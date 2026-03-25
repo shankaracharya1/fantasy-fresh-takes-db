@@ -1,0 +1,20 @@
+{
+  "name": "fresh-take-gantt",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "googleapis": "^171.4.0",
+    "html-to-image": "^1.11.13",
+    "next": "^16.1.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "recharts": "^3.8.0",
+    "xlsx": "^0.18.5"
+  }
+}
