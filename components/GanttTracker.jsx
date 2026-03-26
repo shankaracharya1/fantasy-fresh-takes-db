@@ -2469,7 +2469,7 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
 
     try {
       await copyNodeImageToClipboard(captureRef.current, {
-        backgroundColor: "#f4efe6",
+        backgroundColor: "#f4f0ea",
       });
       setToast({ tone: "success", text: successText });
       return true;

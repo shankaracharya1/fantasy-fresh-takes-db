@@ -147,9 +147,9 @@ select {
   color: var(--ink);
 }
 
-.sidebar-link.is-active {
-  background: var(--accent-light);
-  color: var(--accent);
+.sidebar-link.active {
+  background: var(--accent);
+  color: #fff;
   font-weight: 600;
 }
 

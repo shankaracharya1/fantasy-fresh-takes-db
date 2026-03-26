@@ -365,7 +365,7 @@ function MetricCard({ label, value, hint, tone = "default", body = null, classNa
   );
 }
 
-function ProgressBar({ value, target, color = "var(--amber-light, #FAC775)" }) {
+function ProgressBar({ value, target, color = "var(--terracotta)" }) {
   const pct = target > 0 ? Math.min((value / target) * 100, 100) : 0;
   return (
     <div className="metric-progress-bar">
@@ -385,15 +385,15 @@ function ReadinessRow({ color, label, value }) {
 }
 
 function getReadinessColor(ratio) {
-  if (ratio >= 1) return "#0F6E56";
-  if (ratio >= 0.5) return "#854F0B";
-  return "#A32D2D";
+  if (ratio >= 1) return "#2d5a3d";
+  if (ratio >= 0.5) return "#9f6b15";
+  return "#9f2e2e";
 }
 
 function getHitRateColor(rate) {
-  if (rate >= 50) return "#0F6E56";
-  if (rate >= 30) return "#854F0B";
-  return "#A32D2D";
+  if (rate >= 50) return "#2d5a3d";
+  if (rate >= 30) return "#9f6b15";
+  return "#9f2e2e";
 }
 
 function EmptyState({ text }) {
@@ -779,19 +779,19 @@ function AcdLeaderboardChart({ rows, viewLabel, emptyText = EMPTY_ACD_MESSAGE })
           margin={{ top: 8, right: 28, left: 8, bottom: 8 }}
           barCategoryGap={12}
         >
-          <CartesianGrid horizontal={false} stroke="#eadfcc" strokeDasharray="3 3" />
+          <CartesianGrid horizontal={false} stroke="#ddd6c9" strokeDasharray="3 3" />
           <XAxis
             type="number"
-            tick={{ fill: "#6d5b45", fontSize: 12 }}
+            tick={{ fill: "#a39e93", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
-            label={{ value: "Minutes", position: "insideBottomRight", offset: -2, fill: "#6d5b45", fontSize: 12 }}
+            label={{ value: "Minutes", position: "insideBottomRight", offset: -2, fill: "#a39e93", fontSize: 12 }}
           />
           <YAxis
             type="category"
             dataKey="name"
             width={yAxisWidth}
-            tick={{ fill: "#34291d", fontSize: 12 }}
+            tick={{ fill: "#1c1917", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
           />
@@ -801,7 +801,7 @@ function AcdLeaderboardChart({ rows, viewLabel, emptyText = EMPTY_ACD_MESSAGE })
               dataKey="totalMinutes"
               position="right"
               formatter={(value) => `${formatNumber(value)} min`}
-              fill="#34291d"
+              fill="#1c1917"
               fontSize={12}
             />
             {chartRows.map((row, index) => (
@@ -950,7 +950,7 @@ function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError }) {
               </div>
               <ProgressBar value={Number(plannedLive || 0)} target={target} />
               {!overviewLoading && shortfall > 0 && (
-                <div style={{ fontSize: 11, color: "#A32D2D", marginTop: 4 }}>{shortfall} short of target</div>
+                <div style={{ fontSize: 11, color: "#9f2e2e", marginTop: 4 }}>{shortfall} short of target</div>
               )}
             </>
           }
@@ -1073,7 +1073,7 @@ function OverviewLastWeek({ overviewData, overviewLoading, overviewError }) {
                             className="col-right"
                             style={{
                               fontWeight: 500,
-                              color: row.successfulAttempts > 0 ? "#0F6E56" : "var(--gray-light, #D3D1C7)",
+                              color: row.successfulAttempts > 0 ? "#2d5a3d" : "var(--gray-light, #D3D1C7)",
                             }}
                           >
                             {row.successfulAttempts}
@@ -1130,7 +1130,7 @@ function OverviewNextWeek({ overviewData, overviewLoading, overviewError }) {
               </div>
               <ProgressBar value={Number(plannedLive || 0)} target={target} />
               {!overviewLoading && shortfall > 0 && (
-                <div style={{ fontSize: 11, color: "#A32D2D", marginTop: 4 }}>{shortfall} short of target</div>
+                <div style={{ fontSize: 11, color: "#9f2e2e", marginTop: 4 }}>{shortfall} short of target</div>
               )}
             </>
           }
@@ -1163,27 +1163,27 @@ function OverviewNextWeek({ overviewData, overviewLoading, overviewError }) {
         <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 12 }}>Readiness checklist</div>
         <div className="readiness-checklist">
           <ReadinessRow
-            color={beatsCount > 0 ? getReadinessColor(1) : "#888780"}
+            color={beatsCount > 0 ? getReadinessColor(1) : "#a39e93"}
             label="Beats locked and assigned to writers"
             value={beatsCount > 0 ? `${beatsCount} of ${beatsCount}` : "Pending"}
           />
           <ReadinessRow
-            color={liveOnMetaCount > 0 ? getReadinessColor(inProductionCount / Math.max(liveOnMetaCount, 1)) : "#854F0B"}
+            color={liveOnMetaCount > 0 ? getReadinessColor(inProductionCount / Math.max(liveOnMetaCount, 1)) : "#9f6b15"}
             label="Scripts in CL review pipeline"
             value={liveOnMetaCount > 0 ? `${inProductionCount} of ${liveOnMetaCount}` : "Pending"}
           />
           <ReadinessRow
-            color={liveOnMetaCount > 0 ? getReadinessColor(liveOnMetaCount / Math.max(Number(target), 1)) : "#A32D2D"}
+            color={liveOnMetaCount > 0 ? getReadinessColor(liveOnMetaCount / Math.max(Number(target), 1)) : "#9f2e2e"}
             label="Scripts cleared for production"
             value={liveOnMetaCount > 0 ? `${liveOnMetaCount} of ${target}` : "Pending"}
           />
           <ReadinessRow
-            color="#888780"
+            color="#a39e93"
             label="Production slots booked"
             value="Pending"
           />
           <ReadinessRow
-            color={uniqueShowCount > 0 ? "#0F6E56" : "#888780"}
+            color={uniqueShowCount > 0 ? "#2d5a3d" : "#a39e93"}
             label="Show coverage (shows with at least 1 beat)"
             value={uniqueShowCount > 0 ? String(uniqueShowCount) : "Pending"}
           />
@@ -1449,9 +1449,9 @@ const POD_TIER_GREEN_MIN = 35;
 const POD_TIER_AMBER_MIN = 20;
 
 function getPodTierColor(conversionRate) {
-  if (conversionRate >= POD_TIER_GREEN_MIN) return "#0F6E56";
-  if (conversionRate >= POD_TIER_AMBER_MIN) return "#BA7517";
-  return "#E24B4A";
+  if (conversionRate >= POD_TIER_GREEN_MIN) return "#2d5a3d";
+  if (conversionRate >= POD_TIER_AMBER_MIN) return "#c2703e";
+  return "#9f2e2e";
 }
 
 function PodFunnelBar({ label, value, maxValue, color }) {
@@ -1541,9 +1541,9 @@ function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyi
                   <div className="pod-rate-label">BEAT TO SUCCESS RATE</div>
                 </div>
                 <div className="pod-bars-col">
-                  <PodFunnelBar label="Beats" value={pod.beats} maxValue={maxBeats} color="#4BA88B" />
-                  <PodFunnelBar label="Scripts" value={pod.scripts} maxValue={maxScripts} color="#D4A843" />
-                  <PodFunnelBar label="Success" value={pod.successful} maxValue={maxSuccessful} color="#0F6E56" />
+                  <PodFunnelBar label="Beats" value={pod.beats} maxValue={maxBeats} color="#2d5a3d" />
+                  <PodFunnelBar label="Scripts" value={pod.scripts} maxValue={maxScripts} color="#c2703e" />
+                  <PodFunnelBar label="Success" value={pod.successful} maxValue={maxSuccessful} color="#2d5a3d" />
                 </div>
               </div>
             );
@@ -1553,9 +1553,9 @@ function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyi
         {/* Legend */}
         <div className="pod-legend">
           {[
-            { color: "#4BA88B", label: "Beats written" },
-            { color: "#D4A843", label: "Scripts produced" },
-            { color: "#0F6E56", label: "Successful scripts" },
+            { color: "#2d5a3d", label: "Beats written" },
+            { color: "#c2703e", label: "Scripts produced" },
+            { color: "#2d5a3d", label: "Successful scripts" },
           ].map((item) => (
             <div key={item.label} className="pod-legend-item">
               <span className="pod-legend-swatch" style={{ background: item.color }} />
@@ -2243,9 +2243,9 @@ export default function UnifiedOpsApp() {
             {activeView === "overview" ? (
               <>
                 <div className="page-header">
-                  <div className="page-kicker">This Week's Pipeline</div>
-                  <h1 className="page-title">Editorial Funnel</h1>
-                  <p className="page-sub">Scripts moving through review, testing, and production this week</p>
+                  <div className="page-header-kicker">This Week's Pipeline</div>
+                  <h1 className="page-header-title">Editorial Funnel</h1>
+                  <p className="page-header-sub">Scripts moving through review, testing, and production this week</p>
                 </div>
                 <div className="section-shell">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
@@ -2295,9 +2295,9 @@ export default function UnifiedOpsApp() {
             {activeView === "pod-wise" ? (
               <>
                 <div className="page-header">
-                  <div className="page-kicker">Team Performance</div>
-                  <h1 className="page-title">POD Wise</h1>
-                  <p className="page-sub">Conversion rates and output by POD lead</p>
+                  <div className="page-header-kicker">Team Performance</div>
+                  <h1 className="page-header-title">POD Wise</h1>
+                  <p className="page-header-sub">Conversion rates and output by POD lead</p>
                 </div>
                 <div className="section-shell">
                   <PodWiseContent
@@ -2313,9 +2313,9 @@ export default function UnifiedOpsApp() {
             {activeView === "planner" ? (
               <>
                 <div className="page-header">
-                  <div className="page-kicker">Weekly Planning</div>
-                  <h1 className="page-title">Planner</h1>
-                  <p className="page-sub">Beat assignments and stage tracking across PODs</p>
+                  <div className="page-header-kicker">Weekly Planning</div>
+                  <h1 className="page-header-title">Planner</h1>
+                  <p className="page-header-sub">Beat assignments and stage tracking across PODs</p>
                 </div>
                 <PlannerErrorBoundary>
                   <GanttTracker onPlannerSnapshotChange={setPlannerBoardSnapshot} />
@@ -2326,9 +2326,9 @@ export default function UnifiedOpsApp() {
             {activeView === "analytics" ? (
               <>
                 <div className="page-header">
-                  <div className="page-kicker">Script Performance</div>
-                  <h1 className="page-title">Analytics</h1>
-                  <p className="page-sub">{analyticsSubtitle || "Week-on-week script test results from the Live tab."}</p>
+                  <div className="page-header-kicker">Script Performance</div>
+                  <h1 className="page-header-title">Analytics</h1>
+                  <p className="page-header-sub">{analyticsSubtitle || "Week-on-week script test results from the Live tab."}</p>
                 </div>
                 <div className="section-shell">
                   <div className="section-toolbar">
@@ -2363,9 +2363,9 @@ export default function UnifiedOpsApp() {
             {activeView === "production" ? (
               <>
                 <div className="page-header">
-                  <div className="page-kicker">Output Tracking</div>
-                  <h1 className="page-title">Production</h1>
-                  <p className="page-sub">{productionSubtitle}</p>
+                  <div className="page-header-kicker">Output Tracking</div>
+                  <h1 className="page-header-title">Production</h1>
+                  <p className="page-header-sub">{productionSubtitle}</p>
                 </div>
                 <div className="section-shell">
                   <ProductionContent
@@ -2388,9 +2388,9 @@ export default function UnifiedOpsApp() {
             {activeView === "details" ? (
               <>
                 <div className="page-header">
-                  <div className="page-kicker">Configuration</div>
-                  <h1 className="page-title">Details</h1>
-                  <p className="page-sub">Tracked teams, sync scope, and Analytics next-step logic.</p>
+                  <div className="page-header-kicker">Configuration</div>
+                  <h1 className="page-header-title">Details</h1>
+                  <p className="page-header-sub">Tracked teams, sync scope, and Analytics next-step logic.</p>
                 </div>
                 <div className="section-shell">
                   <DetailsContent
