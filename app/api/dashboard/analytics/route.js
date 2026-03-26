@@ -512,21 +512,6 @@ export async function PUT(request) {
 
     await writeJsonObject(ACTIONED_STATE_PATH, payload);
 
-    const verifiedState = await readActionedState();
-    const verifiedValue = getActionedValue(verifiedState, weekKey, assetCode);
-    if (verifiedValue !== actioned) {
-      console.error("[analytics] Actioned write verification failed", {
-        weekKey,
-        assetCode,
-        expected: actioned,
-        got: verifiedValue,
-      });
-      return NextResponse.json(
-        { error: "Actioned state could not be verified after saving. Please try again." },
-        { status: 500 }
-      );
-    }
-
     return NextResponse.json({
       ok: true,
       weekKey,
