@@ -317,15 +317,16 @@ function buildDecoratedAnalyticsRows(rows) {
     });
 }
 
-function buildDedupedAttemptRows(rows, selectedWeekKey = "") {
+function buildDedupedAttemptRows(rows, selectedWeekKeys = []) {
+  const keySet = new Set(Array.isArray(selectedWeekKeys) ? selectedWeekKeys : [selectedWeekKeys].filter(Boolean));
   const dedupedRows = new Map();
 
   for (const row of Array.isArray(rows) ? rows : []) {
-    if (selectedWeekKey && row?.analyticsWeekKey !== selectedWeekKey) {
+    if (keySet.size > 0 && !keySet.has(row?.analyticsWeekKey)) {
       continue;
     }
 
-    const rowKey = buildAttemptKey(row, row?.analyticsWeekKey || selectedWeekKey);
+    const rowKey = buildAttemptKey(row, row?.analyticsWeekKey || "");
     if (!dedupedRows.has(rowKey) || isBetterAttemptRow(row, dedupedRows.get(rowKey))) {
       dedupedRows.set(rowKey, row);
     }
@@ -431,19 +432,52 @@ function buildAnalyticsRow(row, actioned = false) {
 }
 
 export async function GET(request) {
-  const requestedWeekKey = normalizeWeekKey(new URL(request.url).searchParams.get("week"));
-  const fallbackWeekKey = getWeekSelection("last").weekKey;
+  const url = new URL(request.url);
+  const requestedWeekKey = normalizeWeekKey(url.searchParams.get("week"));
+  const requestedWeeks = url.searchParams.get("weeks");
+  const currentWeekKey = getWeekSelection("current").weekKey;
+  const lastWeekKey = getWeekSelection("last").weekKey;
 
   try {
     const [{ rows }, actionedState] = await Promise.all([fetchAnalyticsLiveTabRows(), readActionedState()]);
     const eligibleRows = buildDecoratedAnalyticsRows(rows);
     const analyticsRows = eligibleRows.filter((row) => hasReadableCpi(row?.cpiUsd));
 
-    const selectedWeekKey = requestedWeekKey || fallbackWeekKey;
-    const selectedWeekEnd = shiftYmd(selectedWeekKey, 6);
-    const weekOptions = buildWeekOptions(analyticsRows, fallbackWeekKey, selectedWeekKey);
-    const tableRows = buildDedupedAttemptRows(analyticsRows, selectedWeekKey)
-      .map((row) => buildAnalyticsRow(row, getActionedValue(actionedState, selectedWeekKey, row?.assetCode)))
+    // Support multi-week: "weeks=2" means current + last week
+    let selectedWeekKeys;
+    let selectedWeekKey;
+    let selectedWeekEnd;
+    let selectedLabel;
+
+    if (requestedWeeks) {
+      const weekCount = Math.min(Math.max(Number(requestedWeeks) || 2, 1), 8);
+      selectedWeekKeys = [];
+      let wk = currentWeekKey;
+      for (let i = 0; i < weekCount; i++) {
+        selectedWeekKeys.push(wk);
+        wk = shiftYmd(wk, -7);
+      }
+      selectedWeekKey = selectedWeekKeys.join(",");
+      selectedWeekEnd = shiftYmd(currentWeekKey, 6);
+      const oldestWeek = selectedWeekKeys[selectedWeekKeys.length - 1];
+      selectedLabel = `Last ${weekCount} weeks`;
+    } else {
+      selectedWeekKey = requestedWeekKey || lastWeekKey;
+      selectedWeekKeys = [selectedWeekKey];
+      selectedWeekEnd = shiftYmd(selectedWeekKey, 6);
+      selectedLabel = buildAnalyticsWeekOption(selectedWeekKey).shortLabel;
+    }
+
+    const weekOptions = buildWeekOptions(analyticsRows, lastWeekKey, selectedWeekKeys[0]);
+
+    // Add multi-week options at the top
+    const multiWeekOptions = [
+      { id: "last-2-weeks", label: "Last 2 weeks (incl. current)" },
+      { id: "last-4-weeks", label: "Last 4 weeks" },
+    ];
+
+    const tableRows = buildDedupedAttemptRows(analyticsRows, selectedWeekKeys)
+      .map((row) => buildAnalyticsRow(row, getActionedValue(actionedState, selectedWeekKeys[0], row?.assetCode)))
       .sort(
         (a, b) =>
           getNextStepSortIndex(a.nextStep) - getNextStepSortIndex(b.nextStep) ||
@@ -456,8 +490,11 @@ export async function GET(request) {
     return NextResponse.json({
       ok: true,
       selectedWeekKey,
-      selectedWeekLabel: buildAnalyticsWeekOption(selectedWeekKey).shortLabel,
-      selectedWeekRangeLabel: formatWeekRangeLabel(selectedWeekKey, selectedWeekEnd),
+      selectedWeekLabel: selectedLabel,
+      selectedWeekRangeLabel: requestedWeeks
+        ? `${formatWeekRangeLabel(selectedWeekKeys[selectedWeekKeys.length - 1], selectedWeekEnd)}`
+        : formatWeekRangeLabel(selectedWeekKeys[0], selectedWeekEnd),
+      multiWeekOptions,
       weekOptions,
       rowCount: tableRows.length,
       legend: LEGEND_ITEMS,

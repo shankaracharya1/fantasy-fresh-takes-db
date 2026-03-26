@@ -1793,7 +1793,7 @@ async function readJson(response) {
 export default function UnifiedOpsApp() {
   const [activeView, setActiveView] = useState("overview");
   const [editorialPeriod, setEditorialPeriod] = useState("current");
-  const [selectedAnalyticsWeekKey, setSelectedAnalyticsWeekKey] = useState(getWeekSelection("last").weekKey);
+  const [selectedAnalyticsWeekKey, setSelectedAnalyticsWeekKey] = useState("last-2-weeks");
   const [plannerBoardSnapshot, setPlannerBoardSnapshot] = useState(null);
   const [overviewDataByPeriod, setOverviewDataByPeriod] = useState({});
   const [overviewLoadingByPeriod, setOverviewLoadingByPeriod] = useState(
@@ -2016,10 +2016,11 @@ export default function UnifiedOpsApp() {
       setAnalyticsError("");
 
       try {
-        const response = await fetch(
-          `/api/dashboard/analytics?week=${encodeURIComponent(selectedAnalyticsWeekKey)}`,
-          { cache: "no-store" }
-        );
+        const multiWeekMatch = selectedAnalyticsWeekKey.match(/^last-(\d+)-weeks$/);
+        const analyticsUrl = multiWeekMatch
+          ? `/api/dashboard/analytics?weeks=${multiWeekMatch[1]}`
+          : `/api/dashboard/analytics?week=${encodeURIComponent(selectedAnalyticsWeekKey)}`;
+        const response = await fetch(analyticsUrl, { cache: "no-store" });
         const payload = await readJson(response);
         if (!response.ok) {
           throw new Error(payload.error || "Unable to load Analytics dashboard.");
@@ -2027,7 +2028,7 @@ export default function UnifiedOpsApp() {
 
         if (!cancelled) {
           setAnalyticsData(payload);
-          if (payload?.selectedWeekKey && payload.selectedWeekKey !== selectedAnalyticsWeekKey) {
+          if (!selectedAnalyticsWeekKey.startsWith("last-") && payload?.selectedWeekKey && payload.selectedWeekKey !== selectedAnalyticsWeekKey) {
             setSelectedAnalyticsWeekKey(payload.selectedWeekKey);
           }
         }
@@ -2391,6 +2392,8 @@ export default function UnifiedOpsApp() {
                         onChange={(event) => setSelectedAnalyticsWeekKey(event.target.value)}
                         disabled={analyticsLoading && !analyticsData}
                       >
+                        <option value="last-2-weeks">Last 2 weeks (incl. current)</option>
+                        <option value="last-4-weeks">Last 4 weeks</option>
                         {(Array.isArray(analyticsData?.weekOptions) ? analyticsData.weekOptions : []).map((option) => (
                           <option key={option.id} value={option.id}>
                             {option.label}
