@@ -1793,7 +1793,7 @@ async function readJson(response) {
 export default function UnifiedOpsApp() {
   const [activeView, setActiveView] = useState("overview");
   const [editorialPeriod, setEditorialPeriod] = useState("current");
-  const [selectedAnalyticsWeekKey, setSelectedAnalyticsWeekKey] = useState("last-2-weeks");
+  const [selectedAnalyticsWeekKey, setSelectedAnalyticsWeekKey] = useState(getWeekSelection("current").weekKey);
   const [plannerBoardSnapshot, setPlannerBoardSnapshot] = useState(null);
   const [overviewDataByPeriod, setOverviewDataByPeriod] = useState({});
   const [overviewLoadingByPeriod, setOverviewLoadingByPeriod] = useState(
