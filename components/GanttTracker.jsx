@@ -1318,40 +1318,14 @@ function SnapshotBoard({
     >
       <div
         style={{
-          border: "1px solid var(--border)",
           background: "var(--card)",
-          padding: "18px 24px",
+          borderBottom: "1px solid var(--border)",
+          padding: "18px 28px",
           color: "var(--ink)",
-          borderRadius: 24,
           marginBottom: 14,
-          boxShadow: "0 18px 40px rgba(20, 28, 30, 0.08)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                letterSpacing: "0.1em",
-                color: "var(--forest)",
-                textTransform: "uppercase",
-              }}
-            >
-              Pocket FM / Fresh takes dashboard
-            </div>
-            <h1
-              style={{
-                fontSize: 28,
-                fontWeight: 700,
-                margin: "6px 0 0",
-                letterSpacing: "-0.03em",
-                fontFamily: DISPLAY_FONT,
-              }}
-            >
-              Fresh takes dashboard
-            </h1>
-          </div>
           <div
             style={{
               fontSize: 13,
@@ -2572,12 +2546,9 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
       >
         <div
           style={{
-            border: "1px solid var(--border)",
-            borderRadius: 24,
-            background: "rgba(255, 252, 246, 0.92)",
-            backdropFilter: "blur(8px)",
-            boxShadow: "0 18px 40px rgba(20, 28, 30, 0.08)",
-            padding: "18px 20px",
+            background: "var(--card)",
+            borderBottom: "1px solid var(--border)",
+            padding: "18px 28px",
             color: "var(--ink)",
           }}
         >
@@ -2590,31 +2561,6 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
               gap: 12,
             }}
           >
-            <div>
-              <div
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.1em",
-                  color: "var(--forest)",
-                  textTransform: "uppercase",
-                }}
-              >
-                Pocket FM / Fresh takes dashboard
-              </div>
-              <h1
-                style={{
-                  fontSize: 28,
-                  fontWeight: 700,
-                  margin: "6px 0 0",
-                  letterSpacing: "-0.03em",
-                  fontFamily: DISPLAY_FONT,
-                }}
-              >
-                Fresh takes dashboard
-              </h1>
-            </div>
-
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <button onClick={() => void changeWeek(-1)} style={navBtn}>
                 {"<"}
@@ -2776,9 +2722,8 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                 marginBottom: 14,
                 background: "var(--card)",
                 border: "1px solid var(--border)",
-                borderRadius: 18,
+                borderRadius: "var(--radius-sm)",
                 padding: "10px 14px",
-                boxShadow: "0 8px 20px rgba(20, 28, 30, 0.05)",
                 flexWrap: "wrap",
               }}
             >

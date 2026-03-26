@@ -110,11 +110,37 @@ select {
 
 .sidebar-brand {
   padding: 20px 18px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-brand-name {
+  display: block;
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 600;
   color: var(--ink-bright);
-  border-bottom: 1px solid var(--border);
+  letter-spacing: -0.02em;
+}
+
+.sidebar-brand-sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.sidebar-section {
+  padding: 0 10px;
+}
+
+.sidebar-section-label {
+  padding: 16px 12px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .sidebar-nav {
@@ -210,10 +236,9 @@ select {
 }
 
 .ops-shell {
-  width: min(1320px, 100%);
-  margin: 0 auto;
+  width: 100%;
   display: grid;
-  gap: 20px;
+  gap: 0;
 }
 
 /* ─── Shared panel treatment ─── */
@@ -525,7 +550,7 @@ select {
 /* ─── Section shells ─── */
 
 .section-shell {
-  padding: 24px;
+  padding: 28px;
   background: transparent;
   border: none;
   border-radius: 0;
@@ -687,7 +712,7 @@ select {
 .rank-card,
 .panel-card {
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   background: var(--card);
   padding: 20px;
   transition: border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
@@ -1611,6 +1636,154 @@ select {
 
 .production-troubleshooting-panel[data-share-capture="production-troubleshooting"] .ops-table {
   min-width: 100% !important;
+}
+
+/* ─── POD Wise ─── */
+
+.pod-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.pod-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.pod-section-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.pod-section-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.pod-cards-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.pod-rank-card {
+  display: grid;
+  grid-template-columns: 64px 1fr 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--forest);
+  border-radius: var(--radius-sm);
+}
+
+.pod-rank-col {
+  text-align: center;
+}
+
+.pod-rank-number {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.pod-rank-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.pod-lead-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+
+.pod-conversion {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.pod-rate-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.pod-bars-col {
+  display: grid;
+  gap: 6px;
+}
+
+.pod-funnel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pod-funnel-label {
+  width: 56px;
+  text-align: right;
+  font-size: 10px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.pod-funnel-track {
+  flex: 1;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.pod-funnel-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.4s ease;
+}
+
+.pod-funnel-count {
+  width: 28px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+}
+
+.pod-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pod-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pod-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 /* ─── Responsive ─── */
