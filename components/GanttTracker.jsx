@@ -367,6 +367,21 @@ function buildRows(pods, options = {}) {
         beats: asArray(writer?.beats),
       };
       const writerStageStreak = getWriterActiveStageStreak(safeWriter, options);
+      const todayIdxForCheck = options.todayIdx != null ? options.todayIdx : -1;
+      const writerHasWritingToday = todayIdxForCheck >= 0 && safeWriter.beats.some((beat) => {
+        const safeBeat = normalizeBeatForUi(beat, "check");
+        return safeBeat.assets.some((asset) => {
+          const days = Array.isArray(asset?.days) ? asset.days : [];
+          return days[todayIdxForCheck] === "writing";
+        });
+      });
+      const writerIsOoo = todayIdxForCheck >= 0 && safeWriter.beats.some((beat) => {
+        const safeBeat = normalizeBeatForUi(beat, "check");
+        return safeBeat.assets.some((asset) => {
+          const days = Array.isArray(asset?.days) ? asset.days : [];
+          return days[todayIdxForCheck] === "writer_ooo";
+        });
+      });
       const writerRowCount = safeWriter.beats.reduce((total, beat, beatIndex) => {
         const safeBeat = normalizeBeatForUi(
           beat,
@@ -388,6 +403,8 @@ function buildRows(pods, options = {}) {
             writer: {
               ...safeWriter,
               stageStreak: writerStageStreak,
+              hasWritingToday: writerHasWritingToday,
+              isOoo: writerIsOoo,
             },
             beat: safeBeat,
             asset,
@@ -846,8 +863,9 @@ function TrackerTable({
               justifyContent: "center",
               flexDirection: "column",
               gap: 1,
-              background: index === todayIdx ? "var(--teal, #2563EB)" : "var(--surface)",
+              background: index === todayIdx ? "var(--accent)" : "var(--card-alt)",
               color: index === todayIdx ? "#fff" : "var(--muted)",
+              borderBottom: index === todayIdx ? "2px solid var(--accent)" : "1px solid var(--border)",
             }}
           >
             <span>{DAYS[index]}</span>
@@ -919,9 +937,35 @@ function TrackerTable({
                       style={{ ...inputStyle, fontWeight: 600, fontSize: 11 }}
                     />
                   ) : (
-                    <div style={{ ...textStyle, fontWeight: 600 }}>{row.writer.name || "\u00A0"}</div>
+                    <div style={{
+                      ...textStyle,
+                      fontWeight: 600,
+                      color: (!row.writer.hasWritingToday && !row.writer.isOoo && todayIdx >= 0 && todayIdx < 5)
+                        ? "var(--amber)" : "var(--ink)",
+                    }}>{row.writer.name || "\u00A0"}</div>
                   )}
                   <div style={{ ...subtleTextStyle, fontSize: 10 }}>{row.writer.role || "Writer"}</div>
+                  {!row.writer.hasWritingToday && !row.writer.isOoo && todayIdx >= 0 && todayIdx < 5 ? (
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        width: "fit-content",
+                        maxWidth: "100%",
+                        marginTop: 2,
+                        padding: "3px 8px",
+                        borderRadius: 999,
+                        background: "var(--amber-bg)",
+                        border: "1px solid rgba(159, 107, 21, 0.18)",
+                        color: "var(--amber)",
+                        fontSize: 9,
+                        fontWeight: 700,
+                        lineHeight: 1.2,
+                      }}
+                    >
+                      Not writing today
+                    </div>
+                  ) : null}
                   {row.writer.stageStreak ? (
                     <div
                       style={{
@@ -1019,8 +1063,8 @@ function TrackerTable({
                     cursor: editable ? "pointer" : "default",
                     borderRight: dayIndex < DAYS.length - 1 ? "1px solid var(--border)" : "none",
                     borderBottom: rowBorder,
-                    background: isToday ? "rgba(0,106,103,0.05)" : "transparent",
-                    borderLeft: isToday ? "2px solid rgba(0,106,103,0.22)" : "none",
+                    background: isToday ? "rgba(159, 78, 46, 0.06)" : "transparent",
+                    borderLeft: isToday ? "2px solid rgba(159, 78, 46, 0.25)" : "none",
                   }}
                 >
                   <StageBar
