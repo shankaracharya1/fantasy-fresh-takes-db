@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fresh Takes — Visual Direction Options</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #111; color: #fff; padding: 40px 24px; }
+  .page { max-width: 1400px; margin: 0 auto; }
+  h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+  .subtitle { color: #888; font-size: 15px; margin-bottom: 48px; }
+
+  .options-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+
+  .option-card {
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1.5px solid #222;
+    transition: border-color 200ms, transform 200ms;
+    cursor: default;
+  }
+  .option-card:hover { border-color: #444; transform: translateY(-2px); }
+
+  .option-label {
+    padding: 16px 20px;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .option-label .tag {
+    font-size: 11px; padding: 4px 10px; border-radius: 999px; font-weight: 500;
+    letter-spacing: 0.02em; text-transform: none;
+  }
+
+  /* === OPTION A: Midnight Ops === */
+  .option-a { background: #0a0a0f; }
+  .option-a .option-label { background: #0d0d14; color: #7c8aff; border-bottom: 1px solid #1a1a2e; }
+  .option-a .tag { background: rgba(124,138,255,0.12); color: #7c8aff; }
+
+  .mock-a {
+    --bg: #0a0a0f; --surface: #111118; --card: #16161f; --border: #1e1e2e;
+    --accent: #7c8aff; --accent-glow: rgba(124,138,255,0.08);
+    --ink: #e4e4ef; --muted: #555568;
+    --green: #4ade80; --amber: #fbbf24; --red: #f87171;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* === OPTION B: Warm Mineral === */
+  .option-b { background: #faf9f6; }
+  .option-b .option-label { background: #f5f3ee; color: #1a1a1a; border-bottom: 1px solid #e8e4dc; }
+  .option-b .tag { background: rgba(180, 83, 9, 0.08); color: #b45309; }
+
+  .mock-b {
+    --bg: #faf9f6; --surface: #f5f3ee; --card: #ffffff; --border: #e8e4dc;
+    --accent: #b45309; --accent-glow: rgba(180, 83, 9, 0.06);
+    --ink: #1a1a1a; --muted: #9a948a;
+    --green: #15803d; --amber: #b45309; --red: #dc2626;
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+
+  /* === OPTION C: Carbon === */
+  .option-c { background: #111111; }
+  .option-c .option-label { background: #161616; color: #22d3ee; border-bottom: 1px solid #222; }
+  .option-c .tag { background: rgba(34,211,238,0.1); color: #22d3ee; }
+
+  .mock-c {
+    --bg: #111111; --surface: #161616; --card: #1c1c1c; --border: #2a2a2a;
+    --accent: #22d3ee; --accent-glow: rgba(34,211,238,0.06);
+    --ink: #e5e5e5; --muted: #666;
+    --green: #34d399; --amber: #fbbf24; --red: #fb7185;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+
+  /* === Shared mock dashboard === */
+  .mock-dashboard {
+    padding: 20px;
+    min-height: 420px;
+  }
+
+  .mock-hero {
+    padding: 20px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .mock-hero-kicker {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 6px;
+  }
+  .mock-hero-title {
+    font-size: 20px; font-weight: 600; color: var(--ink); margin-bottom: 4px; letter-spacing: -0.02em;
+  }
+  .mock-hero-sub { font-size: 12px; color: var(--muted); }
+
+  .mock-nav {
+    display: flex; gap: 6px; margin-bottom: 16px;
+  }
+  .mock-nav-item {
+    padding: 7px 14px; border-radius: 8px; font-size: 11px; font-weight: 500;
+    background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+  }
+  .mock-nav-item.active {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+  .option-b .mock-nav-item.active { color: #fff; }
+
+  .mock-metrics {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px;
+  }
+  .mock-metric-card {
+    padding: 16px;
+    border-radius: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+  }
+  .mock-metric-label {
+    font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 8px;
+  }
+  .mock-metric-value {
+    font-size: 22px; font-weight: 600; color: var(--ink); letter-spacing: -0.02em;
+  }
+  .mock-metric-hint {
+    font-size: 10px; color: var(--muted); margin-top: 4px;
+  }
+  .mock-metric-card.positive .mock-metric-value { color: var(--green); }
+  .mock-metric-card.warning .mock-metric-value { color: var(--amber); }
+  .mock-metric-card.danger .mock-metric-value { color: var(--red); }
+
+  .mock-table {
+    width: 100%; border-collapse: collapse;
+    border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .mock-table th {
+    background: var(--surface); text-align: left;
+    padding: 10px 14px; font-size: 9px; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .mock-table td {
+    padding: 10px 14px; font-size: 12px; color: var(--ink);
+    border-bottom: 1px solid var(--border);
+  }
+  .mock-table tr:last-child td { border-bottom: none; }
+  .mock-table tbody tr { background: var(--card); }
+
+  .mock-status {
+    display: inline-flex; padding: 3px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 600;
+  }
+  .mock-status.green { background: rgba(74,222,128,0.12); color: var(--green); }
+  .mock-status.amber { background: rgba(251,191,36,0.12); color: var(--amber); }
+  .mock-status.red { background: rgba(248,113,113,0.12); color: var(--red); }
+
+  .option-b .mock-status.green { background: rgba(21,128,61,0.08); }
+  .option-b .mock-status.amber { background: rgba(180,83,9,0.08); }
+  .option-b .mock-status.red { background: rgba(220,38,38,0.08); }
+
+  /* Description panels */
+  .option-desc {
+    padding: 16px 20px;
+    font-size: 13px; line-height: 1.6;
+  }
+  .option-a .option-desc { background: #0d0d14; color: #8888a0; border-top: 1px solid #1a1a2e; }
+  .option-b .option-desc { background: #f5f3ee; color: #6b6560; border-top: 1px solid #e8e4dc; }
+  .option-c .option-desc { background: #161616; color: #777; border-top: 1px solid #222; }
+
+  .desc-title { font-weight: 600; margin-bottom: 4px; }
+  .option-a .desc-title { color: #c0c0d8; }
+  .option-b .desc-title { color: #1a1a1a; }
+  .option-c .desc-title { color: #ccc; }
+
+  .desc-tags { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .desc-tag {
+    font-size: 11px; padding: 3px 10px; border-radius: 999px; font-weight: 500;
+  }
+  .option-a .desc-tag { background: #1a1a2e; color: #7c8aff; }
+  .option-b .desc-tag { background: #ede8df; color: #8b7355; }
+  .option-c .desc-tag { background: #222; color: #22d3ee; }
+
+  @media (max-width: 1100px) { .options-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Fresh Takes — Visual Direction</h1>
+  <p class="subtitle">Three directions for the dashboard redesign. Same data, different personality.</p>
+
+  <div class="options-grid">
+
+    <!-- OPTION A: Midnight Ops -->
+    <div class="option-card option-a">
+      <div class="option-label">
+        A — Midnight Ops
+        <span class="tag">Dark + Indigo</span>
+      </div>
+      <div class="mock-dashboard mock-a">
+        <div class="mock-hero">
+          <div class="mock-hero-kicker">Pocket FM / Fresh Takes</div>
+          <div class="mock-hero-title">Editorial Funnel</div>
+          <div class="mock-hero-sub">Week of Mar 24 — Mar 30, 2026</div>
+        </div>
+        <div class="mock-nav">
+          <div class="mock-nav-item active">Editorial Funnel</div>
+          <div class="mock-nav-item">POD Wise</div>
+          <div class="mock-nav-item">Planner</div>
+          <div class="mock-nav-item">Analytics</div>
+        </div>
+        <div class="mock-metrics">
+          <div class="mock-metric-card positive">
+            <div class="mock-metric-label">Scripts In</div>
+            <div class="mock-metric-value">142</div>
+            <div class="mock-metric-hint">+12% vs last week</div>
+          </div>
+          <div class="mock-metric-card warning">
+            <div class="mock-metric-label">Conversion</div>
+            <div class="mock-metric-value">38%</div>
+            <div class="mock-metric-hint">Target: 45%</div>
+          </div>
+          <div class="mock-metric-card">
+            <div class="mock-metric-label">Avg TAT</div>
+            <div class="mock-metric-value">2.4d</div>
+            <div class="mock-metric-hint">Within target</div>
+          </div>
+        </div>
+        <table class="mock-table">
+          <thead><tr><th>POD Lead</th><th>Scripts</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Aman K.</td><td>24</td><td><span class="mock-status green">On Track</span></td></tr>
+            <tr><td>Priya S.</td><td>18</td><td><span class="mock-status amber">Behind</span></td></tr>
+            <tr><td>Ravi M.</td><td>12</td><td><span class="mock-status red">At Risk</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="option-desc">
+        <div class="desc-title">Deep dark UI with soft indigo accents</div>
+        Inspired by Linear and Vercel. Dark backgrounds reduce visual noise and let colored status indicators pop. Feels technical and focused — built for people who live in this dashboard.
+        <div class="desc-tags">
+          <span class="desc-tag">Inter</span>
+          <span class="desc-tag">Indigo accent</span>
+          <span class="desc-tag">Subtle glow effects</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPTION B: Warm Mineral -->
+    <div class="option-card option-b">
+      <div class="option-label">
+        B — Warm Mineral
+        <span class="tag">Light + Amber</span>
+      </div>
+      <div class="mock-dashboard mock-b">
+        <div class="mock-hero">
+          <div class="mock-hero-kicker">Pocket FM / Fresh Takes</div>
+          <div class="mock-hero-title">Editorial Funnel</div>
+          <div class="mock-hero-sub">Week of Mar 24 — Mar 30, 2026</div>
+        </div>
+        <div class="mock-nav">
+          <div class="mock-nav-item active">Editorial Funnel</div>
+          <div class="mock-nav-item">POD Wise</div>
+          <div class="mock-nav-item">Planner</div>
+          <div class="mock-nav-item">Analytics</div>
+        </div>
+        <div class="mock-metrics">
+          <div class="mock-metric-card positive">
+            <div class="mock-metric-label">Scripts In</div>
+            <div class="mock-metric-value">142</div>
+            <div class="mock-metric-hint">+12% vs last week</div>
+          </div>
+          <div class="mock-metric-card warning">
+            <div class="mock-metric-label">Conversion</div>
+            <div class="mock-metric-value">38%</div>
+            <div class="mock-metric-hint">Target: 45%</div>
+          </div>
+          <div class="mock-metric-card">
+            <div class="mock-metric-label">Avg TAT</div>
+            <div class="mock-metric-value">2.4d</div>
+            <div class="mock-metric-hint">Within target</div>
+          </div>
+        </div>
+        <table class="mock-table">
+          <thead><tr><th>POD Lead</th><th>Scripts</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Aman K.</td><td>24</td><td><span class="mock-status green">On Track</span></td></tr>
+            <tr><td>Priya S.</td><td>18</td><td><span class="mock-status amber">Behind</span></td></tr>
+            <tr><td>Ravi M.</td><td>12</td><td><span class="mock-status red">At Risk</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="option-desc">
+        <div class="desc-title">Refined light with warm, earthy tones</div>
+        Evolution of the current design but sharper. Creamy whites, stone borders, amber accent. Feels premium and editorial — like a well-designed annual report. Keeps the light feel your team is used to.
+        <div class="desc-tags">
+          <span class="desc-tag">DM Sans</span>
+          <span class="desc-tag">Amber accent</span>
+          <span class="desc-tag">Earthy neutrals</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- OPTION C: Carbon -->
+    <div class="option-card option-c">
+      <div class="option-label">
+        C — Carbon
+        <span class="tag">Dark + Cyan</span>
+      </div>
+      <div class="mock-dashboard mock-c">
+        <div class="mock-hero">
+          <div class="mock-hero-kicker">Pocket FM / Fresh Takes</div>
+          <div class="mock-hero-title">Editorial Funnel</div>
+          <div class="mock-hero-sub">Week of Mar 24 — Mar 30, 2026</div>
+        </div>
+        <div class="mock-nav">
+          <div class="mock-nav-item active">Editorial Funnel</div>
+          <div class="mock-nav-item">POD Wise</div>
+          <div class="mock-nav-item">Planner</div>
+          <div class="mock-nav-item">Analytics</div>
+        </div>
+        <div class="mock-metrics">
+          <div class="mock-metric-card positive">
+            <div class="mock-metric-label">Scripts In</div>
+            <div class="mock-metric-value">142</div>
+            <div class="mock-metric-hint">+12% vs last week</div>
+          </div>
+          <div class="mock-metric-card warning">
+            <div class="mock-metric-label">Conversion</div>
+            <div class="mock-metric-value">38%</div>
+            <div class="mock-metric-hint">Target: 45%</div>
+          </div>
+          <div class="mock-metric-card">
+            <div class="mock-metric-label">Avg TAT</div>
+            <div class="mock-metric-value">2.4d</div>
+            <div class="mock-metric-hint">Within target</div>
+          </div>
+        </div>
+        <table class="mock-table">
+          <thead><tr><th>POD Lead</th><th>Scripts</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Aman K.</td><td>24</td><td><span class="mock-status green">On Track</span></td></tr>
+            <tr><td>Priya S.</td><td>18</td><td><span class="mock-status amber">Behind</span></td></tr>
+            <tr><td>Ravi M.</td><td>12</td><td><span class="mock-status red">At Risk</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="option-desc">
+        <div class="desc-title">Pure dark with electric cyan highlights</div>
+        Inspired by IBM Carbon and Raycast. Monochrome grays with a single electric accent color. Geometric, clean, and data-forward. The typography does the heavy lifting — Space Grotesk gives it a modern engineering feel.
+        <div class="desc-tags">
+          <span class="desc-tag">Space Grotesk</span>
+          <span class="desc-tag">Cyan accent</span>
+          <span class="desc-tag">Monochrome base</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
