@@ -1538,7 +1538,7 @@ function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyi
       const beats = row.lifetimeBeats || 0;
       const scripts = row.lifetimeScripts || 0;
       const successful = row.hitRateNumerator || 0;
-      const conversion = beats > 0 ? Math.round((successful / beats) * 100) : 0;
+      const conversion = scripts > 0 ? Math.round((successful / scripts) * 100) : 0;
       return { ...row, beats, scripts, successful, conversion };
     })
     .sort((a, b) => b.conversion - a.conversion || b.successful - a.successful);
@@ -1546,7 +1546,7 @@ function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyi
   const totalBeats = sorted.reduce((s, r) => s + r.beats, 0);
   const totalScripts = sorted.reduce((s, r) => s + r.scripts, 0);
   const totalSuccessful = sorted.reduce((s, r) => s + r.successful, 0);
-  const avgConversion = totalBeats > 0 ? Math.round((totalSuccessful / totalBeats) * 100) : 0;
+  const avgConversion = totalScripts > 0 ? Math.round((totalSuccessful / totalScripts) * 100) : 0;
 
   const maxBeats = Math.max(...sorted.map((r) => r.beats), 1);
   const maxScripts = Math.max(...sorted.map((r) => r.scripts), 1);
@@ -1577,7 +1577,7 @@ function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyi
         {/* Section header */}
         <div className="pod-section-header">
           <span className="pod-section-title">POD performance</span>
-          <span className="pod-section-subtitle">Ranked by beat-to-success conversion</span>
+          <span className="pod-section-subtitle">Ranked by successful scripts as % of total attempted scripts</span>
         </div>
 
         {/* POD cards */}
@@ -1594,7 +1594,7 @@ function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyi
                 <div className="pod-info-col">
                   <div className="pod-lead-name">{pod.podLeadName}</div>
                   <div className="pod-conversion" style={{ color: tierColor }}>{pod.conversion}%</div>
-                  <div className="pod-rate-label">BEAT TO SUCCESS RATE</div>
+                  <div className="pod-rate-label">SCRIPT HIT RATE</div>
                 </div>
                 <div className="pod-bars-col">
                   <PodFunnelBar label="Beats" value={pod.beats} maxValue={maxBeats} color="#2d5a3d" />
