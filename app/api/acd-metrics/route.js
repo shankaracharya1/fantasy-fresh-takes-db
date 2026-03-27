@@ -18,6 +18,7 @@ const {
 const { fetchAcdSyncStatus, LIVE_SOURCE_CUTOFF_DATE } = require("../../../lib/ops/cjs/_acd-live-sync-lib.cjs");
 
 const ACD_TABLE = "acd_productivity";
+const SYNC_ROWS_TABLE = "acd_live_sync_rows";
 const FAILURES_TABLE = "acd_live_sync_failures";
 const LIVE_TAB_DATA_SOURCE = "live_tab_sync";
 const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab sync.";
@@ -84,6 +85,31 @@ async function fetchAcdReportingRows() {
   }
 }
 
+async function fetchLiveDateMap() {
+  const rows = await supabaseFetchAll(
+    `${SYNC_ROWS_TABLE}?select=asset_code,base_asset_code,live_date&live_date=gte.${encodeURIComponent(
+      LIVE_SOURCE_CUTOFF_DATE
+    )}`
+  );
+
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const liveDate = String(row.live_date || "").slice(0, 10);
+    if (!liveDate) continue;
+
+    const scopeKey =
+      normalizeAssetId(row.base_asset_code) || normalizeAssetId(row.asset_code);
+    if (!scopeKey) continue;
+
+    const existing = map.get(scopeKey);
+    if (!existing || liveDate > existing) {
+      map.set(scopeKey, liveDate);
+    }
+  }
+
+  return map;
+}
+
 function getAcdName(row) {
   return normalizeAcdName(row.normalized_acd_name || row.acd_name || row.raw_acd_name);
 }
@@ -143,8 +169,9 @@ function isWithinWindow(dateKey, startDateKey, endDateKey) {
   return Boolean(dateKey) && Boolean(startDateKey) && Boolean(endDateKey) && dateKey >= startDateKey && dateKey <= endDateKey;
 }
 
-function aggregateAcdDeltaMetrics(rows) {
+function aggregateAcdDeltaMetrics(rows, liveDateMap) {
   const input = Array.isArray(rows) ? [...rows] : [];
+  const dateMap = liveDateMap instanceof Map ? liveDateMap : new Map();
   const today = todayInIST();
   input.sort((a, b) => {
     const createdCompare = String(a.created_at || "").localeCompare(String(b.created_at || ""));
@@ -155,18 +182,22 @@ function aggregateAcdDeltaMetrics(rows) {
   });
 
   const seenImages = new Set();
-  const lineageImageCounts = new Map();
+  const perSheetImageCounts = new Map();
   const dailyMap = new Map();
-  let latestWorkDate = "";
+  let latestLiveDate = "";
 
   for (const row of input) {
-    const workDate = String(row.work_date || "").slice(0, 10);
     const cdName = normalizeCdName(row.cd_name);
     const acdName = getAcdName(row);
     const generationKey = getGenerationKey(row);
-    const lineageKey = getLineageKey(row);
+    const scopeKey = getScopeKey(row);
 
-    if (!workDate || !cdName || !acdName || !generationKey || !lineageKey || (today && workDate > today)) {
+    if (!cdName || !acdName || !generationKey || !scopeKey) {
+      continue;
+    }
+
+    const liveDate = dateMap.get(scopeKey) || "";
+    if (!liveDate || (today && liveDate > today)) {
       continue;
     }
 
@@ -175,36 +206,53 @@ function aggregateAcdDeltaMetrics(rows) {
     }
     seenImages.add(generationKey);
 
-    const existingImages = Number(lineageImageCounts.get(lineageKey) || 0);
-    const nextImages = existingImages + 1;
-    const deltaMinutes = convertImagesToMinutes(nextImages) - convertImagesToMinutes(existingImages);
-    lineageImageCounts.set(lineageKey, nextImages);
+    // Count images per sheet (scopeKey + acdName) for per-sheet minutes calculation
+    const sheetAcdKey = `${normalizeForKey(scopeKey)}|${normalizeForKey(acdName)}`;
+    perSheetImageCounts.set(sheetAcdKey, (perSheetImageCounts.get(sheetAcdKey) || 0) + 1);
 
-    const dailyKey = `${workDate}|${normalizeForKey(cdName)}|${normalizeForKey(acdName)}`;
+    const dailyKey = `${liveDate}|${normalizeForKey(cdName)}|${normalizeForKey(acdName)}|${normalizeForKey(scopeKey)}`;
     if (!dailyMap.has(dailyKey)) {
       dailyMap.set(dailyKey, {
-        workDate,
+        liveDate,
         cdName,
         acdName,
+        scopeKey,
+        sheetAcdKey,
+        totalImages: 0,
+      });
+    }
+
+    dailyMap.get(dailyKey).totalImages += 1;
+
+    if (!latestLiveDate || liveDate > latestLiveDate) {
+      latestLiveDate = liveDate;
+    }
+  }
+
+  // Calculate minutes per sheet (not cumulative across lineages)
+  const aggregatedDailyMap = new Map();
+  for (const row of dailyMap.values()) {
+    const minutes = convertImagesToMinutes(row.totalImages);
+    const aggKey = `${row.liveDate}|${normalizeForKey(row.cdName)}|${normalizeForKey(row.acdName)}`;
+
+    if (!aggregatedDailyMap.has(aggKey)) {
+      aggregatedDailyMap.set(aggKey, {
+        liveDate: row.liveDate,
+        cdName: row.cdName,
+        acdName: row.acdName,
         totalImages: 0,
         totalMinutes: 0,
       });
     }
 
-    const target = dailyMap.get(dailyKey);
-    target.totalImages += 1;
-    target.totalMinutes += deltaMinutes;
-
-    // The Production heading uses the latest valid synced work_date that survived
-    // live_tab_sync filtering, validation, dedupe, and aggregation.
-    if (!latestWorkDate || workDate > latestWorkDate) {
-      latestWorkDate = workDate;
-    }
+    const target = aggregatedDailyMap.get(aggKey);
+    target.totalImages += row.totalImages;
+    target.totalMinutes += minutes;
   }
 
-  const dailyRows = Array.from(dailyMap.values())
+  const dailyRows = Array.from(aggregatedDailyMap.values())
     .map((row) => ({
-      workDate: row.workDate,
+      workDate: row.liveDate,
       cdName: row.cdName,
       acdName: row.acdName,
       totalImages: Number(row.totalImages || 0),
@@ -217,7 +265,7 @@ function aggregateAcdDeltaMetrics(rows) {
         String(a.cdName || "").localeCompare(String(b.cdName || ""))
     );
 
-  if (!latestWorkDate) {
+  if (!latestLiveDate) {
     return {
       today: todayInIST(),
       latestWorkDate: "",
@@ -231,9 +279,9 @@ function aggregateAcdDeltaMetrics(rows) {
     };
   }
 
-  const start7 = shiftDate(latestWorkDate, -6);
-  const start14 = shiftDate(latestWorkDate, -13);
-  const start30 = shiftDate(latestWorkDate, -29);
+  const start7 = shiftDate(latestLiveDate, -6);
+  const start14 = shiftDate(latestLiveDate, -13);
+  const start30 = shiftDate(latestLiveDate, -29);
   const rolling7Acd = new Map();
   const rolling14Acd = new Map();
   const rolling30Acd = new Map();
@@ -242,17 +290,17 @@ function aggregateAcdDeltaMetrics(rows) {
   const rolling30Cd = new Map();
 
   for (const row of dailyRows) {
-    if (isWithinWindow(row.workDate, start30, latestWorkDate)) {
+    if (isWithinWindow(row.workDate, start30, latestLiveDate)) {
       addRollingSummary(rolling30Acd, row.acdName, row.totalMinutes, row.totalImages);
       addRollingSummary(rolling30Cd, row.cdName, row.totalMinutes, row.totalImages);
     }
 
-    if (isWithinWindow(row.workDate, start14, latestWorkDate)) {
+    if (isWithinWindow(row.workDate, start14, latestLiveDate)) {
       addRollingSummary(rolling14Acd, row.acdName, row.totalMinutes, row.totalImages);
       addRollingSummary(rolling14Cd, row.cdName, row.totalMinutes, row.totalImages);
     }
 
-    if (isWithinWindow(row.workDate, start7, latestWorkDate)) {
+    if (isWithinWindow(row.workDate, start7, latestLiveDate)) {
       addRollingSummary(rolling7Acd, row.acdName, row.totalMinutes, row.totalImages);
       addRollingSummary(rolling7Cd, row.cdName, row.totalMinutes, row.totalImages);
     }
@@ -260,7 +308,7 @@ function aggregateAcdDeltaMetrics(rows) {
 
   return {
     today: todayInIST(),
-    latestWorkDate,
+    latestWorkDate: latestLiveDate,
     dailyRows,
     rolling7Rows: mapRollingRows(rolling7Acd, "acdName"),
     rolling14Rows: mapRollingRows(rolling14Acd, "acdName"),
@@ -327,8 +375,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const reporting = await fetchAcdReportingRows();
-    const metrics = aggregateAcdDeltaMetrics(reporting.rows || []);
+    const [reporting, liveDateMap] = await Promise.all([
+      fetchAcdReportingRows(),
+      fetchLiveDateMap().catch(() => new Map()),
+    ]);
+    const metrics = aggregateAcdDeltaMetrics(reporting.rows || [], liveDateMap);
     const trackedTeams = buildTrackedTeams(reporting.rows || []);
 
     let syncStatus = {
