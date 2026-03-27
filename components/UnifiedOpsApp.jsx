@@ -942,8 +942,6 @@ function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError }) {
   const beatsTarget = 25;
   const productionCount = overviewData?.inProductionBeatCount ?? 0;
   const productionTarget = 22;
-  const liveCount = overviewData?.plannedReleaseCount ?? overviewData?.freshTakeCount ?? 0;
-  const liveTarget = Math.round(productionTarget * 0.8);
 
   return (
     <div className="section-stack">
@@ -961,13 +959,6 @@ function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError }) {
           tone={getPipelineCardTone(productionCount, productionTarget)}
           value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(productionCount)}
           hint={`Target: ${productionTarget}`}
-        />
-        <MetricCard
-          label="Assets going live"
-          className="hero-card"
-          tone={getPipelineCardTone(liveCount, liveTarget)}
-          value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(liveCount)}
-          hint={!overviewLoading && overviewData?.submittedByThursday != null ? `${overviewData.submittedByThursday} submitted by Fri morning IST` : ""}
         />
       </div>
       <div className="metric-grid three-col">
