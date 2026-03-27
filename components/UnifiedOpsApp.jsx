@@ -1394,26 +1394,84 @@ function AnalyticsContent({
   );
 }
 
-function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyingSection }) {
+function PodWiseContent({ competitionPodRows, competitionLoading, podWiseView, setPodWiseView, podTasksData, podTasksLoading, writerProductionByPod, onShare, copyingSection }) {
   if (competitionLoading) {
-    return <EmptyState text="Loading POD Wise dashboard..." />;
+    return <EmptyState text="Loading POD Lifetime Performance..." />;
   }
 
   const competitionRows = Array.isArray(competitionPodRows) ? competitionPodRows : [];
-  if (competitionRows.length === 0) {
-    return <EmptyState text="POD Wise data is not available right now." />;
+  if (competitionRows.length === 0 && podWiseView === "performance") {
+    return <EmptyState text="POD Lifetime Performance data is not available right now." />;
+  }
+
+  const toggle = (
+    <div className="week-toggle-group" role="tablist" style={{ marginBottom: 12 }}>
+      {[["performance", "Performance"], ["tasks", "Tasks"]].map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={podWiseView === id}
+          className={podWiseView === id ? "is-active" : ""}
+          onClick={() => setPodWiseView(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (podWiseView === "tasks") {
+    const podTasks = Array.isArray(podTasksData?.pods) ? podTasksData.pods : [];
+    if (podTasksLoading) {
+      return <>{toggle}<EmptyState text="Loading POD tasks..." /></>;
+    }
+    if (podTasks.length === 0) {
+      return <>{toggle}<EmptyState text="No POD tasks data available." /></>;
+    }
+
+    return (
+      <div className="section-stack">
+        {toggle}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+          {podTasks.map((pod) => {
+            const wp = writerProductionByPod[pod.podLeadName] || { total: 0, withProduction: 0, pct: 0 };
+            return (
+              <div key={pod.podLeadName} style={{ background: "#fffefb", border: "1px solid #ddd3c2", borderRadius: 12, padding: 16, boxShadow: "0 4px 12px rgba(20,28,30,0.04)" }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, color: "#1a1a1a" }}>{pod.podLeadName}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                    <span style={{ color: "#666" }}>Beats next week</span>
+                    <span><span style={{ color: "#b45309" }}>{pod.pendingBeats} pending</span> / <span style={{ color: "#047857" }}>{pod.approvedBeats} approved</span></span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                    <span style={{ color: "#666" }}>Scripts to review</span>
+                    <span style={{ fontWeight: 600, color: pod.scriptsToReview > 0 ? "#b45309" : "#047857" }}>{pod.scriptsToReview}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                    <span style={{ color: "#666" }}>Writers in production</span>
+                    <span style={{ fontWeight: 600 }}>{wp.withProduction}/{wp.total} ({wp.pct}%)</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="section-stack">
+      {toggle}
       <ShareablePanel
-        shareLabel="POD Wise leaderboard"
+        shareLabel="POD Lifetime Performance"
         onShare={onShare}
-        isSharing={copyingSection === "POD Wise leaderboard"}
+        isSharing={copyingSection === "POD Lifetime Performance"}
       >
         <div className="section-stack">
           <div>
-            <div className="panel-title">POD wise leaderboard</div>
+            <div className="panel-title">POD Lifetime Performance</div>
             <ResponsiveContainer width="100%" height={360}>
               <BarChart
                 data={competitionRows.map((row) => ({
@@ -1629,6 +1687,9 @@ export default function UnifiedOpsApp() {
   const [productionErrorByPeriod, setProductionErrorByPeriod] = useState({});
   const [competitionData, setCompetitionData] = useState(null);
   const [competitionLoading, setCompetitionLoading] = useState(true);
+  const [podWiseView, setPodWiseView] = useState("performance");
+  const [podTasksData, setPodTasksData] = useState(null);
+  const [podTasksLoading, setPodTasksLoading] = useState(true);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState("");
@@ -1651,6 +1712,33 @@ export default function UnifiedOpsApp() {
 
     return buildNextWeekPlannerBoardMetrics(plannerBoardSnapshot);
   }, [nextWeekKey, plannerBoardSnapshot]);
+  const writerProductionByPod = useMemo(() => {
+    if (!plannerBoardSnapshot?.pods) return {};
+    const result = {};
+    for (const pod of plannerBoardSnapshot.pods) {
+      const podName = String(pod?.cl || "").trim();
+      if (!podName || !isVisiblePlannerPodLeadName(podName)) continue;
+      const writers = (Array.isArray(pod?.writers) ? pod.writers : []).filter((w) => w?.active !== false);
+      const total = writers.length;
+      const withProduction = writers.filter((writer) => {
+        const beats = Object.values(writer?.beats || {});
+        let productionBeats = 0;
+        for (const beat of beats) {
+          const assets = Array.isArray(beat?.assets) ? beat.assets : [];
+          for (const asset of assets) {
+            const days = Array.isArray(asset?.days) ? asset.days : [];
+            if (days.some((d) => d === "production")) {
+              productionBeats++;
+              break;
+            }
+          }
+        }
+        return productionBeats > 1;
+      }).length;
+      result[podName] = { total, withProduction, pct: total > 0 ? Math.round((withProduction / total) * 100) : 0 };
+    }
+    return result;
+  }, [plannerBoardSnapshot]);
   const effectiveOverviewDataByPeriod = useMemo(() => {
     if (!nextWeekPlannerBoardMetrics?.overview) {
       return overviewDataByPeriod;
@@ -1818,7 +1906,29 @@ export default function UnifiedOpsApp() {
       }
     }
 
+    async function loadPodTasks() {
+      try {
+        const response = await fetch("/api/dashboard/pod-tasks", { cache: "no-store" });
+        const payload = await readJson(response);
+        if (!response.ok) {
+          throw new Error(payload.error || "Unable to load POD tasks.");
+        }
+        if (!cancelled) {
+          setPodTasksData(payload);
+        }
+      } catch {
+        if (!cancelled) {
+          setPodTasksData(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setPodTasksLoading(false);
+        }
+      }
+    }
+
     void loadCompetition();
+    void loadPodTasks();
     return () => {
       cancelled = true;
     };
@@ -2130,10 +2240,15 @@ export default function UnifiedOpsApp() {
           ) : null}
 
           {activeView === "pod-wise" ? (
-            <Toolbar title="POD Wise" subtitle="Lifetime leaderboard">
+            <Toolbar title="POD Lifetime Performance" subtitle="Performance and task tracking by POD">
               <PodWiseContent
                 competitionPodRows={competitionData?.podRows}
                 competitionLoading={competitionLoading}
+                podWiseView={podWiseView}
+                setPodWiseView={setPodWiseView}
+                podTasksData={podTasksData}
+                podTasksLoading={podTasksLoading}
+                writerProductionByPod={writerProductionByPod}
                 onShare={copySection}
                 copyingSection={copyingSection}
               />

@@ -92,11 +92,21 @@ function computeHitRatePerPod(analyticsRows, sinceDate) {
     }
   }
 
-  // Classify each deduped row with full baseline checks
+  // Classify each deduped row — denominator is ALL live scripts, not just qualifying
   const podStats = new Map();
   for (const row of podAssetMap.values()) {
     const podName = String(row?.podLeadName || "").trim();
     if (!podName) continue;
+
+    if (!podStats.has(podName)) {
+      podStats.set(podName, { totalLive: 0, hits: 0 });
+    }
+    const stats = podStats.get(podName);
+    stats.totalLive += 1;
+
+    const amountSpent = toFiniteNumber(row?.amountSpentUsd);
+    // Only scripts with $100+ spend can qualify for Gen AI / P1 Rework
+    if (!Number.isFinite(amountSpent) || amountSpent < 100) continue;
 
     const metrics = {
       threeSecPlays: buildMetricCell(row?.threeSecPlaysPct, BASELINE_THRESHOLD_CHECKS.threeSecPlays),
@@ -107,16 +117,6 @@ function computeHitRatePerPod(analyticsRows, sinceDate) {
       cti: buildMetricCell(row?.clickToInstall, BASELINE_THRESHOLD_CHECKS.cti),
       amountSpent: buildMetricCell(row?.amountSpentUsd, BASELINE_THRESHOLD_CHECKS.amountSpent),
     };
-
-    const amountSpent = toFiniteNumber(row?.amountSpentUsd);
-    // Only count rows with amountSpent >= $100 as qualifying
-    if (!Number.isFinite(amountSpent) || amountSpent < 100) continue;
-
-    if (!podStats.has(podName)) {
-      podStats.set(podName, { qualifying: 0, hits: 0 });
-    }
-    const stats = podStats.get(podName);
-    stats.qualifying += 1;
 
     const baselineKeys = Object.keys(BASELINE_THRESHOLD_CHECKS);
     const baselineMissCount = countBenchmarkMisses(metrics, baselineKeys);
@@ -176,14 +176,14 @@ async function loadLifetimeCompetitionData(rosterMeta) {
 
   const podRows = [];
   for (const podLeadName of rosterMeta.podOrder) {
-    const hitStats = hitRateMap.get(podLeadName) || { qualifying: 0, hits: 0 };
+    const hitStats = hitRateMap.get(podLeadName) || { totalLive: 0, hits: 0 };
     podRows.push({
       podLeadName,
       lifetimeBeats: lifetimeBeatsMap.get(podLeadName) || 0,
       lifetimeScripts: lifetimeScriptsMap.get(podLeadName) || 0,
       hitRateNumerator: hitStats.hits,
-      hitRateDenominator: hitStats.qualifying,
-      hitRate: hitStats.qualifying > 0 ? Number(((hitStats.hits / hitStats.qualifying) * 100).toFixed(1)) : null,
+      hitRateDenominator: hitStats.totalLive,
+      hitRate: hitStats.totalLive > 0 ? Number(((hitStats.hits / hitStats.totalLive) * 100).toFixed(1)) : null,
       lwEditorialOutput: lwEditorialMap.get(podLeadName) || 0,
       writerCount: Number(rosterMeta.podWriterCounts[podLeadName] || 0),
     });
