@@ -1101,9 +1101,10 @@ function OverviewNextWeek({ overviewData, overviewLoading, overviewError }) {
   const plannedLive = overviewData?.plannedReleaseCount ?? 0;
   const target = overviewData?.targetFloor || 22;
   const shortfall = Math.max(0, target - Number(plannedLive || 0));
-  const beatsCount = overviewData?.plannerBeatCount ?? 0;
+  const beatsCount = overviewData?.goodToGoBeatsCount ?? overviewData?.plannerBeatCount ?? 0;
   const reviewPendingCount = overviewData?.reviewPendingCount ?? 0;
   const iterateCount = overviewData?.iterateCount ?? 0;
+  const wipCount = reviewPendingCount + iterateCount;
 
   // Readiness checklist data
   const liveOnMetaCount = Number(overviewData?.plannedReleaseCount || 0);
@@ -1112,18 +1113,23 @@ function OverviewNextWeek({ overviewData, overviewLoading, overviewError }) {
 
   return (
     <div className="section-stack">
-      <div className="metric-grid two-col">
+      <div className="metric-grid three-col">
         <MetricCard
           label="Beats locked GTG"
           className="hero-card"
           value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(beatsCount)}
-          hint={
-            !overviewLoading && (reviewPendingCount > 0 || iterateCount > 0)
-              ? `${reviewPendingCount} review pending · ${iterateCount} in iteration`
-              : "Confirmed and ready to go"
-          }
+          hint="Confirmed and ready to go"
           tone="positive"
         />
+        {wipCount > 0 ? (
+          <MetricCard
+            label="Work in Progress"
+            className="hero-card"
+            value={overviewLoading ? "..." : formatMetricValue(wipCount)}
+            hint={`${reviewPendingCount} review pending · ${iterateCount} in iteration`}
+            tone="warning"
+          />
+        ) : null}
         <MetricCard
           label="Assets planned to go live"
           className="hero-card"
