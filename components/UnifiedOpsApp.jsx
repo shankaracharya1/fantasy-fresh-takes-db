@@ -922,43 +922,76 @@ function buildOverviewNotes({ overviewError, overviewData }) {
   return notes.filter(Boolean);
 }
 
+function getPipelineCardTone(actualValue, targetValue) {
+  const actual = Number(actualValue);
+  const target = Number(targetValue);
+  if (!Number.isFinite(actual) || !Number.isFinite(target) || target <= 0) return "default";
+  const ratio = actual / target;
+  if (ratio < 0.7) return "danger-strong";
+  if (ratio < 0.85) return "danger";
+  if (ratio < 1) return "warning";
+  return ratio >= 1.15 ? "positive-strong" : "positive";
+}
+
 function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError }) {
   const unavailableMetricValue = overviewError ? "-" : null;
   const tatSummary = overviewData?.tatSummary || {};
   const tatDays = tatSummary?.averageTatDays;
-  const plannedLive = overviewData?.plannedReleaseCount ?? overviewData?.freshTakeCount ?? 0;
-  const target = overviewData?.targetFloor || 22;
-  const shortfall = Math.max(0, target - Number(plannedLive || 0));
+
+  const beatsCount = overviewData?.plannerBeatCount ?? 0;
+  const beatsTarget = 25;
+  const productionCount = overviewData?.inProductionBeatCount ?? 0;
+  const productionTarget = 22;
+  const liveCount = overviewData?.plannedReleaseCount ?? overviewData?.freshTakeCount ?? 0;
+  const liveTarget = Math.round(productionTarget * 0.8);
 
   return (
     <div className="section-stack">
       <div className="metric-grid three-col">
         <MetricCard
-          label="Beats being worked on"
-          value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(overviewData?.plannerBeatCount)}
-          hint="From Planner tab"
-        />
-        <MetricCard
-          label="Assets planned to go live"
+          label="Unique beats this week"
           className="hero-card"
-          tone={getTargetCardTone(plannedLive, target)}
+          tone={getPipelineCardTone(beatsCount, beatsTarget)}
           body={
             <>
               <div className="metric-value">
-                {overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(plannedLive)}
-                <span className="metric-unit">/ {target}</span>
+                {overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(beatsCount)}
+                <span className="metric-unit">/ {beatsTarget}</span>
               </div>
-              <ProgressBar value={Number(plannedLive || 0)} target={target} />
-              {!overviewLoading && shortfall > 0 && (
-                <div style={{ fontSize: 11, color: "#9f2e2e", marginTop: 4 }}>{shortfall} short of target</div>
-              )}
+              <ProgressBar value={Number(beatsCount || 0)} target={beatsTarget} />
             </>
           }
+          hint="From Planner"
         />
         <MetricCard
           label="Moving to production"
-          value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(overviewData?.inProductionBeatCount)}
+          className="hero-card"
+          tone={getPipelineCardTone(productionCount, productionTarget)}
+          body={
+            <>
+              <div className="metric-value">
+                {overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(productionCount)}
+                <span className="metric-unit">/ {productionTarget}</span>
+              </div>
+              <ProgressBar value={Number(productionCount || 0)} target={productionTarget} />
+            </>
+          }
           hint="Scripts with Production cell"
+        />
+        <MetricCard
+          label="Assets going live"
+          className="hero-card"
+          tone={getPipelineCardTone(liveCount, liveTarget)}
+          body={
+            <>
+              <div className="metric-value">
+                {overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(liveCount)}
+                <span className="metric-unit">/ {liveTarget}</span>
+              </div>
+              <ProgressBar value={Number(liveCount || 0)} target={liveTarget} />
+            </>
+          }
+          hint="~80% of production target"
         />
       </div>
       <div className="metric-grid three-col">
