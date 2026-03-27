@@ -23,7 +23,8 @@ const LIVE_TAB_DATA_SOURCE = "live_tab_sync";
 const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab sync.";
 
 function isGaAssetCode(value) {
-  return normalizeForKey(normalizeAssetId(value)).startsWith("ga");
+  const key = normalizeForKey(normalizeAssetId(value));
+  return key.startsWith("ga") || key.startsWith("gi");
 }
 
 function isTrackedCreativeDirector(value) {
@@ -143,7 +144,21 @@ function isWithinWindow(dateKey, startDateKey, endDateKey) {
   return Boolean(dateKey) && Boolean(startDateKey) && Boolean(endDateKey) && dateKey >= startDateKey && dateKey <= endDateKey;
 }
 
-function aggregateAcdDeltaMetrics(rows) {
+async function fetchLatestLiveDate() {
+  try {
+    const rows = await supabaseFetchAll(
+      `acd_live_sync_rows?select=live_date&eligible=eq.true&successful_links=gt.0&order=live_date.desc&limit=1`
+    );
+    if (Array.isArray(rows) && rows.length > 0) {
+      return String(rows[0].live_date || "").slice(0, 10);
+    }
+  } catch {
+    // Fall through to empty
+  }
+  return "";
+}
+
+function aggregateAcdDeltaMetrics(rows, anchorDate) {
   const input = Array.isArray(rows) ? [...rows] : [];
   const today = todayInIST();
   input.sort((a, b) => {
@@ -217,7 +232,9 @@ function aggregateAcdDeltaMetrics(rows) {
         String(a.cdName || "").localeCompare(String(b.cdName || ""))
     );
 
-  if (!latestWorkDate) {
+  const rollingAnchor = anchorDate || latestWorkDate;
+
+  if (!latestWorkDate && !rollingAnchor) {
     return {
       today: todayInIST(),
       latestWorkDate: "",
@@ -231,9 +248,9 @@ function aggregateAcdDeltaMetrics(rows) {
     };
   }
 
-  const start7 = shiftDate(latestWorkDate, -6);
-  const start14 = shiftDate(latestWorkDate, -13);
-  const start30 = shiftDate(latestWorkDate, -29);
+  const start7 = shiftDate(rollingAnchor, -6);
+  const start14 = shiftDate(rollingAnchor, -13);
+  const start30 = shiftDate(rollingAnchor, -29);
   const rolling7Acd = new Map();
   const rolling14Acd = new Map();
   const rolling30Acd = new Map();
@@ -261,6 +278,7 @@ function aggregateAcdDeltaMetrics(rows) {
   return {
     today: todayInIST(),
     latestWorkDate,
+    latestLiveDate: rollingAnchor,
     dailyRows,
     rolling7Rows: mapRollingRows(rolling7Acd, "acdName"),
     rolling14Rows: mapRollingRows(rolling14Acd, "acdName"),
@@ -327,8 +345,11 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const reporting = await fetchAcdReportingRows();
-    const metrics = aggregateAcdDeltaMetrics(reporting.rows || []);
+    const [reporting, latestLiveDate] = await Promise.all([
+      fetchAcdReportingRows(),
+      fetchLatestLiveDate(),
+    ]);
+    const metrics = aggregateAcdDeltaMetrics(reporting.rows || [], latestLiveDate || undefined);
     const trackedTeams = buildTrackedTeams(reporting.rows || []);
 
     let syncStatus = {
