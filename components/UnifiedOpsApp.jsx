@@ -1624,7 +1624,50 @@ function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyi
   );
 }
 
-function PodTasksContent({ podTasksData, podTasksLoading }) {
+function PodTasksBarChart({ title, subtitle, items, maxValue, accentColor }) {
+  if (items.length === 0) {
+    return (
+      <>
+        <div className="pod-section-header">
+          <span className="pod-section-title">{title}</span>
+          <span className="pod-section-subtitle">{subtitle}</span>
+        </div>
+        <EmptyState text={`No ${title.toLowerCase()} right now.`} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="pod-section-header">
+        <span className="pod-section-title">{title}</span>
+        <span className="pod-section-subtitle">{subtitle}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {items.map((item, i) => {
+          const isMax = i === 0;
+          const barColor = isMax ? accentColor : "#2d5a3d";
+          const pct = maxValue > 0 ? Math.max((item.count / maxValue) * 100, 4) : 0;
+          return (
+            <div key={item.podLead} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ width: 72, fontSize: 13, fontWeight: 500, color: "var(--ink)", textAlign: "right", flexShrink: 0 }}>
+                {item.podLead}
+              </span>
+              <div style={{ flex: 1, height: 28, borderRadius: 6, background: "var(--surface)", overflow: "hidden" }}>
+                <div style={{ width: `${pct}%`, height: "100%", borderRadius: 6, background: barColor, transition: "width 0.4s ease" }} />
+              </div>
+              <span style={{ width: 28, fontSize: 14, fontWeight: 700, color: isMax ? accentColor : "var(--ink-secondary)", textAlign: "right", flexShrink: 0 }}>
+                {item.count}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function PodTasksContent({ podTasksData, podTasksLoading, onShare, copyingSection }) {
   if (podTasksLoading) {
     return <EmptyState text="Loading POD tasks..." />;
   }
@@ -1638,69 +1681,42 @@ function PodTasksContent({ podTasksData, podTasksLoading }) {
   const maxBeats = Math.max(...beatsPendingByPod.map((r) => r.count), 1);
 
   return (
-    <div className="section-stack">
-      {/* Summary row */}
-      <div className="pod-summary-grid">
-        {[
-          { label: "Scripts to review", value: totalScriptsPending },
-          { label: "Beats to review", value: totalBeatsPending },
-        ].map((card) => (
-          <div key={card.label} className="metric-card">
-            <div className="metric-label">{card.label}</div>
-            <div className="metric-value">{card.value}</div>
-          </div>
-        ))}
-      </div>
+    <ShareablePanel
+      shareLabel="POD Tasks"
+      onShare={onShare}
+      isSharing={copyingSection === "POD Tasks"}
+    >
+      <div className="section-stack">
+        {/* Summary row */}
+        <div className="pod-summary-grid">
+          {[
+            { label: "Scripts to review", value: totalScriptsPending },
+            { label: "Beats to review", value: totalBeatsPending },
+          ].map((card) => (
+            <div key={card.label} className="metric-card">
+              <div className="metric-label">{card.label}</div>
+              <div className="metric-value">{card.value}</div>
+            </div>
+          ))}
+        </div>
 
-      {/* Scripts pending approval */}
-      <div className="pod-section-header">
-        <span className="pod-section-title">Scripts pending approval</span>
-        <span className="pod-section-subtitle">Scripts completed by writer, awaiting POD lead review</span>
-      </div>
-      <div className="pod-cards-stack">
-        {scriptsPendingByPod.length === 0 ? (
-          <EmptyState text="No scripts pending approval." />
-        ) : (
-          scriptsPendingByPod.map((pod, i) => {
-            const isMax = i === 0;
-            const barColor = isMax ? "#c2703e" : "#2d5a3d";
-            const pct = Math.round((pod.count / maxScripts) * 100);
-            return (
-              <div key={pod.podLead} className="pod-rank-card" style={{ borderLeftColor: barColor }}>
-                <div className="pod-info-col" style={{ flex: 1 }}>
-                  <div className="pod-lead-name">{pod.podLead}</div>
-                  <PodFunnelBar label="" value={pod.count} maxValue={maxScripts} color={barColor} />
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+        <PodTasksBarChart
+          title="Scripts pending approval"
+          subtitle="Scripts completed by writer, awaiting POD lead review"
+          items={scriptsPendingByPod}
+          maxValue={maxScripts}
+          accentColor="#c2703e"
+        />
 
-      {/* Beats pending approval */}
-      <div className="pod-section-header">
-        <span className="pod-section-title">Beats pending approval</span>
-        <span className="pod-section-subtitle">Beats from current week in review pending or iterate status</span>
+        <PodTasksBarChart
+          title="Beats pending approval"
+          subtitle="Beats from current week in review pending or iterate status"
+          items={beatsPendingByPod}
+          maxValue={maxBeats}
+          accentColor="#c2703e"
+        />
       </div>
-      <div className="pod-cards-stack">
-        {beatsPendingByPod.length === 0 ? (
-          <EmptyState text="No beats pending approval this week." />
-        ) : (
-          beatsPendingByPod.map((pod, i) => {
-            const isMax = i === 0;
-            const barColor = isMax ? "#c2703e" : "#2d5a3d";
-            return (
-              <div key={pod.podLead} className="pod-rank-card" style={{ borderLeftColor: barColor }}>
-                <div className="pod-info-col" style={{ flex: 1 }}>
-                  <div className="pod-lead-name">{pod.podLead}</div>
-                  <PodFunnelBar label="" value={pod.count} maxValue={maxBeats} color={barColor} />
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
+    </ShareablePanel>
   );
 }
 
@@ -2508,6 +2524,8 @@ export default function UnifiedOpsApp() {
                     <PodTasksContent
                       podTasksData={podTasksData}
                       podTasksLoading={podTasksLoading}
+                      onShare={copySection}
+                      copyingSection={copyingSection}
                     />
                   )}
                 </div>

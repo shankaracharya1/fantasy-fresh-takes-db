@@ -38,16 +38,12 @@ export async function GET() {
       .map(([podLead, count]) => ({ podLead, count }))
       .sort((a, b) => b.count - a.count);
 
-    // 2. Beats pending approval per POD (current week's ideation = pipeline for next week)
+    // 2. Beats pending approval per POD (current week)
     //    Count ideation rows from current week with status "review pending" or "iterate"
     const weekSelection = getWeekSelection("current");
-    const sourceWeekSelection = {
-      ...weekSelection,
-      weekStart: shiftYmd(weekSelection.weekStart, -7),
-    };
-    const targetStart = sourceWeekSelection.weekStart;
-    const targetEnd = shiftYmd(sourceWeekSelection.weekStart, 6);
-    const bucketLabel = getIdeationWeekBucket(sourceWeekSelection);
+    const targetStart = weekSelection.weekStart;
+    const targetEnd = shiftYmd(weekSelection.weekStart, 6);
+    const bucketLabel = getIdeationWeekBucket(weekSelection);
 
     const beatsPending = new Map();
     for (const row of ideationRows) {
