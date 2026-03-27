@@ -967,6 +967,7 @@ function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError }) {
           className="hero-card"
           tone={getPipelineCardTone(liveCount, liveTarget)}
           value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(liveCount)}
+          hint={!overviewLoading && overviewData?.submittedByThursday != null ? `${overviewData.submittedByThursday} submitted by Fri morning IST` : ""}
         />
       </div>
       <div className="metric-grid three-col">
