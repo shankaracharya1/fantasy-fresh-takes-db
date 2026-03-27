@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  fetchEditorialTabRows,
+  fetchEditorialScriptStatusRows,
   fetchIdeationTabRows,
   parseLiveDate,
   normalizeIdeationWeekLabel,
@@ -18,16 +18,17 @@ function normalizeKey(value) {
 export async function GET() {
   try {
     const [{ rows: editorialRows }, { rows: ideationRows }] = await Promise.all([
-      fetchEditorialTabRows(),
+      fetchEditorialScriptStatusRows(),
       fetchIdeationTabRows(),
     ]);
 
     // 1. Scripts pending approval per POD
-    //    Count editorial rows where status = "Completed by the writer"
+    //    Column C = podLeadName, Column N = scriptStatus
+    //    Count rows where scriptStatus = "Completed by writer"
     const scriptsPending = new Map();
     for (const row of editorialRows) {
-      const status = normalizeKey(row.status);
-      if (status !== "completed by the writer") continue;
+      const status = normalizeKey(row.scriptStatus);
+      if (status !== "completed by writer") continue;
       const podLead = row.podLeadName || "";
       if (!podLead) continue;
       scriptsPending.set(podLead, (scriptsPending.get(podLead) || 0) + 1);
