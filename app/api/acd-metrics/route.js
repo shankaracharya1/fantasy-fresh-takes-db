@@ -182,22 +182,27 @@ function aggregateAcdDeltaMetrics(rows, liveDateMap) {
   });
 
   const seenImages = new Set();
-  const perSheetImageCounts = new Map();
   const dailyMap = new Map();
-  let latestLiveDate = "";
+  let latestWorkDate = "";
 
   for (const row of input) {
+    const workDate = String(row.work_date || "").slice(0, 10);
     const cdName = normalizeCdName(row.cd_name);
     const acdName = getAcdName(row);
     const generationKey = getGenerationKey(row);
     const scopeKey = getScopeKey(row);
 
-    if (!cdName || !acdName || !generationKey || !scopeKey) {
+    if (!workDate || !cdName || !acdName || !generationKey || !scopeKey) {
       continue;
     }
 
+    // Only include images for assets that have gone live
     const liveDate = dateMap.get(scopeKey) || "";
     if (!liveDate || (today && liveDate > today)) {
+      continue;
+    }
+
+    if (today && workDate > today) {
       continue;
     }
 
@@ -206,26 +211,22 @@ function aggregateAcdDeltaMetrics(rows, liveDateMap) {
     }
     seenImages.add(generationKey);
 
-    // Count images per sheet (scopeKey + acdName) for per-sheet minutes calculation
-    const sheetAcdKey = `${normalizeForKey(scopeKey)}|${normalizeForKey(acdName)}`;
-    perSheetImageCounts.set(sheetAcdKey, (perSheetImageCounts.get(sheetAcdKey) || 0) + 1);
-
-    const dailyKey = `${liveDate}|${normalizeForKey(cdName)}|${normalizeForKey(acdName)}|${normalizeForKey(scopeKey)}`;
+    // Bucket by work_date (image generation date) + scopeKey for per-sheet minutes
+    const dailyKey = `${workDate}|${normalizeForKey(cdName)}|${normalizeForKey(acdName)}|${normalizeForKey(scopeKey)}`;
     if (!dailyMap.has(dailyKey)) {
       dailyMap.set(dailyKey, {
-        liveDate,
+        workDate,
         cdName,
         acdName,
         scopeKey,
-        sheetAcdKey,
         totalImages: 0,
       });
     }
 
     dailyMap.get(dailyKey).totalImages += 1;
 
-    if (!latestLiveDate || liveDate > latestLiveDate) {
-      latestLiveDate = liveDate;
+    if (!latestWorkDate || workDate > latestWorkDate) {
+      latestWorkDate = workDate;
     }
   }
 
@@ -233,11 +234,11 @@ function aggregateAcdDeltaMetrics(rows, liveDateMap) {
   const aggregatedDailyMap = new Map();
   for (const row of dailyMap.values()) {
     const minutes = convertImagesToMinutes(row.totalImages);
-    const aggKey = `${row.liveDate}|${normalizeForKey(row.cdName)}|${normalizeForKey(row.acdName)}`;
+    const aggKey = `${row.workDate}|${normalizeForKey(row.cdName)}|${normalizeForKey(row.acdName)}`;
 
     if (!aggregatedDailyMap.has(aggKey)) {
       aggregatedDailyMap.set(aggKey, {
-        liveDate: row.liveDate,
+        workDate: row.workDate,
         cdName: row.cdName,
         acdName: row.acdName,
         totalImages: 0,
@@ -252,7 +253,7 @@ function aggregateAcdDeltaMetrics(rows, liveDateMap) {
 
   const dailyRows = Array.from(aggregatedDailyMap.values())
     .map((row) => ({
-      workDate: row.liveDate,
+      workDate: row.workDate,
       cdName: row.cdName,
       acdName: row.acdName,
       totalImages: Number(row.totalImages || 0),
@@ -265,7 +266,7 @@ function aggregateAcdDeltaMetrics(rows, liveDateMap) {
         String(a.cdName || "").localeCompare(String(b.cdName || ""))
     );
 
-  if (!latestLiveDate) {
+  if (!latestWorkDate) {
     return {
       today: todayInIST(),
       latestWorkDate: "",
@@ -279,9 +280,9 @@ function aggregateAcdDeltaMetrics(rows, liveDateMap) {
     };
   }
 
-  const start7 = shiftDate(latestLiveDate, -6);
-  const start14 = shiftDate(latestLiveDate, -13);
-  const start30 = shiftDate(latestLiveDate, -29);
+  const start7 = shiftDate(latestWorkDate, -6);
+  const start14 = shiftDate(latestWorkDate, -13);
+  const start30 = shiftDate(latestWorkDate, -29);
   const rolling7Acd = new Map();
   const rolling14Acd = new Map();
   const rolling30Acd = new Map();
@@ -290,17 +291,17 @@ function aggregateAcdDeltaMetrics(rows, liveDateMap) {
   const rolling30Cd = new Map();
 
   for (const row of dailyRows) {
-    if (isWithinWindow(row.workDate, start30, latestLiveDate)) {
+    if (isWithinWindow(row.workDate, start30, latestWorkDate)) {
       addRollingSummary(rolling30Acd, row.acdName, row.totalMinutes, row.totalImages);
       addRollingSummary(rolling30Cd, row.cdName, row.totalMinutes, row.totalImages);
     }
 
-    if (isWithinWindow(row.workDate, start14, latestLiveDate)) {
+    if (isWithinWindow(row.workDate, start14, latestWorkDate)) {
       addRollingSummary(rolling14Acd, row.acdName, row.totalMinutes, row.totalImages);
       addRollingSummary(rolling14Cd, row.cdName, row.totalMinutes, row.totalImages);
     }
 
-    if (isWithinWindow(row.workDate, start7, latestLiveDate)) {
+    if (isWithinWindow(row.workDate, start7, latestWorkDate)) {
       addRollingSummary(rolling7Acd, row.acdName, row.totalMinutes, row.totalImages);
       addRollingSummary(rolling7Cd, row.cdName, row.totalMinutes, row.totalImages);
     }
@@ -308,7 +309,7 @@ function aggregateAcdDeltaMetrics(rows, liveDateMap) {
 
   return {
     today: todayInIST(),
-    latestWorkDate: latestLiveDate,
+    latestWorkDate,
     dailyRows,
     rolling7Rows: mapRollingRows(rolling7Acd, "acdName"),
     rolling14Rows: mapRollingRows(rolling14Acd, "acdName"),
