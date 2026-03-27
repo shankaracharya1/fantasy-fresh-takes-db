@@ -1634,6 +1634,8 @@ function PodTasksContent({ podTasksData, podTasksLoading }) {
   }
 
   const { scriptsPendingByPod, beatsPendingByPod, totalScriptsPending, totalBeatsPending } = podTasksData;
+  const maxScripts = Math.max(...scriptsPendingByPod.map((r) => r.count), 1);
+  const maxBeats = Math.max(...beatsPendingByPod.map((r) => r.count), 1);
 
   return (
     <div className="section-stack">
@@ -1659,17 +1661,19 @@ function PodTasksContent({ podTasksData, podTasksLoading }) {
         {scriptsPendingByPod.length === 0 ? (
           <EmptyState text="No scripts pending approval." />
         ) : (
-          scriptsPendingByPod.map((pod) => (
-            <div key={pod.podLead} className="pod-rank-card" style={{ borderLeftColor: "#c2703e" }}>
-              <div className="pod-info-col" style={{ flex: 1 }}>
-                <div className="pod-lead-name">{pod.podLead}</div>
+          scriptsPendingByPod.map((pod, i) => {
+            const isMax = i === 0;
+            const barColor = isMax ? "#c2703e" : "#2d5a3d";
+            const pct = Math.round((pod.count / maxScripts) * 100);
+            return (
+              <div key={pod.podLead} className="pod-rank-card" style={{ borderLeftColor: barColor }}>
+                <div className="pod-info-col" style={{ flex: 1 }}>
+                  <div className="pod-lead-name">{pod.podLead}</div>
+                  <PodFunnelBar label="" value={pod.count} maxValue={maxScripts} color={barColor} />
+                </div>
               </div>
-              <div className="pod-rank-col">
-                <div className="pod-rank-number" style={{ color: "#c2703e" }}>{pod.count}</div>
-                <div className="pod-rank-label">SCRIPTS</div>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -1682,17 +1686,18 @@ function PodTasksContent({ podTasksData, podTasksLoading }) {
         {beatsPendingByPod.length === 0 ? (
           <EmptyState text="No beats pending approval this week." />
         ) : (
-          beatsPendingByPod.map((pod) => (
-            <div key={pod.podLead} className="pod-rank-card" style={{ borderLeftColor: "#2d5a3d" }}>
-              <div className="pod-info-col" style={{ flex: 1 }}>
-                <div className="pod-lead-name">{pod.podLead}</div>
+          beatsPendingByPod.map((pod, i) => {
+            const isMax = i === 0;
+            const barColor = isMax ? "#c2703e" : "#2d5a3d";
+            return (
+              <div key={pod.podLead} className="pod-rank-card" style={{ borderLeftColor: barColor }}>
+                <div className="pod-info-col" style={{ flex: 1 }}>
+                  <div className="pod-lead-name">{pod.podLead}</div>
+                  <PodFunnelBar label="" value={pod.count} maxValue={maxBeats} color={barColor} />
+                </div>
               </div>
-              <div className="pod-rank-col">
-                <div className="pod-rank-number" style={{ color: "#2d5a3d" }}>{pod.count}</div>
-                <div className="pod-rank-label">BEATS</div>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
@@ -1903,7 +1908,7 @@ export default function UnifiedOpsApp() {
   const [notice, setNotice] = useState(null);
   const [podWiseView, setPodWiseView] = useState("performance");
   const [podTasksData, setPodTasksData] = useState(null);
-  const [podTasksLoading, setPodTasksLoading] = useState(false);
+  const [podTasksLoading, setPodTasksLoading] = useState(true);
 
   const nextWeekKey = useMemo(() => shiftWeekKey(getCurrentWeekKey(), 1), []);
   const nextWeekPlannerBoardMetrics = useMemo(() => {
@@ -2089,14 +2094,9 @@ export default function UnifiedOpsApp() {
   }, []);
 
   useEffect(() => {
-    if (activeView !== "pod-wise" || podWiseView !== "tasks") {
-      return undefined;
-    }
-
     let cancelled = false;
 
     async function loadPodTasks() {
-      setPodTasksLoading(true);
       try {
         const response = await fetch("/api/dashboard/pod-tasks", { cache: "no-store" });
         const payload = await readJson(response);
@@ -2121,7 +2121,7 @@ export default function UnifiedOpsApp() {
     return () => {
       cancelled = true;
     };
-  }, [activeView, podWiseView]);
+  }, []);
 
   useEffect(() => {
     if (activeView !== "analytics") {
