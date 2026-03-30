@@ -1438,7 +1438,215 @@ function AnalyticsContent({
   );
 }
 
-function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyingSection }) {
+function PodWisePerformanceView({ competitionRows, onShare, copyingSection }) {
+  const totalBeats = competitionRows.reduce((sum, row) => sum + Number(row.lifetimeBeats || 0), 0);
+  const totalScripts = competitionRows.reduce((sum, row) => sum + Number(row.lifetimeScripts || 0), 0);
+  const totalSuccessful = competitionRows.reduce((sum, row) => sum + Number(row.hitRateNumerator || 0), 0);
+  const avgConversion = totalScripts > 0 ? Number(((totalSuccessful / totalScripts) * 100).toFixed(0)) : 0;
+  const maxBarValue = Math.max(
+    ...competitionRows.map((row) =>
+      Math.max(Number(row.lifetimeBeats || 0), Number(row.lifetimeScripts || 0))
+    ),
+    1
+  );
+  const sorted = [...competitionRows].sort((a, b) => {
+    const aRate = Number(a.lifetimeScripts || 0) > 0 ? (Number(a.hitRateNumerator || 0) / Number(a.lifetimeScripts || 0)) : 0;
+    const bRate = Number(b.lifetimeScripts || 0) > 0 ? (Number(b.hitRateNumerator || 0) / Number(b.lifetimeScripts || 0)) : 0;
+    return bRate - aRate;
+  });
+
+  return (
+    <div className="section-stack">
+      <ShareablePanel
+        shareLabel="POD Wise leaderboard"
+        onShare={onShare}
+        isSharing={copyingSection === "POD Wise leaderboard"}
+      >
+        <div className="metric-grid pod-metric-row-4">
+          <article className="metric-card tone-default">
+            <div className="metric-label">Total beats</div>
+            <div className="metric-value">{formatNumber(totalBeats)}</div>
+          </article>
+          <article className="metric-card tone-default">
+            <div className="metric-label">Total scripts</div>
+            <div className="metric-value">{formatNumber(totalScripts)}</div>
+          </article>
+          <article className="metric-card tone-default">
+            <div className="metric-label">Successful</div>
+            <div className="metric-value">{formatNumber(totalSuccessful)}</div>
+          </article>
+          <article className="metric-card tone-default">
+            <div className="metric-label">Avg conversion</div>
+            <div className="metric-value">{avgConversion}%</div>
+          </article>
+        </div>
+
+        <div className="pod-performance-section">
+          <div className="panel-head">
+            <div className="panel-subtitle">POD performance</div>
+            <div className="pod-performance-hint">Ranked by successful scripts as % of total attempted scripts</div>
+          </div>
+
+          <div className="pod-rank-list">
+            {sorted.map((row, index) => {
+              const beats = Number(row.lifetimeBeats || 0);
+              const scripts = Number(row.lifetimeScripts || 0);
+              const successful = Number(row.hitRateNumerator || 0);
+              const hitRate = scripts > 0 ? Number(((successful / scripts) * 100).toFixed(0)) : 0;
+
+              return (
+                <div key={row.podLeadName} className="pod-rank-card">
+                  <div className="pod-rank-left">
+                    <div className="pod-rank-circle">{index + 1}</div>
+                    <div className="pod-rank-info">
+                      <div className="pod-rank-name">{row.podLeadName}</div>
+                      <div className="pod-rank-rate">
+                        <span className="pod-rank-pct">{hitRate}%</span>
+                        <span className="pod-rank-rate-label">Script hit rate</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pod-rank-bars">
+                    <div className="pod-bar-row">
+                      <span className="pod-bar-label">Beats</span>
+                      <div className="pod-bar-track">
+                        <div className="pod-bar-fill pod-bar-beats" style={{ width: `${(beats / maxBarValue) * 100}%` }} />
+                      </div>
+                      <span className="pod-bar-count">{beats}</span>
+                    </div>
+                    <div className="pod-bar-row">
+                      <span className="pod-bar-label">Scripts</span>
+                      <div className="pod-bar-track">
+                        <div className="pod-bar-fill pod-bar-scripts" style={{ width: `${(scripts / maxBarValue) * 100}%` }} />
+                      </div>
+                      <span className="pod-bar-count">{scripts}</span>
+                    </div>
+                    <div className="pod-bar-row">
+                      <span className="pod-bar-label">Successful</span>
+                      <div className="pod-bar-track">
+                        <div className="pod-bar-fill pod-bar-successful" style={{ width: `${(successful / maxBarValue) * 100}%` }} />
+                      </div>
+                      <span className="pod-bar-count">{successful}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pod-legend-row">
+            <span className="pod-legend-item"><span className="pod-legend-swatch pod-bar-beats" /> Beats written</span>
+            <span className="pod-legend-item"><span className="pod-legend-swatch pod-bar-scripts" /> Scripts produced</span>
+            <span className="pod-legend-item"><span className="pod-legend-swatch pod-bar-successful" /> Successful scripts</span>
+          </div>
+        </div>
+      </ShareablePanel>
+    </div>
+  );
+}
+
+function PodWiseTasksView({ podTasksData, podTasksLoading, podTasksError, onShare, copyingSection }) {
+  if (podTasksLoading) {
+    return <EmptyState text="Loading POD tasks..." />;
+  }
+
+  if (podTasksError) {
+    return <div className="warning-note">{podTasksError}</div>;
+  }
+
+  const pods = Array.isArray(podTasksData?.pods) ? podTasksData.pods : [];
+  const totalScriptsToReview = pods.reduce((sum, pod) => sum + Number(pod.scriptsToReview || 0), 0);
+  const totalBeatsToReview = pods.reduce((sum, pod) => sum + Number(pod.pendingBeats || 0), 0);
+  const maxScripts = Math.max(...pods.map((p) => Number(p.scriptsToReview || 0)), 1);
+  const maxBeats = Math.max(...pods.map((p) => Number(p.pendingBeats || 0)), 1);
+  const scriptPods = [...pods].filter((p) => Number(p.scriptsToReview || 0) > 0).sort((a, b) => Number(b.scriptsToReview || 0) - Number(a.scriptsToReview || 0));
+  const beatPods = [...pods].filter((p) => Number(p.pendingBeats || 0) > 0).sort((a, b) => Number(b.pendingBeats || 0) - Number(a.pendingBeats || 0));
+
+  return (
+    <div className="section-stack">
+      <ShareablePanel
+        shareLabel="POD Wise tasks"
+        onShare={onShare}
+        isSharing={copyingSection === "POD Wise tasks"}
+      >
+        <div className="metric-grid funnel-metric-row-2">
+          <article className="metric-card tone-default">
+            <div className="metric-label">Scripts to review</div>
+            <div className="metric-value">{formatNumber(totalScriptsToReview)}</div>
+          </article>
+          <article className="metric-card tone-default">
+            <div className="metric-label">Beats to review</div>
+            <div className="metric-value">{formatNumber(totalBeatsToReview)}</div>
+          </article>
+        </div>
+
+        <div className="pod-tasks-section">
+          <div className="panel-head">
+            <div className="panel-subtitle">Scripts pending approval</div>
+            <div className="pod-performance-hint">Scripts completed by writer, awaiting POD lead review</div>
+          </div>
+          {scriptPods.length > 0 ? (
+            <div className="pod-tasks-bar-list">
+              {scriptPods.map((pod) => {
+                const count = Number(pod.scriptsToReview || 0);
+                return (
+                  <div key={pod.podLeadName} className="pod-tasks-bar-row">
+                    <span className="pod-tasks-bar-name">{pod.podLeadName}</span>
+                    <div className="pod-bar-track">
+                      <div className="pod-bar-fill pod-bar-beats" style={{ width: `${(count / maxScripts) * 100}%` }} />
+                    </div>
+                    <span className="pod-bar-count" style={{ color: "var(--forest)", fontWeight: 700 }}>{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState text="No scripts pending review right now." />
+          )}
+        </div>
+
+        <div className="pod-tasks-section">
+          <div className="panel-head">
+            <div className="panel-subtitle">Beats pending approval</div>
+            <div className="pod-performance-hint">Beats from current week in review pending or iterate status</div>
+          </div>
+          {beatPods.length > 0 ? (
+            <div className="pod-tasks-bar-list">
+              {beatPods.map((pod) => {
+                const count = Number(pod.pendingBeats || 0);
+                return (
+                  <div key={pod.podLeadName} className="pod-tasks-bar-row">
+                    <span className="pod-tasks-bar-name">{pod.podLeadName}</span>
+                    <div className="pod-bar-track">
+                      <div className="pod-bar-fill pod-bar-scripts" style={{ width: `${(count / maxBeats) * 100}%` }} />
+                    </div>
+                    <span className="pod-bar-count">{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <EmptyState text="No beats pending approval right now." />
+          )}
+        </div>
+      </ShareablePanel>
+    </div>
+  );
+}
+
+function PodWiseContent({ view, competitionPodRows, competitionLoading, podTasksData, podTasksLoading, podTasksError, onShare, copyingSection }) {
+  if (view === "tasks") {
+    return (
+      <PodWiseTasksView
+        podTasksData={podTasksData}
+        podTasksLoading={podTasksLoading}
+        podTasksError={podTasksError}
+        onShare={onShare}
+        copyingSection={copyingSection}
+      />
+    );
+  }
+
   if (competitionLoading) {
     return <EmptyState text="Loading POD Wise dashboard..." />;
   }
@@ -1449,39 +1657,11 @@ function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyi
   }
 
   return (
-    <div className="section-stack">
-      <ShareablePanel
-        shareLabel="POD Wise leaderboard"
-        onShare={onShare}
-        isSharing={copyingSection === "POD Wise leaderboard"}
-      >
-        <div className="section-stack">
-          <div>
-            <div className="panel-title">POD wise leaderboard</div>
-            <ResponsiveContainer width="100%" height={360}>
-              <BarChart
-                data={competitionRows.map((row) => ({
-                  name: row.podLeadName,
-                  "Lifetime beats": row.lifetimeBeats,
-                  "Lifetime scripts": row.lifetimeScripts,
-                  "Successful scripts": row.hitRateNumerator,
-                }))}
-                margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="Lifetime beats" fill="#146b65" />
-                <Bar dataKey="Lifetime scripts" fill="#c28b2c" />
-                <Bar dataKey="Successful scripts" fill="#3f7d4f" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </ShareablePanel>
-    </div>
+    <PodWisePerformanceView
+      competitionRows={competitionRows}
+      onShare={onShare}
+      copyingSection={copyingSection}
+    />
   );
 }
 
@@ -1678,8 +1858,12 @@ export default function UnifiedOpsApp() {
     Object.fromEntries(OVERVIEW_PERIODS.map((period) => [period, true]))
   );
   const [productionErrorByPeriod, setProductionErrorByPeriod] = useState({});
+  const [podWiseView, setPodWiseView] = useState("performance");
   const [competitionData, setCompetitionData] = useState(null);
   const [competitionLoading, setCompetitionLoading] = useState(true);
+  const [podTasksData, setPodTasksData] = useState(null);
+  const [podTasksLoading, setPodTasksLoading] = useState(false);
+  const [podTasksError, setPodTasksError] = useState("");
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState("");
@@ -1874,6 +2058,47 @@ export default function UnifiedOpsApp() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (activeView !== "pod-wise" || podWiseView !== "tasks") {
+      return undefined;
+    }
+
+    if (podTasksData) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadPodTasks() {
+      setPodTasksLoading(true);
+      setPodTasksError("");
+      try {
+        const response = await fetch("/api/dashboard/pod-tasks", { cache: "no-store" });
+        const payload = await readJson(response);
+        if (!response.ok) {
+          throw new Error(payload.error || "Unable to load POD tasks.");
+        }
+
+        if (!cancelled) {
+          setPodTasksData(payload);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setPodTasksError(error.message || "Unable to load POD tasks.");
+        }
+      } finally {
+        if (!cancelled) {
+          setPodTasksLoading(false);
+        }
+      }
+    }
+
+    void loadPodTasks();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView, podWiseView, podTasksData]);
 
   useEffect(() => {
     if (activeView !== "analytics") {
@@ -2220,10 +2445,32 @@ export default function UnifiedOpsApp() {
                 kicker="Team performance"
                 title="POD Wise"
                 description="Conversion rates and output by POD lead."
+                actions={
+                  <div className="week-toggle-group">
+                    <button
+                      type="button"
+                      className={podWiseView === "performance" ? "is-active" : ""}
+                      onClick={() => setPodWiseView("performance")}
+                    >
+                      Performance
+                    </button>
+                    <button
+                      type="button"
+                      className={podWiseView === "tasks" ? "is-active" : ""}
+                      onClick={() => setPodWiseView("tasks")}
+                    >
+                      Tasks
+                    </button>
+                  </div>
+                }
               >
                 <PodWiseContent
+                  view={podWiseView}
                   competitionPodRows={competitionData?.podRows}
                   competitionLoading={competitionLoading}
+                  podTasksData={podTasksData}
+                  podTasksLoading={podTasksLoading}
+                  podTasksError={podTasksError}
                   onShare={copySection}
                   copyingSection={copyingSection}
                 />
