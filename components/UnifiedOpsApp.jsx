@@ -894,7 +894,7 @@ function buildOverviewNotes({ overviewError, overviewData }) {
 
 function ReadinessChecklistItem({ label, done }) {
   return (
-    <div className={`readiness-item ${done ? "readiness-done" : "readiness-pending"}`}>
+    <div className="readiness-item">
       <span className="readiness-label">{label}</span>
       <span className={`readiness-status ${done ? "readiness-status-done" : "readiness-status-pending"}`}>
         {done ? "Done" : "Pending"}
