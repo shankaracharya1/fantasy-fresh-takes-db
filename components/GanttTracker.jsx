@@ -147,8 +147,8 @@ function Toast({ toast }) {
 
   const palette =
     toast.tone === "success"
-      ? { background: "#ecfdf5", border: "#6ee7b7", color: "#065f46" }
-      : { background: "#fff1f2", border: "#fda4af", color: "#9f1239" };
+      ? { background: "#eefaf6", border: "#c7e7df", color: "#0f5132" }
+      : { background: "#fef2f2", border: "#fecaca", color: "#991b1b" };
 
   return (
     <div
@@ -164,9 +164,10 @@ function Toast({ toast }) {
         border: `1px solid ${palette.border}`,
         background: palette.background,
         color: palette.color,
-        boxShadow: "0 18px 40px rgba(15,23,42,0.18)",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
         fontSize: 12,
         fontWeight: 600,
+        fontFamily: BODY_FONT,
       }}
     >
       {toast.text}
@@ -180,10 +181,10 @@ function StatusBanner({ children }) {
       style={{
         marginBottom: 14,
         padding: "12px 14px",
-        borderRadius: 10,
-        background: "#fff1f2",
-        color: "#9f1239",
-        border: "1px solid #fecdd3",
+        borderRadius: 12,
+        background: "#fef9ee",
+        color: "#8b5e17",
+        border: "1px solid rgba(183, 121, 31, 0.16)",
         fontSize: 12,
         fontWeight: 600,
       }}
@@ -201,11 +202,15 @@ function SummaryChips({ summary, notStarted, totalBeats }) {
   const ooo = Number(safeSummary.writer_ooo || 0);
 
   const chips = [
-    { value: beats, label: "Beats this week", color: "#1e40af" },
-    { value: production, label: "Expected in Production", color: STAGE_MAP.production?.text || "#065f46" },
-    { value: live, label: "Expected Live", color: STAGE_MAP.live_on_meta?.text || "#155e75" },
-    { value: ooo, label: "Writer OOO", color: STAGE_MAP.writer_ooo?.text || "#92400e" },
+    { value: beats, label: "Beats this week", color: "#1a4731", borderColor: "#1a6b5a" },
+    { value: production, label: "Expected in Production", color: "#1a4731", borderColor: "#1a6b5a" },
+    { value: live, label: "Expected Live", color: "#1a4731", borderColor: "#1a6b5a" },
+    { value: ooo, label: "Writer OOO", color: "#8c847d", borderColor: "#e0d5c7" },
   ];
+
+  if (Number(notStarted || 0) > 0) {
+    chips.push({ value: Number(notStarted || 0), label: "Not writing today", color: "#c24141", borderColor: "#c24141" });
+  }
 
   return (
     <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
@@ -216,24 +221,24 @@ function SummaryChips({ summary, notStarted, totalBeats }) {
             display: "flex",
             alignItems: "center",
             gap: 6,
-            padding: "8px 12px",
-            background: "#fffefb",
-            borderRadius: 12,
-            border: "1px solid #ddd3c2",
-            boxShadow: "0 8px 20px rgba(20, 28, 30, 0.05)",
+            padding: "7px 12px",
+            background: "#ffffff",
+            borderRadius: 10,
+            border: "1px solid #e0d5c7",
+            borderLeft: `3px solid ${chip.borderColor}`,
           }}
         >
           <span
             style={{
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: 700,
-              fontFamily: MONO_FONT,
+              fontFamily: DISPLAY_FONT,
               color: chip.color,
             }}
           >
             {chip.value}
           </span>
-          <span style={{ fontSize: 10, color: "#64748b", fontWeight: 500 }}>{chip.label}</span>
+          <span style={{ fontSize: 10, color: "#8c847d", fontWeight: 600 }}>{chip.label}</span>
         </div>
       ))}
     </div>
@@ -610,7 +615,7 @@ function BeatDocPicker({
                   padding: 0,
                   cursor: "pointer",
                   fontSize: 11,
-                  color: "#64748b",
+                  color: "#8c847d",
                   textAlign: "left",
                   fontFamily: BODY_FONT,
                 }}
@@ -729,14 +734,14 @@ function BeatDocPicker({
                         }}
                         style={pickerOptionStyle}
                       >
-                        <div style={{ fontSize: 11, fontWeight: 700, color: "#1e293b" }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: "#2c2c2c" }}>
                           {option.beatTitle || option.beatName || "Untitled Beat"}
                         </div>
                         <div
                           style={{
                             marginTop: 3,
                             fontSize: 10,
-                            color: "#64748b",
+                            color: "#8c847d",
                             whiteSpace: "nowrap",
                             overflow: "hidden",
                             textOverflow: "ellipsis",
@@ -761,7 +766,7 @@ function BeatDocPicker({
                     padding: "8px 10px",
                     borderRadius: 8,
                     border: "1px dashed #cbd5e1",
-                    background: "#f8fafc",
+                    background: "#faf7f3",
                     color: "#475569",
                     fontSize: 11,
                     fontWeight: 600,
@@ -816,10 +821,10 @@ function TrackerTable({
   return (
     <div
       style={{
-        background: "#fffefb",
-        border: "1px solid #ddd3c2",
-        borderRadius: 18,
-        boxShadow: "0 18px 40px rgba(20, 28, 30, 0.08)",
+        background: "#ffffff",
+        border: "1px solid #e0d5c7",
+        borderRadius: 14,
+        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
         overflow: "auto",
       }}
     >
@@ -828,7 +833,7 @@ function TrackerTable({
           display: "grid",
           gridTemplateColumns: GRID_TEMPLATE_COLUMNS,
           minWidth: 940,
-          borderBottom: "1px solid #ede4d7",
+          borderBottom: "1px solid #e0d5c7",
         }}
       >
         {["Pod", "Writer", "Beats"].map((label) => (
@@ -847,8 +852,8 @@ function TrackerTable({
               justifyContent: "center",
               flexDirection: "column",
               gap: 1,
-              background: index === todayIdx ? "#006a67" : "#fbf5eb",
-              color: index === todayIdx ? "#fff" : "#58636a",
+              background: index === todayIdx ? "#c4704b" : "#faf7f3",
+              color: index === todayIdx ? "#fff" : "#8c847d",
             }}
           >
             <span>{DAYS[index]}</span>
@@ -877,7 +882,7 @@ function TrackerTable({
               gridTemplateColumns: GRID_TEMPLATE_COLUMNS,
               minWidth: 940,
               minHeight: 34,
-              background: row.assetIndex % 2 === 0 ? "#fffefb" : "#fcf8f0",
+              background: row.assetIndex % 2 === 0 ? "#ffffff" : "#faf7f3",
             }}
           >
             <div
@@ -901,8 +906,8 @@ function TrackerTable({
             <div
               style={{
                 padding: "3px 6px",
-                background: "#f8f2e5",
-                borderRight: "1px solid #ede4d7",
+                background: "#faf7f3",
+                borderRight: "1px solid #e0d5c7",
                 display: "flex",
                 alignItems: row.isFirstWriterRow ? "flex-start" : "center",
                 borderBottom: rowBorder,
@@ -951,7 +956,7 @@ function TrackerTable({
             <div
               style={{
                 padding: "3px 6px",
-                borderRight: "1px solid #ede4d7",
+                borderRight: "1px solid #e0d5c7",
                 display: "flex",
                 alignItems: "center",
                 borderBottom: rowBorder,
@@ -1092,14 +1097,14 @@ function RosterManager({
           style={{
             fontSize: 10,
             fontWeight: 700,
-            color: "#64748b",
+            color: "#8c847d",
             letterSpacing: "0.08em",
             textTransform: "uppercase",
           }}
         >
           Roster Manager
         </div>
-        <div style={{ fontSize: 13, color: "#334155", marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: "#6b6560", marginTop: 4 }}>
           Add writers, drag them between pods, set their role, and archive or restore them without changing past week
           snapshots.
         </div>
@@ -1119,10 +1124,10 @@ function RosterManager({
             <div
               key={pod.id}
               style={{
-                border: dropPodId === pod.id ? `2px dashed ${pod.color}` : "1px solid #e2e8f0",
+                border: dropPodId === pod.id ? `2px dashed ${pod.color}` : "1px solid #e0d5c7",
                 borderRadius: 12,
                 overflow: "hidden",
-                background: "#f8fafc",
+                background: "#faf7f3",
               }}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -1235,7 +1240,7 @@ function RosterManager({
                     </div>
                   ))
                 ) : (
-                  <div style={{ fontSize: 12, color: "#64748b" }}>
+                  <div style={{ fontSize: 12, color: "#8c847d" }}>
                     {dragWriter ? "Drop a writer here to move them into this POD." : "No active writers in this pod yet."}
                   </div>
                 )}
@@ -1252,7 +1257,7 @@ function RosterManager({
           paddingTop: 12,
         }}
       >
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 8 }}>Archived Writers</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#2c2c2c", marginBottom: 8 }}>Archived Writers</div>
         {archivedWriters.length > 0 ? (
           <div style={{ display: "grid", gap: 8 }}>
             {archivedWriters.map((writer) => (
@@ -1265,13 +1270,13 @@ function RosterManager({
                   gap: 10,
                   padding: "8px 10px",
                   borderRadius: 10,
-                  background: "#f8fafc",
+                  background: "#faf7f3",
                   border: "1px solid #e2e8f0",
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#334155" }}>{writer.name}</div>
-                  <div style={{ fontSize: 10, color: "#64748b" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#2c2c2c" }}>{writer.name}</div>
+                  <div style={{ fontSize: 10, color: "#8c847d" }}>
                     Last pod: {writer.podName} · Role: {writer.role || "Writer"}
                   </div>
                 </div>
@@ -1291,7 +1296,7 @@ function RosterManager({
             ))}
           </div>
         ) : (
-          <div style={{ fontSize: 12, color: "#64748b" }}>No archived writers.</div>
+          <div style={{ fontSize: 12, color: "#8c847d" }}>No archived writers.</div>
         )}
       </div>
     </div>
@@ -1335,11 +1340,11 @@ function SnapshotBoard({
                 fontSize: 10,
                 fontWeight: 600,
                 letterSpacing: "0.1em",
-                color: "#084846",
+                color: "#c4704b",
                 textTransform: "uppercase",
               }}
             >
-              Pocket FM / Fresh takes dashboard
+              Weekly planning
             </div>
             <h1
               style={{
@@ -1350,7 +1355,7 @@ function SnapshotBoard({
                 fontFamily: DISPLAY_FONT,
               }}
             >
-              Fresh takes dashboard
+              Planner
             </h1>
           </div>
           <div
@@ -1360,7 +1365,7 @@ function SnapshotBoard({
               fontFamily: MONO_FONT,
               minWidth: 150,
               textAlign: "center",
-              color: "#52616c",
+              color: "#8c847d",
             }}
           >
             {weekLabel}
@@ -2573,13 +2578,12 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
       >
         <div
           style={{
-            border: "1px solid #d8cfbf",
-            borderRadius: 24,
-            background: "rgba(255, 252, 246, 0.92)",
-            backdropFilter: "blur(8px)",
-            boxShadow: "0 18px 40px rgba(20, 28, 30, 0.08)",
+            border: "1px solid #e0d5c7",
+            borderRadius: 16,
+            background: "#ffffff",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
             padding: "18px 20px",
-            color: "#1b1c20",
+            color: "#2c2c2c",
           }}
         >
           <div
@@ -2591,31 +2595,6 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
               gap: 12,
             }}
           >
-            <div>
-              <div
-                style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.1em",
-                  color: "#084846",
-                  textTransform: "uppercase",
-                }}
-              >
-                Pocket FM / Fresh takes dashboard
-              </div>
-              <h1
-                style={{
-                  fontSize: 28,
-                  fontWeight: 700,
-                  margin: "6px 0 0",
-                  letterSpacing: "-0.03em",
-                  fontFamily: DISPLAY_FONT,
-                }}
-              >
-                Fresh takes dashboard
-              </h1>
-            </div>
-
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <button onClick={() => void changeWeek(-1)} style={navBtn}>
                 {"<"}
@@ -2627,7 +2606,7 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                   fontFamily: MONO_FONT,
                   minWidth: 150,
                   textAlign: "center",
-                  color: "#52616c",
+                  color: "#6b6560",
                 }}
               >
                 {weekLabel}
@@ -2643,9 +2622,11 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                     ...navBtn,
                     width: "auto",
                     padding: "6px 14px",
-                    background: "#006a67",
+                    background: "#c4704b",
+                    border: "1px solid #c4704b",
                     fontSize: 11,
                     fontWeight: 700,
+                    color: "#fff",
                   }}
                 >
                   This Week
@@ -2659,7 +2640,8 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                   ...navBtn,
                   width: "auto",
                   padding: "6px 14px",
-                  background: "#006a67",
+                  background: "#c4704b",
+                  border: "1px solid #c4704b",
                   fontSize: 11,
                   fontWeight: 700,
                   opacity: isCopyingShare ? 0.7 : 1,
@@ -2679,7 +2661,8 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                     ...navBtn,
                     width: "auto",
                     padding: "6px 14px",
-                    background: "#114e4b",
+                    background: "#1a4731",
+                    border: "1px solid #1a4731",
                     fontSize: 11,
                     fontWeight: 700,
                     opacity: isCommitting ? 0.7 : 1,
@@ -2698,12 +2681,12 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                   ...navBtn,
                   width: "auto",
                   padding: "6px 14px",
-                  background: editUnlocked ? "#006a67" : "#fffaf2",
+                  background: editUnlocked ? "#1a4731" : "#faf7f3",
                   fontSize: 11,
                   fontWeight: 700,
                   letterSpacing: "0.02em",
-                  color: editUnlocked ? "#fff" : "#1b1c20",
-                  border: "1px solid #cfc5b4",
+                  color: editUnlocked ? "#fff" : "#2c2c2c",
+                  border: "1px solid #e0d5c7",
                 }}
               >
                 {editUnlocked ? "Lock Edit" : "Unlock Edit"}
@@ -2714,10 +2697,10 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                   padding: "6px 10px",
                   borderRadius: 999,
                   background: "#fff",
-                  border: "1px solid #dfd7c8",
+                  border: "1px solid #e0d5c7",
                   fontSize: 11,
                   fontWeight: 600,
-                  color: editUnlocked ? "#14532d" : "#52616c",
+                  color: editUnlocked ? "#1a4731" : "#8c847d",
                 }}
               >
                 {sessionChecked ? (editUnlocked ? "Editing enabled" : "Read-only") : "Checking session..."}
@@ -2726,7 +2709,7 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
           </div>
         </div>
 
-        <div style={{ padding: "16px 4px 0", maxWidth: 1280, margin: "0 auto" }}>
+        <div style={{ padding: "16px 0 0", maxWidth: 1280, margin: "0 auto" }}>
           {loadError ? <StatusBanner>{loadError}</StatusBanner> : null}
           {plannerRenderError ? (
             <StatusBanner>
@@ -2739,10 +2722,10 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
               style={{
                 marginBottom: 14,
                 padding: "12px 14px",
-                borderRadius: 14,
-                background: "#eef4f5",
-                color: "#084846",
-                border: "1px solid #c7d4d1",
+                borderRadius: 12,
+                background: "#faf7f3",
+                color: "#6b6560",
+                border: "1px solid #e0d5c7",
                 fontSize: 12,
                 fontWeight: 600,
               }}
@@ -2756,10 +2739,10 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
               style={{
                 marginBottom: 14,
                 padding: "12px 14px",
-                borderRadius: 14,
-                background: "#eef8f6",
-                color: "#0f5132",
-                border: "1px solid #cce7df",
+                borderRadius: 12,
+                background: "#eefaf6",
+                color: "#1a4731",
+                border: "1px solid #c7e7df",
                 fontSize: 12,
                 fontWeight: 600,
               }}
@@ -2775,11 +2758,10 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                 alignItems: "center",
                 gap: 6,
                 marginBottom: 14,
-                background: "#fffefb",
-                border: "1px solid #ddd3c2",
-                borderRadius: 18,
+                background: "#ffffff",
+                border: "1px solid #e0d5c7",
+                borderRadius: 14,
                 padding: "10px 14px",
-                boxShadow: "0 8px 20px rgba(20, 28, 30, 0.05)",
                 flexWrap: "wrap",
               }}
             >
@@ -2787,7 +2769,7 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
-                  color: "#64748b",
+                  color: "#8c847d",
                   marginRight: 2,
                   textTransform: "uppercase",
                   letterSpacing: "0.05em",
@@ -2813,8 +2795,8 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                       activeBrush === stage.id && !eraseMode
                         ? `2px solid ${stage.color}`
                         : "2px solid transparent",
-                    background: activeBrush === stage.id && !eraseMode ? stage.bg : "#fbf5eb",
-                    color: activeBrush === stage.id && !eraseMode ? stage.text : "#64748b",
+                    background: activeBrush === stage.id && !eraseMode ? stage.bg : "#faf7f3",
+                    color: activeBrush === stage.id && !eraseMode ? stage.text : "#8c847d",
                     fontSize: 11,
                     fontWeight: 600,
                     cursor: "pointer",
@@ -2826,7 +2808,7 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                 </button>
               ))}
 
-              <div style={{ width: 1, height: 22, background: "#e2e8f0", margin: "0 2px" }} />
+              <div style={{ width: 1, height: 22, background: "#e0d5c7", margin: "0 2px" }} />
 
               <button
                 onClick={() => setEraseMode((current) => !current)}
@@ -2834,8 +2816,8 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                   padding: "5px 10px",
                   borderRadius: 7,
                   border: eraseMode ? "2px solid #ef4444" : "2px solid transparent",
-                  background: eraseMode ? "#fee2e2" : "#fbf5eb",
-                  color: eraseMode ? "#991b1b" : "#64748b",
+                  background: eraseMode ? "#fee2e2" : "#faf7f3",
+                  color: eraseMode ? "#991b1b" : "#8c847d",
                   fontSize: 11,
                   fontWeight: 600,
                   cursor: "pointer",
@@ -2845,7 +2827,7 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
                 Eraser
               </button>
 
-              <div style={{ marginLeft: "auto", fontSize: 10, color: "#94a3b8" }}>
+              <div style={{ marginLeft: "auto", fontSize: 10, color: "#8c847d" }}>
                 {isLoading ? "Loading week..." : statusText(saveState)}
               </div>
             </div>
@@ -2885,7 +2867,7 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
             onPaintEnter={handlePaintEnter}
           />
 
-          <div style={{ textAlign: "center", fontSize: 10, color: "#94a3b8", marginTop: 12, paddingBottom: 16 }}>
+          <div style={{ textAlign: "center", fontSize: 10, color: "#8c847d", marginTop: 12, paddingBottom: 16 }}>
             {plannerRenderError
               ? "This planner week had missing or legacy fields, so a safe read-only fallback is shown instead of crashing the page."
               : editUnlocked
@@ -2926,9 +2908,9 @@ export default function GanttTracker({ onPlannerSnapshotChange = null }) {
 }
 
 const navBtn = {
-  background: "#fffaf2",
-  border: "1px solid #cfc5b4",
-  color: "#1b1c20",
+  background: "#faf7f3",
+  border: "1px solid #e0d5c7",
+  color: "#2c2c2c",
   width: 34,
   height: 34,
   borderRadius: 999,
@@ -2944,13 +2926,13 @@ const hdrCell = {
   padding: "10px 10px",
   fontSize: 10,
   fontWeight: 700,
-  color: "#58636a",
-  background: "#fbf5eb",
+  color: "#8c847d",
+  background: "#faf7f3",
   textTransform: "uppercase",
   letterSpacing: "0.08em",
   display: "flex",
   alignItems: "center",
-  borderRight: "1px solid #ede4d7",
+  borderRight: "1px solid #e0d5c7",
 };
 
 const inputStyle = {
@@ -2959,7 +2941,7 @@ const inputStyle = {
   background: "transparent",
   fontSize: 11,
   fontFamily: BODY_FONT,
-  color: "#1e293b",
+  color: "#2c2c2c",
   outline: "none",
   padding: "2px 0",
 };
@@ -2968,7 +2950,7 @@ const textStyle = {
   width: "100%",
   fontSize: 11,
   fontFamily: BODY_FONT,
-  color: "#1e293b",
+  color: "#2c2c2c",
   lineHeight: 1.35,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -2979,7 +2961,7 @@ const subtleTextStyle = {
   width: "100%",
   fontSize: 10,
   fontFamily: BODY_FONT,
-  color: "#64748b",
+  color: "#8c847d",
   lineHeight: 1.3,
   whiteSpace: "nowrap",
   overflow: "hidden",
@@ -2988,7 +2970,7 @@ const subtleTextStyle = {
 
 const beatFieldButtonStyle = {
   width: "100%",
-  border: "1px solid #e2e8f0",
+  border: "1px solid #e0d5c7",
   background: "#fff",
   borderRadius: 8,
   padding: "5px 8px",
@@ -3001,13 +2983,13 @@ const beatFieldButtonStyle = {
 
 const clearFieldBtnStyle = {
   background: "#fff",
-  border: "1px solid #e2e8f0",
+  border: "1px solid #e0d5c7",
   borderRadius: 6,
   width: 18,
   height: 18,
   fontSize: 10,
   fontWeight: 700,
-  color: "#64748b",
+  color: "#8c847d",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -3019,13 +3001,13 @@ const clearFieldBtnStyle = {
 
 const tinyBtn = {
   background: "#fff",
-  border: "1px solid #e2e8f0",
+  border: "1px solid #e0d5c7",
   borderRadius: 4,
   width: 16,
   height: 16,
   fontSize: 11,
   fontWeight: 700,
-  color: "#64748b",
+  color: "#8c847d",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -3038,7 +3020,7 @@ const tinyBtn = {
 const pickerMessageStyle = {
   padding: "16px 12px",
   fontSize: 11,
-  color: "#64748b",
+  color: "#8c847d",
   textAlign: "center",
 };
 
@@ -3048,7 +3030,7 @@ const pickerOptionStyle = {
   textAlign: "left",
   padding: "9px 12px",
   border: "none",
-  borderBottom: "1px solid #f8fafc",
+  borderBottom: "1px solid #f5f0ea",
   background: "transparent",
   cursor: "pointer",
   fontFamily: BODY_FONT,
