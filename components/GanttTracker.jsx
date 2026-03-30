@@ -24,8 +24,8 @@ import { copyNodeImageToClipboard } from "../lib/clipboard-share.js";
 
 const SESSION_STORAGE_KEY = "fresh-take-gantt-edit";
 const GRID_TEMPLATE_COLUMNS = "80px 130px 420px repeat(7, 1fr)";
-const BODY_FONT = "var(--font-body), sans-serif";
-const DISPLAY_FONT = "var(--font-display), sans-serif";
+const BODY_FONT = "'DM Sans', var(--font-body), sans-serif";
+const DISPLAY_FONT = "'Fraunces', var(--font-display), serif";
 const MONO_FONT =
   "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace";
 const AUTOSAVE_DELAY_MS = 500;

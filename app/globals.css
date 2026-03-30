@@ -1,12 +1,12 @@
 :root {
-  --font-body: var(--font-dm-sans), "DM Sans", sans-serif;
-  --font-display: var(--font-fraunces), "Fraunces", serif;
+  --font-body: "DM Sans", sans-serif;
+  --font-display: "Fraunces", serif;
   --bg-deep: #f5f0ea;
   --bg-surface: #faf7f3;
   --panel: #ffffff;
   --panel-hover: #fefdfb;
-  --line: #e0d5c7;
-  --line-hover: #d1c3b2;
+  --line: rgba(180, 165, 145, 0.3);
+  --line-hover: rgba(180, 165, 145, 0.45);
   --ink: #2c2c2c;
   --ink-bright: #1a1a1a;
   --subtle: #6b6560;
@@ -25,7 +25,7 @@
   --gold-glow: rgba(183, 121, 31, 0.1);
   --red: #c24141;
   --red-glow: rgba(194, 65, 65, 0.1);
-  --amber-text: #9a7b4f;
+  --amber-text: #b8860b;
   --chart-positive: #2d5a3d;
   --chart-warning: #c4704b;
 }
@@ -87,7 +87,7 @@ select {
 .sidebar-brand-name {
   font-family: var(--font-display);
   font-size: 1.35rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--ink-bright);
   line-height: 1.1;
   letter-spacing: -0.01em;
@@ -186,7 +186,7 @@ select {
 
 .section-shell {
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--panel);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: border-color 200ms ease, box-shadow 200ms ease;
@@ -209,7 +209,7 @@ select {
 .section-title {
   font-family: var(--font-display);
   font-size: clamp(1.6rem, 3vw, 2rem);
-  font-weight: 800;
+  font-weight: 700;
   color: var(--ink-bright);
   line-height: 1.1;
   letter-spacing: -0.02em;
@@ -223,6 +223,7 @@ select {
 }
 
 .section-description {
+  font-family: var(--font-body);
   color: var(--amber-text);
   font-style: italic;
   font-size: 0.9rem;
@@ -419,7 +420,7 @@ select {
 .rank-card,
 .panel-card {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
   padding: 20px;
   transition: border-color 200ms ease, box-shadow 200ms ease;
@@ -430,7 +431,7 @@ select {
 .rank-card:hover,
 .panel-card:hover {
   border-color: var(--line-hover);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .pod-summary-card {
@@ -531,6 +532,7 @@ select {
 .rank-value {
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+  font-weight: 300;
   line-height: 1;
   margin-top: 12px;
   color: var(--forest);
@@ -800,7 +802,7 @@ select {
 
 .throughput-pivot-group {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
   overflow: hidden;
 }
@@ -843,7 +845,7 @@ select {
   overflow-x: auto;
   overflow-y: visible;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   margin-top: 14px;
   background: var(--panel);
 }
@@ -1171,7 +1173,7 @@ select {
   gap: 14px;
   padding: 18px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--panel);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
@@ -1190,7 +1192,7 @@ select {
 .details-panel-subtitle {
   font-family: var(--font-display);
   font-size: 0.98rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--ink-bright);
   letter-spacing: -0.01em;
 }
@@ -1212,14 +1214,14 @@ select {
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(196, 112, 75, 0.03);
 }
 
 .details-team-name {
   font-family: var(--font-display);
   font-size: 1rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--ink-bright);
 }
 
@@ -1249,7 +1251,7 @@ select {
   align-items: flex-start;
   padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
 }
 
@@ -1299,7 +1301,7 @@ select {
 .details-logic-card {
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(196, 112, 75, 0.03);
 }
 
@@ -1329,7 +1331,7 @@ select {
   bottom: 20px;
   max-width: 360px;
   padding: 14px 16px;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--panel);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
@@ -1366,7 +1368,7 @@ select {
 .acd-chart-canvas {
   margin-top: 16px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
   padding: 16px 12px 10px;
 }
@@ -1374,7 +1376,7 @@ select {
 .acd-chart-tooltip {
   min-width: 180px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.10);
   padding: 12px 14px;
@@ -1481,7 +1483,7 @@ select {
 
 .rules-card {
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
   padding: 18px;
 }
@@ -1505,7 +1507,7 @@ select {
   gap: 8px;
   padding: 16px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
   transition: border-color 200ms ease;
 }
@@ -1523,6 +1525,7 @@ select {
 .troubleshoot-summary-card strong {
   font-family: var(--font-display);
   font-size: 1.5rem;
+  font-weight: 300;
   line-height: 1;
   color: var(--forest);
 }
@@ -1600,7 +1603,7 @@ select {
 .funnel-section-head .panel-title {
   font-family: var(--font-display);
   font-size: 1.1rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--ink-bright);
 }
 
@@ -1712,7 +1715,7 @@ select {
   padding: 16px 18px;
   border: 1px solid var(--line);
   border-left: 4px solid var(--teal);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--panel);
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
@@ -1740,7 +1743,7 @@ select {
   color: var(--forest);
   font-family: var(--font-display);
   font-size: 1.1rem;
-  font-weight: 800;
+  font-weight: 600;
   flex-shrink: 0;
 }
 
@@ -1764,7 +1767,7 @@ select {
 .pod-rank-pct {
   font-family: var(--font-display);
   font-size: 1.1rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--forest);
 }
 
