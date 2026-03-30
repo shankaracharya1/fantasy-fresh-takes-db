@@ -743,29 +743,29 @@ function AcdLeaderboardChart({ rows, viewLabel, emptyText = EMPTY_ACD_MESSAGE })
           margin={{ top: 8, right: 28, left: 8, bottom: 8 }}
           barCategoryGap={12}
         >
-          <CartesianGrid horizontal={false} stroke="#eadfcc" strokeDasharray="3 3" />
+          <CartesianGrid horizontal={false} stroke="#e0d5c7" strokeDasharray="3 3" />
           <XAxis
             type="number"
-            tick={{ fill: "#6d5b45", fontSize: 12 }}
+            tick={{ fill: "#8c847d", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
-            label={{ value: "Minutes", position: "insideBottomRight", offset: -2, fill: "#6d5b45", fontSize: 12 }}
+            label={{ value: "Minutes", position: "insideBottomRight", offset: -2, fill: "#8c847d", fontSize: 12 }}
           />
           <YAxis
             type="category"
             dataKey="name"
             width={yAxisWidth}
-            tick={{ fill: "#34291d", fontSize: 12 }}
+            tick={{ fill: "#2c2c2c", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip cursor={{ fill: "rgba(20, 107, 101, 0.08)" }} content={<AcdChartTooltip />} />
+          <Tooltip cursor={{ fill: "rgba(196, 112, 75, 0.06)" }} content={<AcdChartTooltip />} />
           <Bar dataKey="totalMinutes" radius={[0, 10, 10, 0]}>
             <LabelList
               dataKey="totalMinutes"
               position="right"
               formatter={(value) => `${formatNumber(value)} min`}
-              fill="#34291d"
+              fill="#2c2c2c"
               fontSize={12}
             />
             {chartRows.map((row, index) => (
@@ -1727,8 +1727,10 @@ function ProductionContent({
         onShare={onShare}
         isSharing={copyingSection === "Production ACD sync"}
       >
-        <div className="panel-title">ACD Daily Sync</div>
-        <div className="panel-statline">{buildAcdSyncMeta(syncStatus)}</div>
+        <div className="funnel-section-head">
+          <div className="panel-subtitle">ACD Daily Sync</div>
+          <div className="panel-statline">{buildAcdSyncMeta(syncStatus)}</div>
+        </div>
         <div className="panel-stack">
           <div className="section-actions section-actions-left" data-share-ignore="true">
             <button
@@ -1750,10 +1752,12 @@ function ProductionContent({
       >
         <div className="panel-head">
           <div>
-            <div className="panel-title">{viewLabel} productivity chart</div>
-            <div className="panel-statline">
-              <span>{dataset.rows.length > 0 ? dataset.meta : acdMetricsData.emptyStateMessage || EMPTY_ACD_MESSAGE}</span>
-              {latestWorkDateLabel ? <span>Latest synced work date: {latestWorkDateLabel}</span> : null}
+            <div className="funnel-section-head">
+              <div className="panel-subtitle">{viewLabel} productivity chart</div>
+              <div className="panel-statline">
+                <span>{dataset.rows.length > 0 ? dataset.meta : acdMetricsData.emptyStateMessage || EMPTY_ACD_MESSAGE}</span>
+                {latestWorkDateLabel ? <span> Latest synced work date: {latestWorkDateLabel}</span> : null}
+              </div>
             </div>
           </div>
           <div className="production-toggle-wrap" data-share-ignore="true">
@@ -1782,8 +1786,10 @@ function ProductionContent({
         isSharing={copyingSection === "Production troubleshooting"}
         className="production-troubleshooting-panel"
       >
-        <div className="panel-title">ACD Sync Rules and Adherence Issues</div>
-        <div className="panel-statline">{buildAcdAdherenceMeta(syncStatus)}</div>
+        <div className="funnel-section-head">
+          <div className="panel-subtitle">ACD Sync Rules and Adherence Issues</div>
+          <div className="panel-statline">{buildAcdAdherenceMeta(syncStatus)}</div>
+        </div>
         <div className="rules-card">
           <div className="rules-card-title">Image sheet rules for ACD sync</div>
           <ol className="rules-list">

@@ -660,8 +660,8 @@ select {
 }
 
 .toggle-chip.is-active {
-  background: var(--ink-bright);
-  border-color: var(--ink-bright);
+  background: var(--accent);
+  border-color: var(--accent);
   color: #ffffff;
   font-weight: 700;
 }
