@@ -979,7 +979,7 @@ function OverviewWeekSection({
               hint={
                 <>
                   <div>{overviewData?.hitRateNumerator ?? 0} of {overviewData?.hitRateDenominator ?? 0} analytics-eligible assets.</div>
-                  <div style={{ marginTop: 4, fontSize: "0.82rem", color: "var(--muted)" }}>Success = $100+ spent, Q1 &gt; 10%, CTI &ge; 12%, Abs completion &ge; 1.8%</div>
+                  <div style={{ marginTop: 4, fontSize: "0.82rem", color: "var(--muted)" }}>Success = $100+ spent, Q1 &gt; 10%, CTI &ge; 12%, Abs completion &ge; 1.8%, CPI &le; $12</div>
                 </>
               }
               tone="default"

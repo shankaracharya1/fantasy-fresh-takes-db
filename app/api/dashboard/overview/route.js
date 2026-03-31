@@ -217,17 +217,20 @@ function isFunnelSuccess(row) {
   const q1Completion = toFiniteNumber(row?.video0To25Pct);
   const cti = toFiniteNumber(row?.clickToInstall);
   const absoluteCompletion = toFiniteNumber(row?.absoluteCompletionPct);
+  const cpi = toFiniteNumber(row?.cpiUsd);
 
   // ALL criteria must be met for success:
   // 1. Amount spent >= $100
   // 2. Q1 completion > 10%
   // 3. CTI >= 12%
   // 4. Absolute completion >= 1.8%
+  // 5. CPI <= $12
   return (
     Number.isFinite(amountSpent) && amountSpent >= 100 &&
     Number.isFinite(q1Completion) && q1Completion > 10 &&
     Number.isFinite(cti) && cti >= 12 &&
-    Number.isFinite(absoluteCompletion) && absoluteCompletion >= 1.8
+    Number.isFinite(absoluteCompletion) && absoluteCompletion >= 1.8 &&
+    Number.isFinite(cpi) && cpi <= 12
   );
 }
 
