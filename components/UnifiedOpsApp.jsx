@@ -1078,10 +1078,14 @@ function OverviewWeekSection({
       ready_for_production: "Ready for Prod",
     };
 
-    const commitTarget = 17;
-    const commitMax = 20;
-    const commitPct = Math.min(100, Math.round((totalThisWeek / commitMax) * 100));
-    const commitColor = totalThisWeek >= commitTarget ? "#1a4731" : totalThisWeek >= 12 ? "#b8860b" : "#c0392b";
+    const commitTarget = 20;
+    const commitPct = Math.min(100, Math.round((totalAllocated / commitTarget) * 100));
+    const isBeforeWednesday = dayOfWeek >= 1 && dayOfWeek <= 2;
+    const commitColor = totalAllocated >= commitTarget
+      ? "#1a4731"
+      : totalAllocated >= 15 && isBeforeWednesday
+        ? "#b8860b"
+        : "#c0392b";
 
     const gapClass = (gap) => {
       if (gap === 0) return "gap-zero";
@@ -1126,7 +1130,7 @@ function OverviewWeekSection({
 
           {/* Section 1 — Planning Health */}
           <div className="planning-health">
-            <span className="planning-health-label">{totalThisWeek} of {commitTarget}–{commitMax}</span>
+            <span className="planning-health-label">{totalAllocated} of {commitTarget}</span>
             <div className="planning-health-bar">
               <div
                 className="planning-health-fill"
