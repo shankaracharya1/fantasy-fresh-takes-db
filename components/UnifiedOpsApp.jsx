@@ -2829,15 +2829,19 @@ export default function UnifiedOpsApp() {
 
   return (
     <>
-      <button
-        type="button"
-        className="theme-toggle-button"
-        onClick={() => setThemeMode((current) => (current === "light" ? "dark" : "light"))}
-        aria-label={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}
-        title={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}
-      >
-        {themeMode === "light" ? "Dark mode" : "Light mode"}
-      </button>
+      <header className="app-topbar">
+        <label className="theme-switch" aria-label={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
+          <span className="theme-switch-text">{themeMode === "light" ? "Light" : "Dark"}</span>
+          <input
+            type="checkbox"
+            checked={themeMode === "dark"}
+            onChange={() => setThemeMode((current) => (current === "light" ? "dark" : "light"))}
+          />
+          <span className="theme-switch-track" aria-hidden="true">
+            <span className="theme-switch-thumb" />
+          </span>
+        </label>
+      </header>
       <div className="app-shell">
         <aside className="sidebar">
           <div className="sidebar-brand">
