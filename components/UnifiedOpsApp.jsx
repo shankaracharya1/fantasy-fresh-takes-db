@@ -2150,6 +2150,7 @@ export default function UnifiedOpsApp() {
   const [activeView, setActiveView] = useState("overview");
   const [overviewPeriod, setOverviewPeriod] = useState("current");
   const [themeMode, setThemeMode] = useState("light");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [selectedBeatOverviewWeekKey, setSelectedBeatOverviewWeekKey] = useState(getWeekSelection("last").weekKey);
   const [expandedNavGroup, setExpandedNavGroup] = useState("overview");
   const [writerTrackerData, setWriterTrackerData] = useState(null);
@@ -2277,6 +2278,14 @@ export default function UnifiedOpsApp() {
       window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
     }
   }, [themeMode]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    document.body.style.overflow = mobileNavOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileNavOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2810,12 +2819,14 @@ export default function UnifiedOpsApp() {
     setActiveView("overview");
     setOverviewPeriod(period);
     setExpandedNavGroup("overview");
+    setMobileNavOpen(false);
   }
 
   function openPodWiseSubView(view) {
     setActiveView("pod-wise");
     setPodWiseView(view);
     setExpandedNavGroup("podWise");
+    setMobileNavOpen(false);
   }
 
   const viewNavItems = [
@@ -2830,6 +2841,18 @@ export default function UnifiedOpsApp() {
   return (
     <>
       <header className="app-topbar">
+        <div className="app-topbar-left">
+          <button
+            type="button"
+            className="mobile-nav-button"
+            onClick={() => setMobileNavOpen((current) => !current)}
+            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileNavOpen}
+          >
+            {mobileNavOpen ? "✕" : "☰"}
+          </button>
+          <div className="app-topbar-title">Fresh Takes Dashboard</div>
+        </div>
         <label className="theme-switch" aria-label={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
           <span className="theme-switch-text">{themeMode === "light" ? "Light" : "Dark"}</span>
           <input
@@ -2842,8 +2865,14 @@ export default function UnifiedOpsApp() {
           </span>
         </label>
       </header>
+      <button
+        type="button"
+        className={`mobile-nav-backdrop${mobileNavOpen ? " is-open" : ""}`}
+        onClick={() => setMobileNavOpen(false)}
+        aria-label="Close navigation"
+      />
       <div className="app-shell">
-        <aside className="sidebar">
+        <aside className={`sidebar${mobileNavOpen ? " is-open" : ""}`}>
           <div className="sidebar-brand">
             <div className="sidebar-brand-name">Fresh Takes</div>
             <div className="sidebar-brand-sub">Pocket FM</div>
@@ -2921,6 +2950,7 @@ export default function UnifiedOpsApp() {
                 onClick={() => {
                   setActiveView(id);
                   setExpandedNavGroup(null);
+                  setMobileNavOpen(false);
                 }}
               >
                 {label}
@@ -2938,6 +2968,7 @@ export default function UnifiedOpsApp() {
                 onClick={() => {
                   setActiveView(id);
                   setExpandedNavGroup(null);
+                  setMobileNavOpen(false);
                 }}
               >
                 {label}

@@ -100,10 +100,44 @@ select {
   padding: 10px 16px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   background: color-mix(in srgb, var(--bg-deep) 88%, transparent);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--line);
+}
+
+.app-topbar-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-topbar-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink-bright);
+  letter-spacing: -0.01em;
+}
+
+.mobile-nav-button {
+  display: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mobile-nav-backdrop {
+  display: none;
 }
 
 .theme-switch {
@@ -2352,25 +2386,61 @@ select {
     padding: 8px 12px;
   }
 
+  .app-topbar-title {
+    font-size: 0.95rem;
+  }
+
+  .mobile-nav-button {
+    display: inline-flex;
+  }
+
+  .mobile-nav-backdrop {
+    position: fixed;
+    top: var(--topbar-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: none;
+    background: rgba(0, 0, 0, 0.28);
+    z-index: 1390;
+    cursor: pointer;
+  }
+
+  .mobile-nav-backdrop.is-open {
+    display: block;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
   }
 
   .sidebar {
-    position: static;
+    position: fixed;
+    top: var(--topbar-height);
+    left: 0;
+    bottom: 0;
+    width: min(84vw, 320px);
     height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    border-bottom: none;
     padding: 16px;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
     gap: 12px;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    z-index: 1395;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
   }
 
   .sidebar-section {
-    flex-direction: row;
-    flex-wrap: wrap;
+    flex-direction: column;
+    flex-wrap: nowrap;
     gap: 4px;
   }
 
@@ -2379,7 +2449,7 @@ select {
   }
 
   .sidebar-subnav {
-    padding-left: 0;
+    padding-left: 10px;
   }
 
   .sidebar-section-label {
