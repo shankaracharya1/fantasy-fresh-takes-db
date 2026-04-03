@@ -2084,6 +2084,10 @@ const OVERVIEW_PERIOD_OPTIONS = [
 export default function UnifiedOpsApp() {
   const [activeView, setActiveView] = useState("overview");
   const [overviewPeriod, setOverviewPeriod] = useState("current");
+  const [expandedNavGroups, setExpandedNavGroups] = useState({
+    overview: true,
+    podWise: false,
+  });
   const [writerTrackerData, setWriterTrackerData] = useState(null);
   const [writerTrackerLoading, setWriterTrackerLoading] = useState(false);
   const [writerTrackerError, setWriterTrackerError] = useState("");
@@ -2651,9 +2655,26 @@ export default function UnifiedOpsApp() {
     }
   }
 
+  function toggleNavGroup(groupKey) {
+    setExpandedNavGroups((current) => ({
+      ...current,
+      [groupKey]: !current[groupKey],
+    }));
+  }
+
+  function openOverviewPeriod(period) {
+    setActiveView("overview");
+    setOverviewPeriod(period);
+    setExpandedNavGroups((current) => ({ ...current, overview: true }));
+  }
+
+  function openPodWiseSubView(view) {
+    setActiveView("pod-wise");
+    setPodWiseView(view);
+    setExpandedNavGroups((current) => ({ ...current, podWise: true }));
+  }
+
   const viewNavItems = [
-    ["overview", "Editorial Funnel"],
-    ["pod-wise", "POD Wise"],
     ["planner", "Planner"],
     ["analytics", "Analytics"],
     ["production", "Production"],
@@ -2673,6 +2694,68 @@ export default function UnifiedOpsApp() {
 
           <nav className="sidebar-section" aria-label="Views">
             <div className="sidebar-section-label">Views</div>
+            <div className="sidebar-group">
+              <button
+                type="button"
+                className={`sidebar-link sidebar-link-group${activeView === "overview" ? " active" : ""}`}
+                onClick={() => {
+                  setActiveView("overview");
+                  toggleNavGroup("overview");
+                }}
+                aria-expanded={expandedNavGroups.overview}
+              >
+                <span>Editorial Funnel</span>
+                <span className={`sidebar-group-chevron${expandedNavGroups.overview ? " is-open" : ""}`}>▾</span>
+              </button>
+              {expandedNavGroups.overview ? (
+                <div className="sidebar-subnav">
+                  {OVERVIEW_PERIOD_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={`sidebar-sub-link${
+                        activeView === "overview" && overviewPeriod === option.id ? " active" : ""
+                      }`}
+                      onClick={() => openOverviewPeriod(option.id)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="sidebar-group">
+              <button
+                type="button"
+                className={`sidebar-link sidebar-link-group${activeView === "pod-wise" ? " active" : ""}`}
+                onClick={() => {
+                  setActiveView("pod-wise");
+                  toggleNavGroup("podWise");
+                }}
+                aria-expanded={expandedNavGroups.podWise}
+              >
+                <span>POD Wise</span>
+                <span className={`sidebar-group-chevron${expandedNavGroups.podWise ? " is-open" : ""}`}>▾</span>
+              </button>
+              {expandedNavGroups.podWise ? (
+                <div className="sidebar-subnav">
+                  <button
+                    type="button"
+                    className={`sidebar-sub-link${activeView === "pod-wise" && podWiseView === "performance" ? " active" : ""}`}
+                    onClick={() => openPodWiseSubView("performance")}
+                  >
+                    Performance
+                  </button>
+                  <button
+                    type="button"
+                    className={`sidebar-sub-link${activeView === "pod-wise" && podWiseView === "tasks" ? " active" : ""}`}
+                    onClick={() => openPodWiseSubView("tasks")}
+                  >
+                    Tasks
+                  </button>
+                </div>
+              ) : null}
+            </div>
             {viewNavItems.map(([id, label]) => (
               <button
                 key={id}
