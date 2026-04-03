@@ -2072,7 +2072,8 @@ async function readJson(response) {
     return {};
   }
 
-  return response.json();
+  const payload = await response.json();
+  return payload && typeof payload === "object" ? payload : {};
 }
 
 const OVERVIEW_PERIOD_OPTIONS = [
