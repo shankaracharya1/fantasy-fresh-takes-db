@@ -1743,7 +1743,7 @@ function AnalyticsContent({
   );
 }
 
-function PodWisePerformanceView({ competitionRows, onShare, copyingSection }) {
+function PodWisePerformanceView({ competitionRows, onShare, copyingSection, weekLabel = "", selectionMode = "lifetime" }) {
   const totalBeats = competitionRows.reduce((sum, row) => sum + Number(row.lifetimeBeats || 0), 0);
   const totalScripts = competitionRows.reduce((sum, row) => sum + Number(row.lifetimeScripts || 0), 0);
   const totalSuccessful = competitionRows.reduce((sum, row) => sum + Number(row.hitRateNumerator || 0), 0);
@@ -1767,6 +1767,9 @@ function PodWisePerformanceView({ competitionRows, onShare, copyingSection }) {
         onShare={onShare}
         isSharing={copyingSection === "POD Wise leaderboard"}
       >
+        {selectionMode === "week" && weekLabel ? (
+          <div className="panel-statline">Week: {weekLabel}</div>
+        ) : null}
         <div className="metric-grid pod-metric-row-4">
           <article className="metric-card tone-default">
             <div className="metric-label">Total beats</div>
@@ -1945,7 +1948,18 @@ function PodWiseTasksView({ podTasksData, podTasksLoading, podTasksError, onShar
   );
 }
 
-function PodWiseContent({ view, competitionPodRows, competitionLoading, podTasksData, podTasksLoading, podTasksError, onShare, copyingSection }) {
+function PodWiseContent({
+  view,
+  competitionPodRows,
+  competitionLoading,
+  competitionWeekLabel,
+  competitionSelectionMode,
+  podTasksData,
+  podTasksLoading,
+  podTasksError,
+  onShare,
+  copyingSection,
+}) {
   if (view === "tasks") {
     return (
       <PodWiseTasksView
@@ -1972,6 +1986,8 @@ function PodWiseContent({ view, competitionPodRows, competitionLoading, podTasks
       competitionRows={competitionRows}
       onShare={onShare}
       copyingSection={copyingSection}
+      weekLabel={competitionWeekLabel}
+      selectionMode={competitionSelectionMode}
     />
   );
 }
@@ -2181,6 +2197,7 @@ export default function UnifiedOpsApp() {
   const [productionErrorByPeriod, setProductionErrorByPeriod] = useState({});
   const [podWiseView, setPodWiseView] = useState("performance");
   const [podWiseWeek, setPodWiseWeek] = useState("next");
+  const [podWiseWeekTouched, setPodWiseWeekTouched] = useState(false);
   const [competitionData, setCompetitionData] = useState(null);
   const [competitionLoading, setCompetitionLoading] = useState(true);
   const [podTasksData, setPodTasksData] = useState(null);
@@ -2425,8 +2442,10 @@ export default function UnifiedOpsApp() {
     let cancelled = false;
 
     async function loadCompetition() {
+      setCompetitionLoading(true);
       try {
-        const response = await fetch("/api/dashboard/competition", { cache: "no-store" });
+        const query = podWiseWeekTouched ? `?period=${encodeURIComponent(podWiseWeek)}` : "";
+        const response = await fetch(`/api/dashboard/competition${query}`, { cache: "no-store" });
         const payload = await readJson(response);
         if (!response.ok) {
           throw new Error(payload.error || "Unable to load competition data.");
@@ -2450,7 +2469,7 @@ export default function UnifiedOpsApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [podWiseWeek, podWiseWeekTouched]);
 
   useEffect(() => {
     if (activeView !== "pod-wise" || podWiseView !== "tasks") {
@@ -3086,7 +3105,10 @@ export default function UnifiedOpsApp() {
                           key={option.id}
                           type="button"
                           className={podWiseWeek === option.id ? "is-active" : ""}
-                          onClick={() => setPodWiseWeek(option.id)}
+                          onClick={() => {
+                            setPodWiseWeek(option.id);
+                            setPodWiseWeekTouched(true);
+                          }}
                         >
                           {option.label}
                         </button>
@@ -3099,6 +3121,8 @@ export default function UnifiedOpsApp() {
                   view={podWiseView}
                   competitionPodRows={competitionData?.podRows}
                   competitionLoading={competitionLoading}
+                  competitionWeekLabel={competitionData?.weekLabel}
+                  competitionSelectionMode={competitionData?.selectionMode}
                   podTasksData={podTasksData}
                   podTasksLoading={podTasksLoading}
                   podTasksError={podTasksError}
