@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fresh Takes Ops Dashboard - PRD</title>
+  <style>
+    :root {
+      --bg: #f7f1e7;
+      --surface: #fffaf3;
+      --ink: #1f2933;
+      --muted: #52606d;
+      --accent: #b3472e;
+      --line: #e5d6c3;
+      --ok: #0d7a3f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: linear-gradient(180deg, #fbf6ef 0%, var(--bg) 100%);
+      line-height: 1.5;
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px 18px 48px;
+    }
+    h1, h2, h3 {
+      margin: 0 0 10px;
+      line-height: 1.2;
+      color: #1e2022;
+    }
+    h1 {
+      font-family: "Fraunces", Georgia, serif;
+      font-size: 34px;
+      margin-bottom: 6px;
+    }
+    h2 {
+      font-family: "Fraunces", Georgia, serif;
+      font-size: 26px;
+      margin-top: 30px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+    }
+    h3 {
+      font-size: 18px;
+      margin-top: 20px;
+    }
+    p, li { font-size: 15px; }
+    .meta {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-top: 12px;
+    }
+    .pill {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      margin-right: 8px;
+      margin-bottom: 8px;
+      background: #fff;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 14px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    th {
+      background: #fef5e9;
+      font-weight: 700;
+    }
+    tr:last-child td { border-bottom: 0; }
+    code {
+      background: #f4ede4;
+      padding: 1px 6px;
+      border-radius: 5px;
+      font-size: 13px;
+    }
+    .ok {
+      color: var(--ok);
+      font-weight: 600;
+    }
+    @media (max-width: 720px) {
+      h1 { font-size: 29px; }
+      h2 { font-size: 22px; }
+      .wrap { padding: 20px 14px 34px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Fresh Takes Ops Dashboard - PRD</h1>
+    <div class="meta">Version 1.0 • Date: April 6, 2026 • Scope: Current Product + Requested Enhancements</div>
+
+    <section class="card">
+      <h3>Product Summary</h3>
+      <p>
+        Fresh Takes Ops Dashboard is an operational control center for editorial planning, pod performance,
+        production tracking, analytics outcomes, and planner execution for weekly Fresh Take delivery.
+      </p>
+      <span class="pill">Next.js App Router</span>
+      <span class="pill">Google Sheets Data Inputs</span>
+      <span class="pill">Supabase Persistence</span>
+      <span class="pill">Weekly Ops Cadence</span>
+    </section>
+
+    <h2>1. Goals</h2>
+    <div class="card">
+      <ol>
+        <li>Make week-level delivery and throughput performance visible at both POD and writer granularity.</li>
+        <li>Enable leadership to compare POD throughput and identify top-performing pods quickly.</li>
+        <li>Preserve all currently working dashboard capabilities while introducing new overview analytics.</li>
+      </ol>
+    </div>
+
+    <h2>2. Current Feature Baseline (Already in Product)</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Current Behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Editorial Funnel</strong></td>
+            <td>Sub-tabs for <code>Overview</code>, <code>Last week</code>, <code>This week</code>, and <code>Next week</code> with collapsible navigation behavior and week-aware data views.</td>
+          </tr>
+          <tr>
+            <td><strong>POD Wise</strong></td>
+            <td>Performance + Tasks views, week filter, and week-scoped API loading for tasks and performance metrics.</td>
+          </tr>
+          <tr>
+            <td><strong>Planner</strong></td>
+            <td>Gantt-style planner with brush interactions, roster management, and edit mode support.</td>
+          </tr>
+          <tr>
+            <td><strong>Analytics</strong></td>
+            <td>Weekly analytics table with status logic, action flags, and filters.</td>
+          </tr>
+          <tr>
+            <td><strong>Production</strong></td>
+            <td>ACD/CD productivity charts, sync status, adherence and troubleshooting sections.</td>
+          </tr>
+          <tr>
+            <td><strong>Details</strong></td>
+            <td>Configuration and documentation view for tracked teams and analytics logic.</td>
+          </tr>
+          <tr>
+            <td><strong>Global UX</strong></td>
+            <td>Light/Dark mode switch, sticky header, mobile hamburger navigation, share/export affordances.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>3. New Requirement A: Overview Tab KPI Expansion</h2>
+    <div class="card">
+      <h3>Objective</h3>
+      <p>Add a leadership overview for last-week output across writer, POD, production throughput, and Gen AI movement.</p>
+
+      <h3>Required Metrics</h3>
+      <ol>
+        <li><strong>Fresh Takes Delivered (Last Week, Approved Beats Only):</strong> show counts by writer and by POD.</li>
+        <li><strong>Throughput per ACD in Production:</strong> output count and throughput summary per ACD for the selected week.</li>
+        <li><strong>Assets moved to Full Gen AI:</strong> count of assets transitioned to Full Gen AI in selected week.</li>
+      </ol>
+
+      <h3>UX Requirements</h3>
+      <ol>
+        <li>Place metrics in the <code>Overview</code> context with clear POD and writer segmentation.</li>
+        <li>Add a week filter at top of the section; default remains current existing default behavior.</li>
+        <li>Allow quick scan cards plus a detailed table below.</li>
+      </ol>
+
+      <h3>Acceptance Criteria</h3>
+      <ol>
+        <li>When week changes, all three overview metrics refresh in one pass.</li>
+        <li>Writer and POD counts reconcile with the same approved-beat source for that week.</li>
+        <li>Empty state appears when no approved beats exist for selected week.</li>
+      </ol>
+    </div>
+
+    <h2>4. New Requirement B: Editorial Throughput Benchmarking</h2>
+    <div class="card">
+      <h3>Objective</h3>
+      <p>In Editorial, provide a pod-level first view and writer-level second view focused on throughput so we can identify the best POD by throughput.</p>
+
+      <h3>Required Views</h3>
+      <ol>
+        <li><strong>POD Level Throughput View (Default):</strong> rank PODs by throughput and delivery efficiency.</li>
+        <li><strong>Writer Level Throughput View:</strong> drill down into individual contributor throughput within pod context.</li>
+      </ol>
+
+      <h3>Suggested Throughput Fields</h3>
+      <ol>
+        <li>Approved beats delivered</li>
+        <li>Scripts completed</li>
+        <li>Production handoff count</li>
+        <li>Median turnaround (optional if available)</li>
+        <li>Throughput score (normalized metric for ranking)</li>
+      </ol>
+
+      <h3>Acceptance Criteria</h3>
+      <ol>
+        <li>POD view loads first and supports rank ordering by throughput.</li>
+        <li>Writer view is filterable by week and POD.</li>
+        <li>“Best POD” indicator is clearly displayed with metric basis.</li>
+      </ol>
+    </div>
+
+    <h2>5. Data and Logic Definitions</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Definition</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Approved Beat</td>
+            <td>Beat row that satisfies approved status logic in tracker source for selected week.</td>
+            <td>Google Sheets + dashboard normalization layer</td>
+          </tr>
+          <tr>
+            <td>Writer Delivery Count</td>
+            <td>Unique approved beats delivered by writer in selected week.</td>
+            <td>Editorial/overview API payloads</td>
+          </tr>
+          <tr>
+            <td>POD Delivery Count</td>
+            <td>Sum of unique approved beats delivered by writers mapped to that POD.</td>
+            <td>Writer-to-POD mapping + editorial payloads</td>
+          </tr>
+          <tr>
+            <td>ACD Throughput</td>
+            <td>Assets or beats processed in production by ACD during selected week.</td>
+            <td>Production dataset / ACD metrics endpoint</td>
+          </tr>
+          <tr>
+            <td>Full Gen AI Count</td>
+            <td>Number of assets marked as moved to Full Gen AI in selected week.</td>
+            <td>Production + classification tags</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>6. Non-Functional Requirements</h2>
+    <div class="card">
+      <ol>
+        <li>Keep dashboard responsive on desktop and mobile; no horizontal overflow on core tables without explicit scroll wrappers.</li>
+        <li>Maintain existing theme toggle behavior (light/dark) and sticky header UX.</li>
+        <li>API-backed sections should fail gracefully with warning notes, not blank screens.</li>
+      </ol>
+    </div>
+
+    <h2>7. Out of Scope (For This PRD Iteration)</h2>
+    <div class="card">
+      <ol>
+        <li>Changing planner data model or planner interaction patterns.</li>
+        <li>Redesigning analytics next-step logic.</li>
+        <li>Historic backfill corrections beyond current weekly data windows.</li>
+      </ol>
+    </div>
+
+    <h2>8. Open Questions</h2>
+    <div class="card">
+      <ol>
+        <li>Final source-of-truth field for “approved beats” across tabs (single standardized flag vs composite condition).</li>
+        <li>Exact definition of “throughput per ACD” (assets/day, assets/week, or approved outputs/week).</li>
+        <li>Canonical marker for “moved to Full Gen AI” (status field, pipeline stage, or tag).</li>
+      </ol>
+    </div>
+
+    <h2>9. Release Readiness</h2>
+    <div class="card">
+      <p class="ok">Ready once metric definitions are finalized and API payload mappings are confirmed.</p>
+      <ol>
+        <li>Week filter validation in Overview + Editorial</li>
+        <li>POD/Writer reconciliation check for same week</li>
+        <li>Smoke test in mobile and desktop layouts</li>
+      </ol>
+    </div>
+  </main>
+</body>
+</html>
