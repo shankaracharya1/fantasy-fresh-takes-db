@@ -17,6 +17,7 @@ import {
   buildPodsModel,
   countActiveWritersInPods,
   countAllAssetsWithStage,
+  countAssetsSubmittedByDay,
   createDefaultWriterConfig,
   getCurrentWeekKey,
   isNonBauPodLeadName,
@@ -124,6 +125,7 @@ function buildCurrentWeekPayload(plannerState) {
   const allProductionAssetCount = countAllAssetsWithStage(plannerState.pods, "production");
   const allLiveOnMetaAssetCount = countAllAssetsWithStage(plannerState.pods, "live_on_meta");
   const activeWriterCount = countActiveWritersInPods(plannerState.pods);
+  const submittedByThursday = countAssetsSubmittedByDay(plannerState.pods, 3); // Thu = index 3
 
   return {
     ok: true,
@@ -141,6 +143,7 @@ function buildCurrentWeekPayload(plannerState) {
     freshTakeCount: timing.plannedLiveCount,
     plannedReleaseCount: allLiveOnMetaAssetCount,
     inProductionBeatCount: allProductionAssetCount,
+    submittedByThursday,
     productionOutputCount: null,
     goodToGoBeatsCount: null,
     goodToGoTarget: GOOD_TO_GO_BEATS_TARGET,
@@ -186,6 +189,8 @@ function buildNextWeekPayload(plannerState, ideationRows) {
     plannerSource: plannerState.plannerSource || "board",
     plannerBeatCount: plannerState.plannerBeats.length,
     goodToGoBeatsCount: gtgMetrics.goodToGoBeatsCount,
+    reviewPendingCount: gtgMetrics.reviewPendingCount || 0,
+    iterateCount: gtgMetrics.iterateCount || 0,
     goodToGoTarget: gtgMetrics.goodToGoTarget,
     ideationWeekBucket: gtgMetrics.ideationWeekBucket,
     freshTakeCount: plannedReleaseCount,

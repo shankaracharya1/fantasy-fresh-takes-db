@@ -1,26 +1,22 @@
+import { Roboto } from "next/font/google";
 import "./globals.css";
 
+const roboto = Roboto({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-roboto",
+  display: "swap",
+});
+
 export const metadata = {
-  title: "Fresh takes dashboard",
-  description: "Pocket FM fresh takes planning and production dashboard",
+  title: "Fresh Takes — Pocket FM",
+  description: "Weekly releases, POD output, and production at a glance",
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,300;1,9..144,400&display=swap"
-          rel="stylesheet"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body>{children}</body>
+      <body className={`${roboto.variable} ${roboto.className}`}>{children}</body>
     </html>
   );
 }

@@ -8,6 +8,7 @@ import {
   Cell,
   LabelList,
   Legend,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -36,8 +37,8 @@ const ACD_VIEW_OPTIONS = [
 ];
 const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab sync.";
 const CHART_TONE_POSITIVE = "#2d5a3d";
-const CHART_TONE_WARNING = "#c4704b";
-const CHART_TONE_DANGER = "#b54c47";
+const CHART_TONE_WARNING = "#c2703e";
+const CHART_TONE_DANGER = "#9f2e2e";
 const WRITER_TARGET_PER_WEEK = 1.5;
 const ANALYTICS_LEGEND_FALLBACK = [
   { label: "Gen AI", tone: "gen-ai" },
@@ -46,18 +47,6 @@ const ANALYTICS_LEGEND_FALLBACK = [
   { label: "Testing / Drop", tone: "testing-drop" },
   { label: "Metric not meeting", tone: "metric-miss" },
 ];
-const EDITORIAL_FUNNEL_VIEW_OPTIONS = [
-  { id: "overview", label: "Overview" },
-  { id: "last", label: "Last week" },
-  { id: "current", label: "This week" },
-  { id: "next", label: "Next week" },
-];
-const POD_WISE_WEEK_OPTIONS = [
-  { id: "last", label: "Last week" },
-  { id: "current", label: "This week" },
-  { id: "next", label: "Next week" },
-];
-const THEME_STORAGE_KEY = "fresh-takes-theme-mode";
 
 function formatDateLabel(value) {
   if (!value) return "-";
@@ -105,6 +94,40 @@ function formatPercent(value) {
 
 function formatRatioValue(value) {
   return value === null || value === undefined ? "-" : formatNumber(value);
+}
+
+function getDeltaMeta(currentValue, previousValue, noun = "vs last week") {
+  const current = Number(currentValue || 0);
+  const previous = Number(previousValue || 0);
+  const delta = current - previous;
+
+  if (delta === 0) {
+    return {
+      text: `No change ${noun}`,
+      color: "var(--subtle)",
+    };
+  }
+
+  const direction = delta > 0 ? "+" : "-";
+  return {
+    text: `${direction}${formatMetricValue(Math.abs(delta))} ${noun}`,
+    color: delta > 0 ? "#2d8a57" : "#c74a3a",
+  };
+}
+
+function normalizePodFilterKey(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeStageMatchKey(value) {
+  return String(value || "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function formatAnalyticsMetricValue(metric, format) {
@@ -360,14 +383,52 @@ function getChartBarColor(index, totalCount) {
   return CHART_TONE_DANGER;
 }
 
-function MetricCard({ label, value, hint, tone = "default", body = null, className = "" }) {
+function MetricCard({ label, value, hint, tone = "default", body = null, className = "", unit = "" }) {
   return (
     <article className={`metric-card tone-${tone} ${className}`.trim()}>
       <div className="metric-label">{label}</div>
-      {body ? <div className="metric-body">{body}</div> : <div className="metric-value">{value}</div>}
+      {body ? (
+        <div className="metric-body">{body}</div>
+      ) : (
+        <div className="metric-value">
+          {value}
+          {unit ? <span className="metric-unit">{unit}</span> : null}
+        </div>
+      )}
       {hint ? <div className="metric-hint">{hint}</div> : null}
     </article>
   );
+}
+
+function ProgressBar({ value, target, color = "var(--terracotta)" }) {
+  const pct = target > 0 ? Math.min((value / target) * 100, 100) : 0;
+  return (
+    <div className="metric-progress-bar">
+      <div className="metric-progress-fill" style={{ width: `${pct}%`, background: color }} />
+    </div>
+  );
+}
+
+function ReadinessRow({ color, label, value }) {
+  return (
+    <div className="readiness-row">
+      <span className="readiness-dot" style={{ background: color }} />
+      <span className="readiness-label">{label}</span>
+      <span className="readiness-value" style={{ color }}>{value}</span>
+    </div>
+  );
+}
+
+function getReadinessColor(ratio) {
+  if (ratio >= 1) return "#2d5a3d";
+  if (ratio >= 0.5) return "#9f6b15";
+  return "#9f2e2e";
+}
+
+function getHitRateColor(rate) {
+  if (rate >= 50) return "#2d5a3d";
+  if (rate >= 30) return "#9f6b15";
+  return "#9f2e2e";
 }
 
 function EmptyState({ text }) {
@@ -383,15 +444,13 @@ function DetailsContent({ acdMetricsData, acdMetricsLoading, acdMetricsError, an
   return (
     <div className="section-stack">
       <div className="panel-grid two-col">
-        <section className="panel-card details-card-no-accent">
-          <div className="funnel-section-head">
-            <div className="panel-subtitle">Teams currently being tracked</div>
-            <div className="section-description">
-              ACD sync reads from the Live tab only, processes Final image sheet links from column AZ, and reports only
-              rows stored as <code>live_tab_sync</code>.
-            </div>
+        <section className="panel-card">
+          <div className="panel-title">Teams currently being tracked</div>
+          <div className="section-subtitle">
+            ACD sync reads from the Live tab only, processes Final image sheet links from column AZ, and reports only
+            rows stored as <code>live_tab_sync</code>.
           </div>
-          <div className="section-stack" style={{ marginTop: 12 }}>
+          <div className="section-stack" style={{ marginTop: 16 }}>
             {acdMetricsLoading ? (
               <div className="details-panel-empty">Loading tracked teams...</div>
             ) : acdMetricsError ? (
@@ -424,11 +483,9 @@ function DetailsContent({ acdMetricsData, acdMetricsLoading, acdMetricsError, an
           </div>
         </section>
 
-        <section className="panel-card details-card-no-accent">
-          <div className="funnel-section-head">
-            <div className="panel-subtitle">Analytics legend</div>
-            <div className="section-description">Use this to decide which attempts are ready for Full Gen AI, need rework, or should be dropped.</div>
-          </div>
+        <section className="panel-card">
+          <div className="panel-title">Analytics legend</div>
+          <div className="section-subtitle">Use this to decide which attempts are ready for Full Gen AI, need rework, or should be dropped.</div>
           <div className="details-legend-list">
             {legendItems.map((item) => (
               <div key={item.label} className="details-legend-item">
@@ -442,13 +499,11 @@ function DetailsContent({ acdMetricsData, acdMetricsLoading, acdMetricsError, an
         </section>
       </div>
 
-      <section className="panel-card details-card-no-accent">
-        <div className="funnel-section-head">
-          <div className="panel-subtitle">Next step logic</div>
-          <div className="section-description">
-            Amount spent is a hard gate. Assets with less than $100 spend are classified as Testing / Drop.
-            Attempts without a readable CPI are excluded from Analytics entirely.
-          </div>
+      <section className="panel-card">
+        <div className="panel-title">Next step logic</div>
+        <div className="section-subtitle">
+          Amount spent is a hard gate. Assets with less than $100 spend are classified as Testing / Drop.
+          Attempts without a readable CPI are excluded from Analytics entirely.
         </div>
         <div className="details-logic-grid">
           <article className="details-logic-card">
@@ -481,7 +536,7 @@ function DetailsContent({ acdMetricsData, acdMetricsLoading, acdMetricsError, an
             </ul>
           </article>
         </div>
-        <div className="details-panel-copy" style={{ marginTop: 14 }}>
+        <div className="details-panel-copy">
           <strong>Actioned</strong> is a shared saved checkbox for each week and asset code. It requires unlocked edit
           access to change, and actioned rows are hidden by default in Analytics until you choose to show them.
         </div>
@@ -541,15 +596,13 @@ function WeekToggleGroup({ value, onChange, disabled = false }) {
   );
 }
 
-function Toolbar({ title, kicker, subtitle, description, actions, children }) {
+function Toolbar({ title, subtitle, actions, children }) {
   return (
     <div className="section-shell">
       <div className="section-toolbar">
         <div>
-          {kicker ? <div className="section-kicker">{kicker}</div> : null}
-          <h2 className="section-title">{title}</h2>
+          <div className="section-kicker">{title}</div>
           {subtitle ? <div className="section-subtitle">{subtitle}</div> : null}
-          {description ? <div className="section-description">{description}</div> : null}
         </div>
         {actions ? <div className="section-actions">{actions}</div> : null}
       </div>
@@ -761,29 +814,29 @@ function AcdLeaderboardChart({ rows, viewLabel, emptyText = EMPTY_ACD_MESSAGE })
           margin={{ top: 8, right: 28, left: 8, bottom: 8 }}
           barCategoryGap={12}
         >
-          <CartesianGrid horizontal={false} stroke="#e0d5c7" strokeDasharray="3 3" />
+          <CartesianGrid horizontal={false} stroke="#ddd6c9" strokeDasharray="3 3" />
           <XAxis
             type="number"
-            tick={{ fill: "#8c847d", fontSize: 12 }}
+            tick={{ fill: "#a39e93", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
-            label={{ value: "Minutes", position: "insideBottomRight", offset: -2, fill: "#8c847d", fontSize: 12 }}
+            label={{ value: "Minutes", position: "insideBottomRight", offset: -2, fill: "#a39e93", fontSize: 12 }}
           />
           <YAxis
             type="category"
             dataKey="name"
             width={yAxisWidth}
-            tick={{ fill: "#2c2c2c", fontSize: 12 }}
+            tick={{ fill: "#1c1917", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip cursor={{ fill: "rgba(196, 112, 75, 0.06)" }} content={<AcdChartTooltip />} />
+          <Tooltip cursor={{ fill: "rgba(20, 107, 101, 0.08)" }} content={<AcdChartTooltip />} />
           <Bar dataKey="totalMinutes" radius={[0, 10, 10, 0]}>
             <LabelList
               dataKey="totalMinutes"
               position="right"
               formatter={(value) => `${formatNumber(value)} min`}
-              fill="#2c2c2c"
+              fill="#1c1917"
               fontSize={12}
             />
             {chartRows.map((row, index) => (
@@ -904,632 +957,342 @@ function buildOverviewNotes({ overviewError, overviewData }) {
   return notes.filter(Boolean);
 }
 
-function ReadinessChecklistItem({ label, done }) {
+function getPipelineCardTone(actualValue, targetValue) {
+  const actual = Number(actualValue);
+  const target = Number(targetValue);
+  if (!Number.isFinite(actual) || !Number.isFinite(target) || target <= 0) return "default";
+  const ratio = actual / target;
+  if (ratio < 0.7) return "danger-strong";
+  if (ratio < 0.85) return "danger";
+  if (ratio < 1) return "warning";
+  return ratio >= 1.15 ? "positive-strong" : "positive";
+}
+
+function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError }) {
+  const unavailableMetricValue = overviewError ? "-" : null;
+  const tatSummary = overviewData?.tatSummary || {};
+  const tatDays = tatSummary?.averageTatDays;
+
+  const beatsCount = overviewData?.plannerBeatCount ?? 0;
+  const beatsTarget = 25;
+  const productionCount = overviewData?.inProductionBeatCount ?? 0;
+  const productionTarget = 22;
+
   return (
-    <div className="readiness-item">
-      <span className="readiness-label">{label}</span>
-      <span className={`readiness-status ${done ? "readiness-status-done" : "readiness-status-pending"}`}>
-        {done ? "Done" : "Pending"}
-      </span>
+    <div className="section-stack">
+      <div className="metric-grid three-col">
+        <MetricCard
+          label="Unique beats this week"
+          className="hero-card"
+          tone={getPipelineCardTone(beatsCount, beatsTarget)}
+          value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(beatsCount)}
+          hint={`Target: ${beatsTarget}+`}
+        />
+        <MetricCard
+          label="Moving to production"
+          className="hero-card"
+          tone={getPipelineCardTone(productionCount, productionTarget)}
+          value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(productionCount)}
+          hint={`Target: ${productionTarget}`}
+        />
+      </div>
+      <div className="metric-grid three-col">
+        <MetricCard
+          label="Expected production TAT"
+          value={overviewLoading ? "..." : unavailableMetricValue || (tatDays !== null && tatDays !== undefined ? formatNumber(tatDays) : "-")}
+          unit="days"
+          hint="Production cells / unique beats"
+          tone={getTatCardTone(tatDays, tatSummary?.targetTatDays)}
+        />
+        <MetricCard
+          label="Scripts per writer"
+          value={overviewLoading ? "..." : unavailableMetricValue || (overviewData?.scriptsPerWriter != null ? String(overviewData.scriptsPerWriter) : "-")}
+          hint="Beats entering production / writers"
+        />
+        <MetricCard
+          label="Avg CL review days"
+          value={overviewLoading ? "..." : unavailableMetricValue || (overviewData?.averageClReviewDays != null ? formatNumber(overviewData.averageClReviewDays) : "-")}
+          unit="days"
+          hint="CL review cells / unique beats"
+          tone={getClReviewDaysTone(overviewData?.averageClReviewDays)}
+        />
+      </div>
     </div>
   );
 }
 
-function OverviewWeekSection({
-  period,
-  overviewData,
-  overviewLoading,
-  overviewError,
-  productionData,
-  productionLoading,
-  productionError,
-  writerTrackerData,
-  writerTrackerLoading,
-  writerTrackerError,
-  onOverrideBeat,
-  onShare,
-  isSharing,
-}) {
-  const notes = buildOverviewNotes({ overviewError, overviewData });
+function OverviewLastWeek({ overviewData, overviewLoading, overviewError }) {
   const unavailableMetricValue = overviewError ? "-" : null;
   const tatSummary = overviewData?.tatSummary || {};
-  const tatValue =
-    overviewLoading || !overviewData
-      ? "..."
-      : unavailableMetricValue
-        ? unavailableMetricValue
-      : tatSummary?.eligibleAssetCount > 0 && tatSummary?.averageTatDays !== null
-        ? formatTat(tatSummary.averageTatDays)
-        : "-";
-  const weekLabel = overviewData?.weekLabel || productionData?.weekLabel || "";
+  const tatDays = tatSummary?.averageTatDays;
+  const hitRate = overviewData?.hitRate;
+  const hitColor = hitRate != null ? getHitRateColor(hitRate) : undefined;
 
-  if (overviewLoading && !overviewData) {
-    return <EmptyState text="Loading Editorial Funnel..." />;
-  }
-
-  /* ── LAST WEEK ── */
-  if (period === "last") {
-    return (
-      <ShareablePanel
-        shareLabel={`Editorial Funnel ${getWeekViewLabel(period)}`}
-        onShare={onShare}
-        isSharing={isSharing}
-        className="overview-week-panel"
-      >
-        <div className="funnel-section-head">
-          <div className="panel-title">Output from last week</div>
-          <div className="panel-statline">{weekLabel}</div>
-          <div className="section-description">What shipped last week and how it performed.</div>
-        </div>
-
-        <div className="section-stack">
-          {notes.map((note) => (
-            <div key={note} className="warning-note">{note}</div>
-          ))}
-
-          <div className="metric-grid funnel-metric-row-3">
-            <MetricCard
-              label="Fresh takes released"
-              value={unavailableMetricValue || formatMetricValue(overviewData?.freshTakeCount)}
-              hint="Unique attempts from Live tab."
-              tone={getTargetCardTone(overviewData?.freshTakeCount, overviewData?.targetFloor)}
-            />
-            <MetricCard
-              label="Production TAT"
-              value={tatValue}
-              hint={
-                tatSummary?.eligibleAssetCount > 0
-                  ? "From last week's Live tab."
-                  : overviewData?.tatEmptyMessage || "No eligible TAT rows found."
-              }
-              tone={getTatCardTone(tatSummary?.averageTatDays, tatSummary?.targetTatDays)}
-            />
-            <MetricCard
-              label="Hit rate"
-              value={
-                unavailableMetricValue ||
-                (overviewData?.hitRate !== null && overviewData?.hitRate !== undefined
-                  ? `${overviewData.hitRate.toFixed(1)}%`
-                  : "-")
-              }
-              hint={
-                <>
-                  <div>{overviewData?.hitRateNumerator ?? 0} of {overviewData?.hitRateDenominator ?? 0} analytics-eligible assets.</div>
-                  <div style={{ marginTop: 4, fontSize: "0.82rem", color: "var(--muted)" }}>Success = $100+ spent, Q1 &gt; 10%, CTI &ge; 12%, Abs completion &ge; 1.8%, CPI &le; $12</div>
-                </>
-              }
-              tone="default"
-            />
-          </div>
-
-          {Array.isArray(overviewData?.beatsFunnel) && overviewData.beatsFunnel.length > 0 && (
-            <div className="beats-funnel-section">
-              <div className="funnel-section-head" style={{ marginBottom: 12 }}>
-                <div className="panel-subtitle">Beats funnel</div>
-                <div className="panel-statline" style={{ fontSize: "0.82rem" }}>
-                  Beats released and their conversion in the last week.
-                </div>
+  return (
+    <div className="section-stack">
+      <div className="metric-grid three-col">
+        <MetricCard
+          label="Fresh takes released"
+          className="hero-card"
+          value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(overviewData?.freshTakeCount)}
+          hint="Unique attempts from Live tab"
+          tone={getTargetCardTone(overviewData?.freshTakeCount, overviewData?.targetFloor)}
+        />
+        <MetricCard
+          label="Production TAT"
+          value={overviewLoading ? "..." : unavailableMetricValue || (tatDays != null ? formatNumber(tatDays) : "-")}
+          unit="days"
+          hint="From last week's Live tab"
+          tone={getTatCardTone(tatDays, tatSummary?.targetTatDays)}
+        />
+        <MetricCard
+          label="Hit rate"
+          className="hero-card"
+          body={
+            <>
+              <div className="metric-value" style={hitColor ? { color: hitColor } : undefined}>
+                {overviewLoading ? "..." : unavailableMetricValue || (hitRate != null ? `${hitRate.toFixed(1)}%` : "-")}
               </div>
-              <div className="table-wrap">
-                <table className="beats-funnel-table ops-table">
-                  <colgroup>
-                    <col className="col-show" />
-                    <col className="col-beat" />
-                    <col className="col-attempts" />
-                    <col className="col-success" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>Show</th>
-                      <th>Beat</th>
-                      <th className="col-right">Attempts</th>
-                      <th className="col-right">Successful</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      const rows = overviewData.beatsFunnel;
-                      const rendered = [];
-                      let i = 0;
-                      while (i < rows.length) {
-                        const showName = rows[i].showName;
-                        let j = i;
-                        while (j < rows.length && rows[j].showName === showName) j++;
-                        const span = j - i;
-                        for (let k = i; k < j; k++) {
-                          const row = rows[k];
-                          const isSuccess = row.successfulAttempts > 0;
-                          rendered.push(
-                            <tr key={`${row.showName}-${row.beatName}`} className={isSuccess ? "beats-funnel-success" : ""}>
-                              {k === i && <td rowSpan={span}>{row.showName}</td>}
-                              <td>{row.beatName}</td>
-                              <td className="col-right">{row.attempts}</td>
-                              <td className="col-right" style={isSuccess ? { color: "var(--forest)", fontWeight: 700 } : { color: "var(--red)" }}>
-                                {row.successfulAttempts}
-                              </td>
-                            </tr>
-                          );
-                        }
-                        i = j;
-                      }
-                      return rendered;
-                    })()}
-                  </tbody>
-                </table>
+              <div className="metric-hint" style={hitColor ? { color: hitColor } : undefined}>
+                {overviewData?.hitRateNumerator ?? 0} of {overviewData?.hitRateDenominator ?? 0} analytics-eligible assets
               </div>
-            </div>
-          )}
-        </div>
-      </ShareablePanel>
-    );
-  }
+            </>
+          }
+        />
+      </div>
 
-  /* ── THIS WEEK (current) ── */
-  if (period === "current") {
-    const [expandedWriters, setExpandedWriters] = useState(new Set());
-
-    if (writerTrackerLoading && !writerTrackerData) {
-      return <EmptyState text="Loading Writer Tracker..." />;
-    }
-    if (writerTrackerError) {
-      return <EmptyState text={`Writer Tracker error: ${writerTrackerError}`} />;
-    }
-
-    const trackerRows = writerTrackerData?.trackerRows || [];
-    const stageCounts = writerTrackerData?.stageCounts || {};
-    const dayOfWeek = writerTrackerData?.dayOfWeek ?? new Date().getDay();
-    const totalAllocated = writerTrackerData?.totalAllocated || 0;
-    const totalThisWeek = writerTrackerData?.totalThisWeek || 0;
-    const totalGap = writerTrackerData?.totalGap || 0;
-    const totalSpillovers = writerTrackerData?.totalSpillovers || 0;
-
-    const STAGE_LABELS = {
-      writing: "Writing",
-      pending_review: "Pending Review",
-      reviewed_by_lead: "Reviewed",
-      moving_to_production: "Moving to Prod",
-      ready_for_production: "Ready for Prod",
-    };
-
-    const commitTarget = writerTrackerData?.commitTarget || 20;
-    const amberFloor = Math.round(commitTarget * 0.75);
-    const commitPct = Math.min(100, Math.round((totalAllocated / commitTarget) * 100));
-    const isBeforeWednesday = dayOfWeek >= 1 && dayOfWeek <= 2;
-    const commitColor = totalAllocated >= commitTarget
-      ? "#1a4731"
-      : totalAllocated >= amberFloor && isBeforeWednesday
-        ? "#b8860b"
-        : "#c0392b";
-
-    const gapClass = (gap) => {
-      if (gap === 0) return "gap-zero";
-      if (gap === 1 && dayOfWeek <= 2) return "gap-amber";
-      return "gap-red";
-    };
-
-    const grouped = new Map();
-    for (const row of trackerRows) {
-      if (!grouped.has(row.podLead)) grouped.set(row.podLead, []);
-      grouped.get(row.podLead).push(row);
-    }
-
-    const toggleWriter = (name) => {
-      setExpandedWriters((prev) => {
-        const next = new Set(prev);
-        if (next.has(name)) next.delete(name);
-        else next.add(name);
-        return next;
-      });
-    };
-
-    const stageOrder = ["writing", "pending_review", "reviewed_by_lead", "ready_for_production"];
-
-    return (
-      <ShareablePanel
-        shareLabel={`Editorial Funnel ${getWeekViewLabel(period)}`}
-        onShare={onShare}
-        isSharing={isSharing}
-        className="overview-week-panel"
-      >
-        <div className="funnel-section-head">
-          <div className="panel-title">This week</div>
-          <div className="panel-statline">{writerTrackerData?.weekLabel || weekLabel}</div>
-          <div className="section-description">Writer delivery, stage pipeline, and efficiency.</div>
-        </div>
-
-        <div className="section-stack">
-          {notes.map((note) => (
-            <div key={note} className="warning-note">{note}</div>
-          ))}
-
-          {/* Section 1 — Planning Health */}
-          <div className="planning-health">
-            <span className="planning-health-label">{totalAllocated} of {commitTarget}</span>
-            <div className="planning-health-bar">
-              <div
-                className="planning-health-fill"
-                style={{ width: `${commitPct}%`, background: commitColor }}
-              />
-            </div>
-            <span className="planning-health-target">beats committed</span>
-          </div>
-
-          {/* Section 2 — Writer Delivery Tracker */}
-          <div className="tracker-table-wrap">
-            <table className="tracker-table">
+      {Array.isArray(overviewData?.beatsFunnel) && overviewData.beatsFunnel.length > 0 && (
+        <>
+          <hr className="section-divider" />
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Beats funnel</div>
+            <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 12 }}>Show and beat level breakdown for last week</div>
+            <table className="beats-funnel-table">
+              <colgroup>
+                <col className="col-show" />
+                <col className="col-beat" />
+                <col className="col-attempts" />
+                <col className="col-success" />
+              </colgroup>
               <thead>
                 <tr>
-                  <th></th>
-                  <th>Writer</th>
-                  <th className="col-right">Allocated</th>
-                  <th className="col-right">This Week</th>
-                  <th className="col-right">Gap</th>
-                  <th className="col-right">Spillovers</th>
-                  <th className="col-right">Flagged</th>
+                  <th>SHOW</th>
+                  <th>BEAT</th>
+                  <th className="col-right">ATTEMPTS</th>
+                  <th className="col-right">SUCCESSFUL</th>
                 </tr>
               </thead>
               <tbody>
-                {[...grouped.entries()].map(([podLead, writers]) => (
-                  <>
-                    <tr key={`pod-${podLead}`} className="tracker-pod-header">
-                      <td colSpan={7}>{podLead}</td>
-                    </tr>
-                    {writers.map((w) => {
-                      const isOpen = expandedWriters.has(w.writerName);
-                      return (
-                        <>
-                          <tr
-                            key={w.writerName}
-                            className="tracker-writer-row"
-                            onClick={() => toggleWriter(w.writerName)}
-                          >
-                            <td>
-                              <span className={`tracker-expand-icon${isOpen ? " is-expanded" : ""}`}>▶</span>
+                {(() => {
+                  const rows = overviewData.beatsFunnel;
+                  const rendered = [];
+                  let i = 0;
+                  while (i < rows.length) {
+                    const showName = rows[i].showName;
+                    let j = i;
+                    while (j < rows.length && rows[j].showName === showName) j++;
+                    const span = j - i;
+                    for (let k = i; k < j; k++) {
+                      const row = rows[k];
+                      const isSuccess = row.successfulAttempts > 0;
+                      rendered.push(
+                        <tr key={`${row.showName}-${row.beatName}`} className={isSuccess ? "beats-funnel-success" : ""}>
+                          {k === i && (
+                            <td rowSpan={span} style={{ fontSize: 12, fontWeight: 500, color: "var(--subtle)" }}>
+                              {row.showName}
                             </td>
-                            <td>{w.writerName}</td>
-                            <td className="col-right">{w.allocated}</td>
-                            <td className="col-right">{w.thisWeekCount}</td>
-                            <td className={`col-right ${gapClass(w.gap)}`}>{w.gap}</td>
-                            <td className="col-right">{w.spilloverCount}</td>
-                            <td className="col-right">
-                              {w.ambiguousCount > 0 ? (
-                                <span className="flag-badge">⚠ {w.ambiguousCount}</span>
-                              ) : (
-                                "—"
-                              )}
-                            </td>
-                          </tr>
-                          {isOpen && (
-                            <tr key={`${w.writerName}-detail`} className="tracker-detail-row">
-                              <td colSpan={7}>
-                                <div className="tracker-beat-detail">
-                                  {w.thisWeekBeats?.length > 0 && (
-                                    <>
-                                      <div className="tracker-beat-category">This Week</div>
-                                      {w.thisWeekBeats.map((b, i) => (
-                                        <div key={`tw-${i}`} className="tracker-beat-item">
-                                          <div>
-                                            <span className="tracker-beat-name">{b.beatName}</span>
-                                            {" "}
-                                            <span className="tracker-beat-show">{b.showName}</span>
-                                          </div>
-                                          <span className={`tracker-beat-stage stage-${b.stage}`}>
-                                            {STAGE_LABELS[b.stage] || b.stage}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </>
-                                  )}
-                                  {w.spilloverBeats?.length > 0 && (
-                                    <>
-                                      <div className="tracker-beat-category">Spillovers</div>
-                                      {w.spilloverBeats.map((b, i) => (
-                                        <div key={`sp-${i}`} className="tracker-beat-item">
-                                          <div>
-                                            <span className="tracker-beat-name">{b.beatName}</span>
-                                            {" "}
-                                            <span className="tracker-beat-show">{b.showName}</span>
-                                          </div>
-                                          <span className={`tracker-beat-stage stage-${b.stage}`}>
-                                            {STAGE_LABELS[b.stage] || b.stage}
-                                          </span>
-                                        </div>
-                                      ))}
-                                    </>
-                                  )}
-                                  {w.ambiguousBeats?.length > 0 && (
-                                    <>
-                                      <div className="tracker-beat-category">Flagged / Ambiguous</div>
-                                      {w.ambiguousBeats.map((b, i) => (
-                                        <div key={`am-${i}`} className="tracker-beat-item tracker-beat-flagged">
-                                          <div>
-                                            <span className="tracker-beat-name">{b.beatName}</span>
-                                            {" "}
-                                            <span className="tracker-beat-show">{b.showName}</span>
-                                          </div>
-                                          <div className="tracker-override-buttons">
-                                            <button
-                                              type="button"
-                                              className={`tracker-override-btn${b.overridden && b.stage !== "spillover" ? " is-selected" : ""}`}
-                                              onClick={() => b.adCode && onOverrideBeat?.(b.adCode, "this_week")}
-                                              disabled={!b.adCode}
-                                            >
-                                              This week
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className={`tracker-override-btn tracker-override-btn-muted${b.overridden && b.stage === "spillover" ? " is-selected" : ""}`}
-                                              onClick={() => b.adCode && onOverrideBeat?.(b.adCode, "spillover")}
-                                              disabled={!b.adCode}
-                                            >
-                                              Spillover
-                                            </button>
-                                            <span className={`tracker-beat-stage stage-${b.stage}`}>
-                                              {STAGE_LABELS[b.stage] || b.stage}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
                           )}
-                        </>
+                          <td>{row.beatName}</td>
+                          <td className="col-right" style={{ fontWeight: 500 }}>{row.attempts}</td>
+                          <td
+                            className="col-right"
+                            style={{
+                              fontWeight: 500,
+                              color: row.successfulAttempts > 0 ? "#2d5a3d" : "var(--gray-light, #D3D1C7)",
+                            }}
+                          >
+                            {row.successfulAttempts}
+                          </td>
+                        </tr>
                       );
-                    })}
-                  </>
-                ))}
+                    }
+                    i = j;
+                  }
+                  return rendered;
+                })()}
               </tbody>
             </table>
           </div>
+        </>
+      )}
+    </div>
+  );
+}
 
-          {/* Section 3 — Stage Breakdown */}
-          <div className="stage-pipeline">
-            {stageOrder.map((key) => (
-              <div key={key} className="stage-pipeline-node">
-                <div className="stage-pipeline-count">{stageCounts[key] || 0}</div>
-                <div className="stage-pipeline-label">{STAGE_LABELS[key]}</div>
-              </div>
-            ))}
-          </div>
-          {totalSpillovers > 0 && (
-            <div className="spillover-note">{totalSpillovers} spillover{totalSpillovers !== 1 ? "s" : ""} from previous weeks</div>
-          )}
+function OverviewNextWeek({ overviewData, overviewLoading, overviewError }) {
+  const unavailableMetricValue = overviewError ? "-" : null;
+  const tatSummary = overviewData?.tatSummary || {};
+  const tatDays = tatSummary?.averageTatDays;
+  const plannedLive = overviewData?.plannedReleaseCount ?? 0;
+  const target = overviewData?.targetFloor || 22;
+  const shortfall = Math.max(0, target - Number(plannedLive || 0));
+  const beatsCount = overviewData?.goodToGoBeatsCount ?? overviewData?.plannerBeatCount ?? 0;
+  const reviewPendingCount = overviewData?.reviewPendingCount ?? 0;
+  const iterateCount = overviewData?.iterateCount ?? 0;
+  const wipCount = reviewPendingCount + iterateCount;
 
-          {/* Section 4 — Efficiency Stats */}
-          <div className="metric-grid funnel-metric-row-3">
-            <MetricCard
-              label="Scripts per writer"
-              value={
-                writerTrackerData?.scriptsPerWriter !== null && writerTrackerData?.scriptsPerWriter !== undefined
-                  ? String(writerTrackerData.scriptsPerWriter)
-                  : unavailableMetricValue || "-"
-              }
-              hint="Beats entering production / writers."
-              tone="default"
-            />
-            <MetricCard
-              label="Expected production TAT"
-              value={tatValue}
-              hint={
-                tatSummary?.averageTatDays !== null
-                  ? "Production cells / unique beats."
-                  : overviewData?.tatEmptyMessage || "Not enough data yet."
-              }
-              tone={getTatCardTone(tatSummary?.averageTatDays, tatSummary?.targetTatDays)}
-            />
-            <MetricCard
-              label="Avg CL review days"
-              value={unavailableMetricValue || formatTat(overviewData?.averageClReviewDays)}
-              hint={
-                overviewData?.averageClReviewDays !== null && overviewData?.averageClReviewDays !== undefined
-                  ? "CL review cells / unique beats."
-                  : overviewData?.clReviewEmptyMessage || "Not enough data yet."
-              }
-              tone={getClReviewDaysTone(overviewData?.averageClReviewDays)}
-            />
-          </div>
-        </div>
-      </ShareablePanel>
-    );
-  }
-
-  /* ── NEXT WEEK ── */
-  const beatsLockedGtg = Number(overviewData?.goodToGoBeatsCount || 0) + Number(overviewData?.plannerBeatCount || 0);
-  const plannedLive = Number(overviewData?.plannedReleaseCount || 0);
-  const targetFloor = Number(overviewData?.targetFloor || 22);
-  const shortOfTarget = Math.max(0, targetFloor - plannedLive);
-
-  const hasBeatsLocked = beatsLockedGtg > 0;
-  const hasClReview = overviewData?.averageClReviewDays !== null && overviewData?.averageClReviewDays !== undefined;
-  const hasProduction = Number(overviewData?.inProductionBeatCount || 0) > 0;
-  const hasTat = tatSummary?.averageTatDays !== null;
-  const hasShowCoverage = Number(overviewData?.plannerBeatCount || 0) > 0;
+  // Readiness checklist data
+  const liveOnMetaCount = Number(overviewData?.plannedReleaseCount || 0);
+  const inProductionCount = Number(overviewData?.inProductionBeatCount || 0);
+  const uniqueShowCount = Number(overviewData?.uniqueShowCount || 0);
 
   return (
-    <ShareablePanel
-      shareLabel={`Editorial Funnel ${getWeekViewLabel(period)}`}
-      onShare={onShare}
-      isSharing={isSharing}
-      className="overview-week-panel"
-    >
-      <div className="section-stack">
-        {notes.map((note) => (
-          <div key={note} className="warning-note">{note}</div>
-        ))}
+    <div className="section-stack">
+      <div className="metric-grid three-col">
+        <MetricCard
+          label="Beats locked GTG"
+          className="hero-card"
+          value={overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(beatsCount)}
+          hint="Confirmed and ready to go"
+          tone="positive"
+        />
+        {wipCount > 0 ? (
+          <MetricCard
+            label="Work in Progress"
+            className="hero-card"
+            value={overviewLoading ? "..." : formatMetricValue(wipCount)}
+            hint={`${reviewPendingCount} review pending · ${iterateCount} in iteration`}
+            tone="warning"
+          />
+        ) : null}
+        <MetricCard
+          label="Assets planned to go live"
+          className="hero-card"
+          tone={getTargetCardTone(plannedLive, target)}
+          body={
+            <>
+              <div className="metric-value">
+                {overviewLoading ? "..." : unavailableMetricValue || formatMetricValue(plannedLive)}
+                <span className="metric-unit">/ {target}</span>
+              </div>
+              <ProgressBar value={Number(plannedLive || 0)} target={target} />
+              {!overviewLoading && shortfall > 0 && (
+                <div style={{ fontSize: 11, color: "#9f2e2e", marginTop: 4 }}>{shortfall} short of target</div>
+              )}
+            </>
+          }
+        />
+      </div>
+      <div className="metric-grid three-col">
+        <MetricCard
+          label="Expected production TAT"
+          value={overviewLoading ? "..." : unavailableMetricValue || (tatDays != null ? formatNumber(tatDays) : "...")}
+          hint={tatDays == null ? "Not enough data yet" : "Production cells / unique beats"}
+          tone={tatDays != null ? getTatCardTone(tatDays, tatSummary?.targetTatDays) : "default"}
+        />
+        <MetricCard
+          label="Avg writing days"
+          value={overviewLoading ? "..." : unavailableMetricValue || (overviewData?.averageWritingDays != null ? formatNumber(overviewData.averageWritingDays) : "...")}
+          hint={overviewData?.averageWritingDays == null ? "Not enough allocations yet" : "Writing cells / unique beats"}
+          tone={getWritingDaysTone(overviewData?.averageWritingDays)}
+        />
+        <MetricCard
+          label="Avg CL review days"
+          value={overviewLoading ? "..." : unavailableMetricValue || (overviewData?.averageClReviewDays != null ? formatNumber(overviewData.averageClReviewDays) : "...")}
+          hint={overviewData?.averageClReviewDays == null ? "Not enough allocations yet" : "CL review cells / unique beats"}
+          tone={getClReviewDaysTone(overviewData?.averageClReviewDays)}
+        />
+      </div>
 
-        <div className="funnel-section-head">
-          <div className="panel-title">Plan for next week</div>
-          <div className="panel-statline">{weekLabel}</div>
-          <div className="section-description">Readiness check: are we set up to hit target next week?</div>
-        </div>
+      <hr className="section-divider" />
 
-        <div className="metric-grid funnel-metric-row-2">
-          <MetricCard
-            label="Beats locked GTG"
-            value={unavailableMetricValue || formatMetricValue(beatsLockedGtg)}
-            hint="Confirmed and ready to go."
-            tone="default"
-          />
-          <MetricCard
-            label="Assets planned to go live"
-            value={unavailableMetricValue || (
-              <>
-                {formatMetricValue(plannedLive)}
-                <span className="metric-value-suffix"> / {targetFloor}</span>
-              </>
-            )}
-            hint={
-              shortOfTarget > 0
-                ? <span style={{ color: "var(--red)", fontWeight: 700 }}>{shortOfTarget} short of target</span>
-                : "On track."
-            }
-            tone={getTargetCardTone(plannedLive, targetFloor)}
-          />
-        </div>
-
-        <div className="metric-grid funnel-metric-row-3">
-          <MetricCard
-            label="Expected production TAT"
-            value={tatValue}
-            hint={
-              hasTat
-                ? "Production cells / unique beats."
-                : overviewData?.tatEmptyMessage || "Not enough allocations yet."
-            }
-            tone={getTatCardTone(tatSummary?.averageTatDays, tatSummary?.targetTatDays)}
-          />
-          <MetricCard
-            label="Avg writing days"
-            value={unavailableMetricValue || formatTat(overviewData?.averageWritingDays)}
-            hint={
-              overviewData?.averageWritingDays !== null && overviewData?.averageWritingDays !== undefined
-                ? "Writing cells / unique beats."
-                : overviewData?.writingEmptyMessage || "Not enough allocations yet."
-            }
-            tone={getWritingDaysTone(overviewData?.averageWritingDays)}
-          />
-          <MetricCard
-            label="Avg CL review days"
-            value={unavailableMetricValue || formatTat(overviewData?.averageClReviewDays)}
-            hint={
-              hasClReview
-                ? "CL review cells / unique beats."
-                : overviewData?.clReviewEmptyMessage || "Not enough allocations yet."
-            }
-            tone={getClReviewDaysTone(overviewData?.averageClReviewDays)}
-          />
-        </div>
-
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 12 }}>Readiness checklist</div>
         <div className="readiness-checklist">
-          <div className="panel-subtitle">Readiness checklist</div>
-          <div className="readiness-list">
-            <ReadinessChecklistItem label="Beats locked and assigned to writers" done={hasBeatsLocked} />
-            <ReadinessChecklistItem label="Scripts in CL review pipeline" done={hasClReview} />
-            <ReadinessChecklistItem label="Scripts cleared for production" done={hasProduction} />
-            <ReadinessChecklistItem label="Production slots booked" done={hasTat} />
-            <ReadinessChecklistItem label="Show coverage (shows with at least 1 beat)" done={hasShowCoverage} />
-          </div>
+          <ReadinessRow
+            color={beatsCount > 0 ? getReadinessColor(1) : "#a39e93"}
+            label="Beats locked and assigned to writers"
+            value={beatsCount > 0 ? `${beatsCount} of ${beatsCount}` : "Pending"}
+          />
+          <ReadinessRow
+            color={liveOnMetaCount > 0 ? getReadinessColor(inProductionCount / Math.max(liveOnMetaCount, 1)) : "#9f6b15"}
+            label="Scripts in CL review pipeline"
+            value={liveOnMetaCount > 0 ? `${inProductionCount} of ${liveOnMetaCount}` : "Pending"}
+          />
+          <ReadinessRow
+            color={liveOnMetaCount > 0 ? getReadinessColor(liveOnMetaCount / Math.max(Number(target), 1)) : "#9f2e2e"}
+            label="Scripts cleared for production"
+            value={liveOnMetaCount > 0 ? `${liveOnMetaCount} of ${target}` : "Pending"}
+          />
+          <ReadinessRow
+            color="#a39e93"
+            label="Production slots booked"
+            value="Pending"
+          />
+          <ReadinessRow
+            color={uniqueShowCount > 0 ? "#2d5a3d" : "#a39e93"}
+            label="Show coverage (shows with at least 1 beat)"
+            value={uniqueShowCount > 0 ? String(uniqueShowCount) : "Pending"}
+          />
         </div>
       </div>
-    </ShareablePanel>
+    </div>
   );
 }
 
 function OverviewContent({
-  period,
   overviewDataByPeriod,
   overviewLoadingByPeriod,
   overviewErrorByPeriod,
   productionDataByPeriod,
   productionLoadingByPeriod,
   productionErrorByPeriod,
-  writerTrackerData,
-  writerTrackerLoading,
-  writerTrackerError,
-  onOverrideBeat,
   onShare,
   copyingSection,
-  beatOverviewData,
-  beatOverviewLoading,
-  beatOverviewError,
+  editorialPeriod,
+  includeNewShowsPod,
+  onIncludeNewShowsPodChange,
 }) {
-  if (period === "overview") {
-    return (
-      <ShareablePanel
-        shareLabel={`Editorial Funnel Overview ${beatOverviewData?.selectedWeekRangeLabel || ""}`.trim()}
-        onShare={onShare}
-        isSharing={copyingSection === `Editorial Funnel Overview ${beatOverviewData?.selectedWeekRangeLabel || ""}`.trim()}
-        className="overview-week-panel"
-      >
-        <div className="funnel-section-head">
-          <div className="panel-title">End-to-end beat overview</div>
-          <div className="panel-statline">
-            {[beatOverviewData?.selectedWeekLabel, beatOverviewData?.rowCount ? `${formatNumber(beatOverviewData.rowCount)} beats` : ""]
-              .filter(Boolean)
-              .join(" · ")}
-          </div>
-          <div className="section-description">Beat, contributors, scripting days, production days, and pass/fail outcome.</div>
-        </div>
+  const period = editorialPeriod;
+  const overviewData = overviewDataByPeriod[period];
+  const overviewLoading = Boolean(overviewLoadingByPeriod[period]);
+  const overviewError = overviewErrorByPeriod[period] || "";
+  const notes = buildOverviewNotes({ overviewError, overviewData });
 
-        <div className="section-stack">
-          {beatOverviewError ? <div className="warning-note">{beatOverviewError}</div> : null}
-
-          {beatOverviewLoading && !beatOverviewData ? (
-            <EmptyState text="Loading end-to-end beat overview..." />
-          ) : Array.isArray(beatOverviewData?.rows) && beatOverviewData.rows.length > 0 ? (
-            <div className="table-wrap">
-              <table className="ops-table">
-                <thead>
-                  <tr>
-                    <th>Beat</th>
-                    <th>Who worked on it</th>
-                    <th className="col-right">Scripting days</th>
-                    <th className="col-right">Production days</th>
-                    <th className="col-right">Pass / Fail</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {beatOverviewData.rows.map((row) => (
-                    <tr key={row.beatLabel}>
-                      <td>{row.beatLabel}</td>
-                      <td>{row.contributors || "-"}</td>
-                      <td className="col-right">{row.scriptingDays === null ? "-" : formatMetricValue(row.scriptingDays)}</td>
-                      <td className="col-right">{row.productionDays === null ? "-" : formatMetricValue(row.productionDays)}</td>
-                      <td className="col-right" style={{ fontWeight: 700, color: row.outcome === "Pass" ? "var(--forest)" : "var(--red)" }}>
-                        {row.outcome}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState text={beatOverviewData?.emptyStateMessage || "No beat overview rows are available for this week."} />
-          )}
-        </div>
-      </ShareablePanel>
-    );
-  }
+  const sectionTitle = period === "current" ? "Editorial funnel" : period === "next" ? "Plan for next week" : "Output from last week";
+  const contextLine = period === "current"
+    ? "Where we are this week: planning and production status."
+    : period === "next"
+      ? "Readiness check: are we set up to hit target next week?"
+      : "What shipped last week and how it performed.";
+  const weekLabel = overviewData?.weekLabel || productionDataByPeriod[period]?.weekLabel || "";
 
   return (
-    <OverviewWeekSection
-      period={period}
-      overviewData={overviewDataByPeriod[period]}
-      overviewLoading={Boolean(overviewLoadingByPeriod[period])}
-      overviewError={overviewErrorByPeriod[period] || ""}
-      productionData={productionDataByPeriod[period]}
-      productionLoading={Boolean(productionLoadingByPeriod[period])}
-      productionError={productionErrorByPeriod[period] || ""}
-      writerTrackerData={writerTrackerData}
-      writerTrackerLoading={writerTrackerLoading}
-      writerTrackerError={writerTrackerError}
-      onOverrideBeat={onOverrideBeat}
+    <ShareablePanel
+      shareLabel={`Editorial Funnel ${getWeekViewLabel(period)}`}
       onShare={onShare}
       isSharing={copyingSection === `Editorial Funnel ${getWeekViewLabel(period)}`}
-    />
+    >
+      <div className="section-stack">
+        {notes.map((note) => (
+          <div key={note} className="warning-note">{note}</div>
+        ))}
+
+        <div style={{ fontSize: 14, fontWeight: 500 }}>{sectionTitle}</div>
+        {weekLabel && <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: -10 }}>{weekLabel}</div>}
+        <div style={{ fontSize: 13, color: "var(--subtle)", fontStyle: "italic", marginTop: -8 }}>{contextLine}</div>
+
+        {period === "current" && (
+          <OverviewCurrentWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} />
+        )}
+        {period === "last" && (
+          <OverviewLastWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} />
+        )}
+        {period === "next" && (
+          <OverviewNextWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} />
+        )}
+      </div>
+    </ShareablePanel>
   );
 }
 
@@ -1540,6 +1303,25 @@ function buildAnalyticsSubtitle(data) {
     data?.rowCount ? `${formatNumber(data.rowCount)} attempts` : "",
   ].filter(Boolean);
   return parts.join(" · ");
+}
+
+function classifyPromising(metrics) {
+  const cpiValue = Number(metrics?.cpi?.value);
+  const ctiValue = Number(metrics?.cti?.value);
+  const baselineKeys = ["threeSecPlays", "thruplaysTo3s", "q1Completion", "cpi", "absoluteCompletion", "cti"];
+  let missCount = 0;
+  for (const key of baselineKeys) {
+    const cell = metrics?.[key];
+    if (cell && cell.meetsBenchmark === false) missCount += 1;
+  }
+
+  if (Number.isFinite(cpiValue) && cpiValue < 10 && missCount <= 2) {
+    return { nextStep: "Potential Gen AI", rowTone: "gen-ai" };
+  }
+  if (Number.isFinite(ctiValue) && ctiValue >= 12) {
+    return { nextStep: "Potential P1 Rework", rowTone: "rework-p1" };
+  }
+  return { nextStep: "Not Promising", rowTone: "testing-drop" };
 }
 
 function AnalyticsContent({
@@ -1553,7 +1335,7 @@ function AnalyticsContent({
 }) {
   const [showCompletionBreakdown, setShowCompletionBreakdown] = useState(false);
   const [hideActioned, setHideActioned] = useState(true);
-  const [showPromisingOnly, setShowPromisingOnly] = useState(false);
+  const [showPromising, setShowPromising] = useState(false);
   const rows = Array.isArray(analyticsData?.rows) ? analyticsData.rows : [];
   const legendItems =
     Array.isArray(analyticsData?.legend) && analyticsData.legend.length > 0
@@ -1565,25 +1347,31 @@ function AnalyticsContent({
   const actionedCount = rows.filter((row) => Boolean(row?.actioned)).length;
   const visibleRows = useMemo(() => {
     let safeRows = Array.isArray(rows) ? rows : [];
+
+    if (showPromising) {
+      safeRows = safeRows
+        .filter((row) => row?.rowTone === "testing-drop")
+        .map((row) => {
+          const reclassified = classifyPromising(row?.metrics);
+          return { ...row, nextStep: reclassified.nextStep, rowTone: reclassified.rowTone };
+        });
+    }
+
     if (hideActioned) {
-      safeRows = safeRows.filter((row) => !row?.actioned);
-    } else {
-      const activeRows = [];
-      const completedRows = [];
-      safeRows.forEach((row) => {
-        if (row?.actioned) {
-          completedRows.push(row);
-        } else {
-          activeRows.push(row);
-        }
-      });
-      safeRows = [...activeRows, ...completedRows];
+      return safeRows.filter((row) => !row?.actioned);
     }
-    if (showPromisingOnly) {
-      safeRows = safeRows.filter((row) => row.rowTone === "gen-ai" || row.rowTone === "rework-p1");
-    }
-    return safeRows;
-  }, [hideActioned, showPromisingOnly, rows]);
+
+    const activeRows = [];
+    const completedRows = [];
+    safeRows.forEach((row) => {
+      if (row?.actioned) {
+        completedRows.push(row);
+      } else {
+        activeRows.push(row);
+      }
+    });
+    return [...activeRows, ...completedRows];
+  }, [hideActioned, showPromising, rows]);
   const analyticsSubtitle = buildAnalyticsSubtitle({
     ...analyticsData,
     rowCount: visibleRows.length,
@@ -1596,9 +1384,11 @@ function AnalyticsContent({
       isSharing={copyingSection === `Analytics ${analyticsData?.selectedWeekLabel || "selected week"}`}
       className="analytics-panel"
     >
-      <div className="funnel-section-head">
-        <div className="panel-subtitle">Weekly script test results</div>
-        <div className="panel-statline">{analyticsSubtitle}</div>
+      <div className="panel-head">
+        <div>
+          <div className="panel-title">Weekly script test results</div>
+          <div className="panel-statline">{analyticsSubtitle}</div>
+        </div>
       </div>
 
       <div className="section-stack">
@@ -1611,7 +1401,14 @@ function AnalyticsContent({
             {rows.length > 0 ? (
               <>
                 <div className="analytics-legend-row">
-                  {legendItems.map((item) => (
+                  {(showPromising
+                    ? [
+                        { label: "Potential Gen AI", tone: "gen-ai" },
+                        { label: "Potential P1 Rework", tone: "rework-p1" },
+                        { label: "Not Promising", tone: "testing-drop" },
+                      ]
+                    : legendItems
+                  ).map((item) => (
                     <div key={item.label} className="analytics-legend-chip">
                       <span className={`details-legend-swatch ${getAnalyticsLegendToneClass(item.tone)}`.trim()} />
                       <span>{item.label}</span>
@@ -1620,33 +1417,31 @@ function AnalyticsContent({
                 </div>
 
                 <div className="analytics-controls-row" data-share-ignore="true">
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      className={`ghost-button${showPromisingOnly ? " analytics-filter-active" : ""}`}
-                      onClick={() => setShowPromisingOnly((current) => !current)}
-                    >
-                      {showPromisingOnly ? "Show all items" : "Show what's promising right now"}
-                    </button>
+                  <button
+                    type="button"
+                    className={showPromising ? "primary-button" : "ghost-button"}
+                    onClick={() => setShowPromising((current) => !current)}
+                  >
+                    {showPromising ? "Showing what's promising" : "Show what's promising right now"}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => setHideActioned((current) => !current)}
+                  >
+                    {hideActioned
+                      ? `Show actioned items${actionedCount > 0 ? ` (${formatNumber(actionedCount)})` : ""}`
+                      : "Hide actioned items"}
+                  </button>
+                  {hiddenCompletionCount > 0 ? (
                     <button
                       type="button"
                       className="ghost-button"
-                      onClick={() => setHideActioned((current) => !current)}
+                      onClick={() => setShowCompletionBreakdown((current) => !current)}
                     >
-                      {hideActioned
-                        ? `Show actioned items${actionedCount > 0 ? ` (${formatNumber(actionedCount)})` : ""}`
-                        : "Hide actioned items"}
+                      {showCompletionBreakdown ? "Hide Q2 / Q3 / Q4 completion metrics" : "Show Q2 / Q3 / Q4 completion metrics"}
                     </button>
-                    {hiddenCompletionCount > 0 ? (
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => setShowCompletionBreakdown((current) => !current)}
-                      >
-                        {showCompletionBreakdown ? "Hide Q2 / Q3 / Q4 completion metrics" : "Show Q2 / Q3 / Q4 completion metrics"}
-                      </button>
-                    ) : null}
-                  </div>
+                  ) : null}
                 </div>
 
                 <div className="table-wrap">
@@ -1723,9 +1518,7 @@ function AnalyticsContent({
                       {visibleRows.length === 0 ? (
                         <tr className="analytics-empty-row">
                           <td colSpan={5 + visibleMetricColumns.length}>
-                            {showPromisingOnly
-                              ? "No promising items (Gen AI or P1 Rework) in the current view."
-                              : "All rows for this week are marked actioned. Use \"Show actioned items\" to review them."}
+                            All rows for this week are marked actioned. Use “Show actioned items” to review them.
                           </td>
                         </tr>
                       ) : null}
@@ -1743,235 +1536,29 @@ function AnalyticsContent({
   );
 }
 
-function PodWisePerformanceView({ competitionRows, onShare, copyingSection, weekLabel = "", selectionMode = "lifetime" }) {
-  const totalBeats = competitionRows.reduce((sum, row) => sum + Number(row.lifetimeBeats || 0), 0);
-  const totalScripts = competitionRows.reduce((sum, row) => sum + Number(row.lifetimeScripts || 0), 0);
-  const totalSuccessful = competitionRows.reduce((sum, row) => sum + Number(row.hitRateNumerator || 0), 0);
-  const avgConversion = totalScripts > 0 ? Number(((totalSuccessful / totalScripts) * 100).toFixed(0)) : 0;
-  const maxBarValue = Math.max(
-    ...competitionRows.map((row) =>
-      Math.max(Number(row.lifetimeBeats || 0), Number(row.lifetimeScripts || 0))
-    ),
-    1
-  );
-  const sorted = [...competitionRows].sort((a, b) => {
-    const aRate = Number(a.lifetimeScripts || 0) > 0 ? (Number(a.hitRateNumerator || 0) / Number(a.lifetimeScripts || 0)) : 0;
-    const bRate = Number(b.lifetimeScripts || 0) > 0 ? (Number(b.hitRateNumerator || 0) / Number(b.lifetimeScripts || 0)) : 0;
-    return bRate - aRate;
-  });
+const POD_TIER_GREEN_MIN = 35;
+const POD_TIER_AMBER_MIN = 20;
 
+function getPodTierColor(conversionRate) {
+  if (conversionRate >= POD_TIER_GREEN_MIN) return "#2d5a3d";
+  if (conversionRate >= POD_TIER_AMBER_MIN) return "#c2703e";
+  return "#9f2e2e";
+}
+
+function PodFunnelBar({ label, value, maxValue, color }) {
+  const pct = maxValue > 0 ? Math.max((value / maxValue) * 100, 2) : 0;
   return (
-    <div className="section-stack">
-      <ShareablePanel
-        shareLabel="POD Wise leaderboard"
-        onShare={onShare}
-        isSharing={copyingSection === "POD Wise leaderboard"}
-      >
-        {selectionMode === "week" && weekLabel ? (
-          <div className="panel-statline">Week: {weekLabel}</div>
-        ) : null}
-        <div className="metric-grid pod-metric-row-4">
-          <article className="metric-card tone-default">
-            <div className="metric-label">Total beats</div>
-            <div className="metric-value">{formatNumber(totalBeats)}</div>
-          </article>
-          <article className="metric-card tone-default">
-            <div className="metric-label">Total scripts</div>
-            <div className="metric-value">{formatNumber(totalScripts)}</div>
-          </article>
-          <article className="metric-card tone-default">
-            <div className="metric-label">Successful</div>
-            <div className="metric-value">{formatNumber(totalSuccessful)}</div>
-          </article>
-          <article className="metric-card tone-default">
-            <div className="metric-label">Avg conversion</div>
-            <div className="metric-value">{avgConversion}%</div>
-          </article>
-        </div>
-
-        <div className="pod-performance-section">
-          <div className="panel-head">
-            <div className="panel-subtitle">POD performance</div>
-            <div className="pod-performance-hint">Ranked by successful scripts as % of total attempted scripts</div>
-          </div>
-
-          <div className="pod-rank-list">
-            {sorted.map((row, index) => {
-              const beats = Number(row.lifetimeBeats || 0);
-              const scripts = Number(row.lifetimeScripts || 0);
-              const successful = Number(row.hitRateNumerator || 0);
-              const hitRate = scripts > 0 ? Number(((successful / scripts) * 100).toFixed(0)) : 0;
-
-              return (
-                <div key={row.podLeadName} className="pod-rank-card">
-                  <div className="pod-rank-left">
-                    <div className="pod-rank-circle">{index + 1}</div>
-                    <div className="pod-rank-info">
-                      <div className="pod-rank-name">{row.podLeadName}</div>
-                      <div className="pod-rank-rate">
-                        <span className="pod-rank-pct">{hitRate}%</span>
-                        <span className="pod-rank-rate-label">Script hit rate</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pod-rank-bars">
-                    <div className="pod-bar-row">
-                      <span className="pod-bar-label">Beats</span>
-                      <div className="pod-bar-track">
-                        <div className="pod-bar-fill pod-bar-beats" style={{ width: `${(beats / maxBarValue) * 100}%` }} />
-                      </div>
-                      <span className="pod-bar-count">{beats}</span>
-                    </div>
-                    <div className="pod-bar-row">
-                      <span className="pod-bar-label">Scripts</span>
-                      <div className="pod-bar-track">
-                        <div className="pod-bar-fill pod-bar-scripts" style={{ width: `${(scripts / maxBarValue) * 100}%` }} />
-                      </div>
-                      <span className="pod-bar-count">{scripts}</span>
-                    </div>
-                    <div className="pod-bar-row">
-                      <span className="pod-bar-label">Successful</span>
-                      <div className="pod-bar-track">
-                        <div className="pod-bar-fill pod-bar-successful" style={{ width: `${(successful / maxBarValue) * 100}%` }} />
-                      </div>
-                      <span className="pod-bar-count">{successful}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="pod-legend-row">
-            <span className="pod-legend-item"><span className="pod-legend-swatch pod-bar-beats" /> Beats written</span>
-            <span className="pod-legend-item"><span className="pod-legend-swatch pod-bar-scripts" /> Scripts produced</span>
-            <span className="pod-legend-item"><span className="pod-legend-swatch pod-bar-successful" /> Successful scripts</span>
-          </div>
-        </div>
-      </ShareablePanel>
+    <div className="pod-funnel-row">
+      <span className="pod-funnel-label">{label}</span>
+      <div className="pod-funnel-track">
+        <div className="pod-funnel-fill" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <span className="pod-funnel-count">{value}</span>
     </div>
   );
 }
 
-function PodWiseTasksView({ podTasksData, podTasksLoading, podTasksError, onShare, copyingSection }) {
-  if (podTasksLoading) {
-    return <EmptyState text="Loading POD tasks..." />;
-  }
-
-  if (podTasksError) {
-    return <div className="warning-note">{podTasksError}</div>;
-  }
-
-  const pods = Array.isArray(podTasksData?.pods) ? podTasksData.pods : [];
-  const selectedWeekLabel = String(podTasksData?.weekLabel || "").trim();
-  const totalScriptsToReview = pods.reduce((sum, pod) => sum + Number(pod.scriptsToReview || 0), 0);
-  const totalBeatsToReview = pods.reduce((sum, pod) => sum + Number(pod.pendingBeats || 0), 0);
-  const maxScripts = Math.max(...pods.map((p) => Number(p.scriptsToReview || 0)), 1);
-  const maxBeats = Math.max(...pods.map((p) => Number(p.pendingBeats || 0)), 1);
-  const scriptPods = [...pods].filter((p) => Number(p.scriptsToReview || 0) > 0).sort((a, b) => Number(b.scriptsToReview || 0) - Number(a.scriptsToReview || 0));
-  const beatPods = [...pods].filter((p) => Number(p.pendingBeats || 0) > 0).sort((a, b) => Number(b.pendingBeats || 0) - Number(a.pendingBeats || 0));
-
-  return (
-    <div className="section-stack">
-      <ShareablePanel
-        shareLabel="POD Wise tasks"
-        onShare={onShare}
-        isSharing={copyingSection === "POD Wise tasks"}
-      >
-        {selectedWeekLabel ? (
-          <div className="panel-statline">Week: {selectedWeekLabel}</div>
-        ) : null}
-        <div className="metric-grid funnel-metric-row-2">
-          <article className="metric-card tone-default">
-            <div className="metric-label">Scripts to review</div>
-            <div className="metric-value">{formatNumber(totalScriptsToReview)}</div>
-          </article>
-          <article className="metric-card tone-default">
-            <div className="metric-label">Beats to review</div>
-            <div className="metric-value">{formatNumber(totalBeatsToReview)}</div>
-          </article>
-        </div>
-
-        <div className="pod-tasks-section">
-          <div className="panel-head">
-            <div className="panel-subtitle">Scripts pending approval</div>
-            <div className="pod-performance-hint">Scripts completed by writer, awaiting POD lead review</div>
-          </div>
-          {scriptPods.length > 0 ? (
-            <div className="pod-tasks-bar-list">
-              {scriptPods.map((pod) => {
-                const count = Number(pod.scriptsToReview || 0);
-                return (
-                  <div key={pod.podLeadName} className="pod-tasks-bar-row">
-                    <span className="pod-tasks-bar-name">{pod.podLeadName}</span>
-                    <div className="pod-bar-track">
-                      <div className="pod-bar-fill pod-bar-beats" style={{ width: `${(count / maxScripts) * 100}%` }} />
-                    </div>
-                    <span className="pod-bar-count" style={{ color: "var(--forest)", fontWeight: 700 }}>{count}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState text="No scripts pending review right now." />
-          )}
-        </div>
-
-        <div className="pod-tasks-section">
-          <div className="panel-head">
-            <div className="panel-subtitle">Beats pending approval</div>
-            <div className="pod-performance-hint">
-              Beats from {selectedWeekLabel || "selected week"} in review pending or iterate status
-            </div>
-          </div>
-          {beatPods.length > 0 ? (
-            <div className="pod-tasks-bar-list">
-              {beatPods.map((pod) => {
-                const count = Number(pod.pendingBeats || 0);
-                return (
-                  <div key={pod.podLeadName} className="pod-tasks-bar-row">
-                    <span className="pod-tasks-bar-name">{pod.podLeadName}</span>
-                    <div className="pod-bar-track">
-                      <div className="pod-bar-fill pod-bar-scripts" style={{ width: `${(count / maxBeats) * 100}%` }} />
-                    </div>
-                    <span className="pod-bar-count">{count}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState text="No beats pending approval right now." />
-          )}
-        </div>
-      </ShareablePanel>
-    </div>
-  );
-}
-
-function PodWiseContent({
-  view,
-  competitionPodRows,
-  competitionLoading,
-  competitionWeekLabel,
-  competitionSelectionMode,
-  podTasksData,
-  podTasksLoading,
-  podTasksError,
-  onShare,
-  copyingSection,
-}) {
-  if (view === "tasks") {
-    return (
-      <PodWiseTasksView
-        podTasksData={podTasksData}
-        podTasksLoading={podTasksLoading}
-        podTasksError={podTasksError}
-        onShare={onShare}
-        copyingSection={copyingSection}
-      />
-    );
-  }
-
+function PodWiseContent({ competitionPodRows, competitionLoading, onShare, copyingSection }) {
   if (competitionLoading) {
     return <EmptyState text="Loading POD Wise dashboard..." />;
   }
@@ -1981,14 +1568,1031 @@ function PodWiseContent({
     return <EmptyState text="POD Wise data is not available right now." />;
   }
 
+  const sorted = [...competitionRows]
+    .map((row) => {
+      const beats = row.lifetimeBeats || 0;
+      const scripts = row.lifetimeScripts || 0;
+      const successful = row.hitRateNumerator || 0;
+      const conversion = scripts > 0 ? Math.round((successful / scripts) * 100) : 0;
+      return { ...row, beats, scripts, successful, conversion };
+    })
+    .sort((a, b) => b.conversion - a.conversion || b.successful - a.successful);
+
+  const totalBeats = sorted.reduce((s, r) => s + r.beats, 0);
+  const totalScripts = sorted.reduce((s, r) => s + r.scripts, 0);
+  const totalSuccessful = sorted.reduce((s, r) => s + r.successful, 0);
+  const avgConversion = totalScripts > 0 ? Math.round((totalSuccessful / totalScripts) * 100) : 0;
+
+  const maxBeats = Math.max(...sorted.map((r) => r.beats), 1);
+  const maxScripts = Math.max(...sorted.map((r) => r.scripts), 1);
+  const maxSuccessful = Math.max(...sorted.map((r) => r.successful), 1);
+
   return (
-    <PodWisePerformanceView
-      competitionRows={competitionRows}
+    <ShareablePanel
+      shareLabel="POD Wise leaderboard"
       onShare={onShare}
-      copyingSection={copyingSection}
-      weekLabel={competitionWeekLabel}
-      selectionMode={competitionSelectionMode}
-    />
+      isSharing={copyingSection === "POD Wise leaderboard"}
+    >
+      <div className="section-stack">
+        {/* Summary row */}
+        <div className="pod-summary-grid">
+          {[
+            { label: "Total beats", value: totalBeats },
+            { label: "Total scripts", value: totalScripts },
+            { label: "Successful", value: totalSuccessful },
+            { label: "Avg conversion", value: `${avgConversion}%` },
+          ].map((card) => (
+            <div key={card.label} className="metric-card">
+              <div className="metric-label">{card.label}</div>
+              <div className="metric-value">{card.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Section header */}
+        <div className="pod-section-header">
+          <span className="pod-section-title">POD performance</span>
+          <span className="pod-section-subtitle">Ranked by successful scripts as % of total attempted scripts</span>
+        </div>
+
+        {/* POD cards */}
+        <div className="pod-cards-stack">
+          {sorted.map((pod, i) => {
+            const rank = i + 1;
+            const tierColor = getPodTierColor(pod.conversion);
+            return (
+              <div key={pod.podLeadName} className="pod-rank-card" style={{ borderLeftColor: tierColor }}>
+                <div className="pod-rank-col">
+                  <div className="pod-rank-number" style={{ color: tierColor }}>{rank}</div>
+                  <div className="pod-rank-label">RANK</div>
+                </div>
+                <div className="pod-info-col">
+                  <div className="pod-lead-name">{pod.podLeadName}</div>
+                  <div className="pod-conversion" style={{ color: tierColor }}>{pod.conversion}%</div>
+                  <div className="pod-rate-label">SCRIPT HIT RATE</div>
+                </div>
+                <div className="pod-bars-col">
+                  <PodFunnelBar label="Beats" value={pod.beats} maxValue={maxBeats} color="#2d5a3d" />
+                  <PodFunnelBar label="Scripts" value={pod.scripts} maxValue={maxScripts} color="#c2703e" />
+                  <PodFunnelBar label="Success" value={pod.successful} maxValue={maxSuccessful} color="#2d5a3d" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div className="pod-legend">
+          {[
+            { color: "#2d5a3d", label: "Beats written" },
+            { color: "#c2703e", label: "Scripts produced" },
+            { color: "#2d5a3d", label: "Successful scripts" },
+          ].map((item) => (
+            <div key={item.label} className="pod-legend-item">
+              <span className="pod-legend-swatch" style={{ background: item.color }} />
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ShareablePanel>
+  );
+}
+
+function getBeatsStatusMeta(statusCategory) {
+  if (statusCategory === "approved") {
+    return { label: "Approved", color: "#2d5a3d", bg: "rgba(45, 90, 61, 0.14)" };
+  }
+  if (statusCategory === "abandoned") {
+    return { label: "Abandoned", color: "#7d5a3a", bg: "rgba(125, 90, 58, 0.14)" };
+  }
+  if (statusCategory === "review_pending") {
+    return { label: "Review pending", color: "#c2703e", bg: "rgba(194, 112, 62, 0.14)" };
+  }
+  if (statusCategory === "iterate") {
+    return { label: "Iterate", color: "#9f2e2e", bg: "rgba(159, 46, 46, 0.14)" };
+  }
+  return { label: "To be ideated", color: "#6e6457", bg: "rgba(110, 100, 87, 0.14)" };
+}
+
+function formatMonthWeekLabel(monthKey, weekInMonth) {
+  if (!monthKey || !weekInMonth) {
+    return "";
+  }
+
+  const [year, month] = String(monthKey).split("-").map(Number);
+  if (!year || !month) {
+    return "";
+  }
+
+  const monthLabel = new Date(Date.UTC(year, month - 1, 1, 12)).toLocaleDateString("en-US", {
+    month: "long",
+    timeZone: "UTC",
+  });
+
+  return `${monthLabel} Wk${weekInMonth}`;
+}
+
+function getMonthWeekDateRange(monthKey, weekInMonth) {
+  if (!monthKey || !weekInMonth) {
+    return null;
+  }
+
+  const [year, month] = String(monthKey).split("-").map(Number);
+  if (!year || !month) {
+    return null;
+  }
+
+  const safeWeek = Number(weekInMonth);
+  if (!Number.isFinite(safeWeek) || safeWeek < 1) {
+    return null;
+  }
+
+  const startDay = (safeWeek - 1) * 7 + 1;
+  const monthEndDay = new Date(Date.UTC(year, month, 0, 12)).getUTCDate();
+  const endDay = safeWeek >= 4 ? monthEndDay : Math.min(startDay + 6, monthEndDay);
+
+  return {
+    start: `${year}-${String(month).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`,
+    end: `${year}-${String(month).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`,
+  };
+}
+
+function getSelectedPeriodRangeLabel(selectedPeriodOption, beatRows) {
+  if (!selectedPeriodOption || selectedPeriodOption.id === "overall") {
+    const datedRows = (Array.isArray(beatRows) ? beatRows : [])
+      .map((row) => String(row?.primaryDate || row?.completedDate || row?.assignedDate || ""))
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right));
+
+    if (datedRows.length === 0) {
+      return "All available Ideation tracker data";
+    }
+
+    return `${formatDateLabel(datedRows[0])} - ${formatDateLabel(datedRows[datedRows.length - 1])}`;
+  }
+
+  const range = getMonthWeekDateRange(selectedPeriodOption.monthKey, selectedPeriodOption.weekInMonth);
+  if (!range) {
+    return selectedPeriodOption.label || "";
+  }
+
+  return `${formatDateLabel(range.start)} - ${formatDateLabel(range.end)}`;
+}
+
+function getSelectedPeriodRange(selectedPeriodOption, beatRows) {
+  if (!selectedPeriodOption || selectedPeriodOption.id === "overall") {
+    const datedRows = (Array.isArray(beatRows) ? beatRows : [])
+      .map((row) => String(row?.primaryDate || row?.completedDate || row?.assignedDate || ""))
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right));
+
+    if (datedRows.length === 0) {
+      return null;
+    }
+
+    return { start: datedRows[0], end: datedRows[datedRows.length - 1] };
+  }
+
+  return getMonthWeekDateRange(selectedPeriodOption.monthKey, selectedPeriodOption.weekInMonth);
+}
+
+function uniqueSortedCodes(rows) {
+  return Array.from(
+    new Set(
+      (Array.isArray(rows) ? rows : [])
+        .map((row) => String(row?.assetCode || "").trim())
+        .filter(Boolean)
+    )
+  ).sort((left, right) => left.localeCompare(right));
+}
+
+function filterWorkflowRows(rows, selectedPod, selectedPodKey) {
+  return (Array.isArray(rows) ? rows : []).filter((row) => {
+    if (selectedPod !== "all") {
+      const rowCanonicalKey = normalizePodFilterKey(row?.podMatchKey || row?.podLeadName);
+      const rowRawKey = normalizePodFilterKey(row?.podLeadName);
+      const selectedRawKey = normalizePodFilterKey(selectedPod);
+
+      if (rowCanonicalKey !== selectedPodKey && rowRawKey !== selectedRawKey) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
+function sortWorkflowRows(rows, sortState) {
+  const safeRows = Array.isArray(rows) ? [...rows] : [];
+  return safeRows.sort((left, right) => {
+    const comparison = compareDetailedTableValues(left?.[sortState.key] ?? "", right?.[sortState.key] ?? "");
+    if (comparison !== 0) {
+      return sortState.direction === "asc" ? comparison : -comparison;
+    }
+    return String(left?.id || "").localeCompare(String(right?.id || ""));
+  });
+}
+
+function paginateRows(rows, page, pageSize) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const count = Math.max(1, Math.ceil(safeRows.length / pageSize));
+  const safePage = Math.min(page, count - 1);
+  const paginatedRows = safeRows.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const options = Array.from({ length: count }, (_, index) => {
+    const start = index * pageSize + 1;
+    const end = Math.min((index + 1) * pageSize, safeRows.length);
+    return { index, label: `${start}-${end}` };
+  });
+
+  return { safePage, count, paginatedRows, options };
+}
+
+function compareDetailedTableValues(leftValue, rightValue) {
+  const leftNumber = Number(leftValue);
+  const rightNumber = Number(rightValue);
+  const leftIsNumber = leftValue !== "" && leftValue !== null && leftValue !== undefined && Number.isFinite(leftNumber);
+  const rightIsNumber = rightValue !== "" && rightValue !== null && rightValue !== undefined && Number.isFinite(rightNumber);
+
+  if (leftIsNumber && rightIsNumber) {
+    return leftNumber - rightNumber;
+  }
+
+  return String(leftValue || "").localeCompare(String(rightValue || ""), undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function daysBetweenYmd(startDate, endDate) {
+  if (!startDate || !endDate) return null;
+  const start = new Date(`${startDate}T12:00:00Z`);
+  const end = new Date(`${endDate}T12:00:00Z`);
+  const diffMs = end.getTime() - start.getTime();
+  if (!Number.isFinite(diffMs) || diffMs < 0) return null;
+  return Math.round(diffMs / 86_400_000);
+}
+
+function BeatsPerformanceContent({
+  beatsPerformanceData,
+  beatsPerformanceLoading,
+  beatsPerformanceError,
+  onShare,
+  copyingSection,
+}) {
+  const [selectedPeriod, setSelectedPeriod] = useState("overall");
+  const [selectedPod, setSelectedPod] = useState("all");
+  const [drilldownPod, setDrilldownPod] = useState("all");
+  const [detailSort, setDetailSort] = useState({ key: "assignedDate", direction: "desc" });
+  const [detailPage, setDetailPage] = useState(0);
+  const [workflowSorts, setWorkflowSorts] = useState({
+    editorial: { key: "assetCode", direction: "asc" },
+    readyForProduction: { key: "assetCode", direction: "asc" },
+    production: { key: "assetCode", direction: "asc" },
+    live: { key: "assetCode", direction: "asc" },
+  });
+  const [workflowPages, setWorkflowPages] = useState({
+    editorial: 0,
+    readyForProduction: 0,
+    production: 0,
+    live: 0,
+  });
+
+  const podOptions = Array.isArray(beatsPerformanceData?.filters?.pods) ? beatsPerformanceData.filters.pods : [];
+  const beatRows = Array.isArray(beatsPerformanceData?.rows) ? beatsPerformanceData.rows : [];
+  const freshTakeRows = Array.isArray(beatsPerformanceData?.freshTakeRows) ? beatsPerformanceData.freshTakeRows : [];
+  const workflowTables = beatsPerformanceData?.workflowTables || {};
+  const periodOptions = useMemo(() => {
+    const optionMap = new Map();
+
+    for (const row of beatRows) {
+      if (!row?.monthKey || !row?.weekInMonth) {
+        continue;
+      }
+
+      const id = `${row.monthKey}::${row.weekInMonth}`;
+      if (!optionMap.has(id)) {
+        optionMap.set(id, {
+          id,
+          monthKey: row.monthKey,
+          weekInMonth: Number(row.weekInMonth),
+          label: formatMonthWeekLabel(row.monthKey, row.weekInMonth),
+        });
+      }
+    }
+
+    return [
+      { id: "overall", label: "Till now (overall data)", monthKey: "", weekInMonth: null },
+      ...Array.from(optionMap.values()).sort((left, right) => {
+        if (left.monthKey !== right.monthKey) {
+          return left.monthKey.localeCompare(right.monthKey);
+        }
+        return left.weekInMonth - right.weekInMonth;
+      }),
+    ];
+  }, [beatRows]);
+
+  useEffect(() => {
+    if (!selectedPeriod || !periodOptions.some((option) => option.id === selectedPeriod)) {
+      setSelectedPeriod(periodOptions[0]?.id || "overall");
+    }
+  }, [periodOptions, selectedPeriod]);
+
+  useEffect(() => {
+    if (selectedPod !== "all" && !podOptions.includes(selectedPod)) {
+      setSelectedPod("all");
+    }
+  }, [podOptions, selectedPod]);
+
+  useEffect(() => {
+    if (drilldownPod !== "all" && !podOptions.includes(drilldownPod)) {
+      setDrilldownPod("all");
+    }
+  }, [podOptions, drilldownPod]);
+
+  useEffect(() => {
+    setDetailPage(0);
+  }, [selectedPeriod, selectedPod, detailSort]);
+
+  useEffect(() => {
+    setDrilldownPod("all");
+  }, [selectedPeriod, selectedPod]);
+
+  useEffect(() => {
+    setWorkflowPages({
+      editorial: 0,
+      readyForProduction: 0,
+      production: 0,
+      live: 0,
+    });
+  }, [selectedPeriod, selectedPod, workflowSorts]);
+
+  if (beatsPerformanceLoading) {
+    return <EmptyState text="Loading beats performance..." />;
+  }
+
+  if (beatsPerformanceError) {
+    return <div className="warning-note">{beatsPerformanceError}</div>;
+  }
+
+  if (!selectedPeriod) {
+    return <EmptyState text="Beats performance data is not available right now." />;
+  }
+
+  const selectedPeriodOption = periodOptions.find((option) => option.id === selectedPeriod) || periodOptions[0];
+  const isOverallPeriod = selectedPeriod === "overall";
+  const selectedPeriodIndex = periodOptions.findIndex((option) => option.id === selectedPeriod);
+  const previousPeriodOption = !isOverallPeriod && selectedPeriodIndex > 1 ? periodOptions[selectedPeriodIndex - 1] : null;
+  const selectedPodKey =
+    selectedPod === "all"
+      ? "all"
+      : beatRows.find((row) => row.podLeadName === selectedPod)?.podMatchKey || normalizePodFilterKey(selectedPod);
+  const scopedRows = beatRows.filter(
+    (row) =>
+      (selectedPod === "all" || normalizePodFilterKey(row.podMatchKey || row.podLeadName) === selectedPodKey) &&
+      (isOverallPeriod ||
+        (row.monthKey === selectedPeriodOption.monthKey && Number(row.weekInMonth || 0) === Number(selectedPeriodOption.weekInMonth || 0)))
+  );
+  const scopedFreshTakeRows = freshTakeRows.filter(
+    (row) =>
+      (selectedPod === "all" || normalizePodFilterKey(row.podMatchKey || row.podLeadName) === selectedPodKey) &&
+      (isOverallPeriod ||
+        (row.monthKey === selectedPeriodOption.monthKey && Number(row.weekInMonth || 0) === Number(selectedPeriodOption.weekInMonth || 0)))
+  );
+  const previousScopedRows = previousPeriodOption
+    ? beatRows.filter(
+        (row) =>
+          (selectedPod === "all" || normalizePodFilterKey(row.podMatchKey || row.podLeadName) === selectedPodKey) &&
+          row.monthKey === previousPeriodOption.monthKey &&
+          Number(row.weekInMonth || 0) === Number(previousPeriodOption.weekInMonth || 0)
+      )
+    : [];
+
+  const activePods = Array.from(
+    new Set(scopedRows.map((row) => String(row?.podLeadName || "").trim()).filter(Boolean))
+  );
+  const totalBeats = scopedRows.length;
+  const approvedCount = scopedRows.filter((row) => row.statusCategory === "approved").length;
+  const abandonedCount = scopedRows.filter((row) => row.statusCategory === "abandoned").length;
+  const reviewPendingCount = scopedRows.filter((row) => row.statusCategory === "review_pending").length;
+  const iterateCount = scopedRows.filter((row) => row.statusCategory === "iterate").length;
+  const previousApprovedCount = previousScopedRows.filter((row) => row.statusCategory === "approved").length;
+  const previousAbandonedCount = previousScopedRows.filter((row) => row.statusCategory === "abandoned").length;
+  const previousReviewPendingCount = previousScopedRows.filter((row) => row.statusCategory === "review_pending").length;
+  const previousIterateCount = previousScopedRows.filter((row) => row.statusCategory === "iterate").length;
+  const podStatusSummaryRows = activePods
+    .map((podLeadName) => {
+      const podRows = scopedRows.filter((row) => row.podLeadName === podLeadName);
+      return {
+        podLeadName,
+        approved: podRows.filter((row) => row.statusCategory === "approved").length,
+        abandoned: podRows.filter((row) => row.statusCategory === "abandoned").length,
+        reviewPending: podRows.filter((row) => row.statusCategory === "review_pending").length,
+        iterate: podRows.filter((row) => row.statusCategory === "iterate").length,
+        toBeIdeated: podRows.filter((row) => row.statusCategory === "to_be_ideated").length,
+        total: podRows.length,
+      };
+    })
+    .sort((left, right) => right.total - left.total || left.podLeadName.localeCompare(right.podLeadName));
+  const comparisonSuffix = previousPeriodOption ? `vs ${previousPeriodOption.label}` : "vs last week";
+  const metricCards = [
+    {
+      label: "Total Beats",
+      value: formatMetricValue(totalBeats),
+      delta: getDeltaMeta(totalBeats, previousScopedRows.length, comparisonSuffix),
+    },
+    {
+      label: "Approved beats",
+      value: formatMetricValue(approvedCount),
+      delta: getDeltaMeta(approvedCount, previousApprovedCount, comparisonSuffix),
+    },
+    {
+      label: "Review pending",
+      value: formatMetricValue(reviewPendingCount),
+      delta: getDeltaMeta(reviewPendingCount, previousReviewPendingCount, comparisonSuffix),
+    },
+    {
+      label: "Iterate",
+      value: formatMetricValue(iterateCount),
+      delta: getDeltaMeta(iterateCount, previousIterateCount, comparisonSuffix),
+    },
+    {
+      label: "Abandoned",
+      value: formatMetricValue(abandonedCount),
+      delta: getDeltaMeta(abandonedCount, previousAbandonedCount, comparisonSuffix),
+    },
+  ];
+  const detailedRows = [...scopedRows].sort((left, right) => {
+    const getSortValue = (row, key) => {
+      if (key === "name") return row.beatCode || "";
+      if (key === "podLeadName") return row.podLeadName || "";
+      if (key === "showName") return row.showName || "";
+      if (key === "beatName") return row.beatName || "";
+      if (key === "statusLabel") return row.statusLabel || "";
+      if (key === "assignedDate") return row.assignedDate || row.assignedDateRaw || "";
+      if (key === "completedDate") return row.completedDate || row.completedDateRaw || "";
+      if (key === "cycleDays") return row.cycleDays ?? "";
+      return "";
+    };
+
+    const comparison = compareDetailedTableValues(
+      getSortValue(left, detailSort.key),
+      getSortValue(right, detailSort.key)
+    );
+
+    if (comparison !== 0) {
+      return detailSort.direction === "asc" ? comparison : -comparison;
+    }
+
+    return String(left.id || "").localeCompare(String(right.id || ""));
+  });
+  const detailPageSize = 10;
+  const detailPageCount = Math.max(1, Math.ceil(detailedRows.length / detailPageSize));
+  const safeDetailPage = Math.min(detailPage, detailPageCount - 1);
+  const paginatedDetailedRows = detailedRows.slice(
+    safeDetailPage * detailPageSize,
+    safeDetailPage * detailPageSize + detailPageSize
+  );
+  const detailPageOptions = Array.from({ length: detailPageCount }, (_, index) => {
+    const start = index * detailPageSize + 1;
+    const end = Math.min((index + 1) * detailPageSize, detailedRows.length);
+    return { index, label: `${start}-${end}` };
+  });
+  const selectedPeriodRangeLabel = getSelectedPeriodRangeLabel(selectedPeriodOption, beatRows);
+  const selectedPeriodRange = getSelectedPeriodRange(selectedPeriodOption, beatRows);
+  const effectiveWorkflowPod = drilldownPod !== "all" ? drilldownPod : selectedPod;
+  const effectiveWorkflowPodKey =
+    effectiveWorkflowPod === "all"
+      ? "all"
+      : beatRows.find((row) => row.podLeadName === effectiveWorkflowPod)?.podMatchKey || normalizePodFilterKey(effectiveWorkflowPod);
+  const workflowTableConfigs = [
+    {
+      id: "editorial",
+      title: "Editorial",
+      subtitle: "Filtered rows from the Editorial sheet",
+      columns: [
+        ["assetCode", "AD code"],
+        ["podLeadName", "POD"],
+        ["writerName", "Writer"],
+        ["showName", "Show"],
+        ["beatName", "Angle name"],
+        ["productionType", "Production Type"],
+        ["dateAssigned", "Date assigned"],
+        ["dateSubmittedByLead", "Date submitted by Lead"],
+      ],
+    },
+    {
+      id: "readyForProduction",
+      title: "Ready for Production",
+      subtitle: "Filtered rows from the Ready for Production sheet",
+      columns: [
+        ["assetCode", "AD code"],
+        ["podLeadName", "POD"],
+        ["writerName", "Writer"],
+        ["showName", "Show"],
+        ["beatName", "Angle name"],
+        ["productionType", "Production Type"],
+        ["dateSubmittedByLead", "Date submitted by Lead"],
+        ["etaToStartProd", "ETA to start prod"],
+      ],
+    },
+    {
+      id: "production",
+      title: "Production",
+      subtitle: "Filtered rows from the Production sheet",
+      columns: [
+        ["assetCode", "AD code"],
+        ["podLeadName", "POD"],
+        ["writerName", "Writer"],
+        ["showName", "Show"],
+        ["beatName", "Angle name"],
+        ["productionType", "Production Type"],
+        ["etaToStartProd", "ETA to start prod"],
+        ["etaPromoCompletion", "ETA for promo completion"],
+        ["cl", "CL"],
+        ["cd", "CD"],
+        ["acd1WorkedOnWorldSettings", "ACD 1 Worked on world settings"],
+        ["acdMultipleSelections", "ACD Multiple selections allowed."],
+        ["status", "Status"],
+      ],
+    },
+    {
+      id: "live",
+      title: "Live",
+      subtitle: "Filtered rows from the Live sheet",
+      columns: [
+        ["assetCode", "AD code"],
+        ["podLeadName", "POD"],
+        ["writerName", "Writer"],
+        ["showName", "Show"],
+        ["beatName", "Angle name"],
+        ["productionType", "Production Type"],
+        ["dateAssigned", "Date assigned"],
+        ["dateSubmittedByLead", "Date submitted by Lead"],
+        ["etaToStartProd", "ETA to start prod"],
+        ["etaPromoCompletion", "ETA for promo completion"],
+        ["cl", "CL"],
+        ["cd", "CD"],
+        ["acd1WorkedOnWorldSettings", "ACD 1 Worked on world settings"],
+        ["acdMultipleSelections", "ACD Multiple selections allowed."],
+        ["finalUploadDate", "Final Upload Date"],
+      ],
+    },
+  ];
+  const workflowPodChips = [...podOptions].sort((left, right) => left.localeCompare(right));
+  const preparedWorkflowTables = workflowTableConfigs.map((config) => {
+    const filteredRows = filterWorkflowRows(
+      workflowTables?.[config.id],
+      effectiveWorkflowPod,
+      effectiveWorkflowPodKey
+    );
+    const sortedRows = sortWorkflowRows(filteredRows, workflowSorts[config.id] || { key: "assetCode", direction: "asc" });
+    const pagination = paginateRows(sortedRows, workflowPages[config.id] || 0, 10);
+    return {
+      ...config,
+      rows: sortedRows,
+      paginatedRows: pagination.paginatedRows,
+      pageOptions: pagination.options,
+      safePage: pagination.safePage,
+      sort: workflowSorts[config.id] || { key: "assetCode", direction: "asc" },
+    };
+  });
+  const ideationAvailabilityRows = scopedRows.map((row) => ({
+    beatCodeKey: normalizeStageMatchKey(row.beatCode),
+    showKey: normalizeStageMatchKey(row.showName),
+    beatKey: normalizeStageMatchKey(row.beatName),
+  }));
+  const workflowTablesWithAvailability = preparedWorkflowTables.map((table) => ({
+    ...table,
+    columns: [...table.columns, ["beatsAvailable", "Beats is available"]],
+    paginatedRows: table.paginatedRows.map((row) => {
+      const scriptCodeKey = normalizeStageMatchKey(row.scriptCode);
+      const showKey = normalizeStageMatchKey(row.showName);
+      const beatKey = normalizeStageMatchKey(row.beatName);
+      const beatsAvailable = ideationAvailabilityRows.some(
+        (candidate) =>
+          (beatKey && candidate.beatKey === beatKey) ||
+          (scriptCodeKey && candidate.beatCodeKey === scriptCodeKey) ||
+          (beatKey && candidate.showKey === showKey && candidate.beatKey === beatKey)
+      );
+
+      return {
+        ...row,
+        beatsAvailable: beatsAvailable ? "Yes" : "No",
+      };
+    }),
+  }));
+
+  return (
+    <ShareablePanel shareLabel="Beats Performance" onShare={onShare} isSharing={copyingSection === "Beats Performance"}>
+      <div className="section-stack">
+        <div className="section-toolbar">
+          <label className="toolbar-select">
+            <span>Filter</span>
+            <select value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value)}>
+              {periodOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="toolbar-select">
+            <span>POD</span>
+            <select value={selectedPod} onChange={(event) => setSelectedPod(event.target.value)}>
+              <option value="all">All PODs</option>
+              {podOptions.map((podLeadName) => (
+                <option key={podLeadName} value={podLeadName}>
+                  {podLeadName}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div
+          style={{
+            marginTop: -6,
+            fontSize: 13,
+            color: "var(--subtle)",
+            fontWeight: 600,
+          }}
+        >
+          {selectedPeriodOption?.label ? `${selectedPeriodOption.label}: ` : ""}
+          {selectedPeriodRangeLabel}
+        </div>
+
+        <div className="pod-summary-grid">
+          {metricCards.map((card) => (
+            <div key={card.label} className="metric-card">
+              <div className="metric-label">{card.label}</div>
+              <div className="metric-value">{card.value}</div>
+              {!isOverallPeriod ? (
+                <div style={{ fontSize: 12, fontWeight: 700, marginTop: 8, color: card.delta.color }}>{card.delta.text}</div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }} />
+
+        <div className="pod-section-header">
+          <span className="pod-section-title">POD Status</span>
+          <span className="pod-section-subtitle">POD-wise status counts from Ideation tracker only</span>
+        </div>
+
+        <div className="table-wrap">
+          <table className="ops-table">
+            <thead>
+              <tr>
+                <th>POD</th>
+                <th>Approved</th>
+                <th>Abandoned</th>
+                <th>Review pending</th>
+                <th>Iterate</th>
+                <th>To be ideated</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {podStatusSummaryRows.length > 0 ? (
+                podStatusSummaryRows.map((row) => (
+                  <tr key={row.podLeadName}>
+                    <td>{row.podLeadName || "-"}</td>
+                    <td>{formatMetricValue(row.approved)}</td>
+                    <td>{formatMetricValue(row.abandoned)}</td>
+                    <td>{formatMetricValue(row.reviewPending)}</td>
+                    <td>{formatMetricValue(row.iterate)}</td>
+                    <td>{formatMetricValue(row.toBeIdeated)}</td>
+                    <td>{formatMetricValue(row.total)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="7" className="empty-cell">
+                    No beats match the selected filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="pod-section-header">
+          <span className="pod-section-title">Detailed Info</span>
+          <span className="pod-section-subtitle">Row-level detail from Ideation tracker</span>
+        </div>
+
+        <div className="table-wrap">
+          <table className="ops-table">
+            <thead>
+              <tr>
+                {[
+                  ["podLeadName", "POD"],
+                  ["name", "Writer name"],
+                  ["showName", "Show"],
+                  ["beatName", "Beat name"],
+                  ["statusLabel", "Beat status"],
+                  ["assignedDate", "Assign date"],
+                  ["completedDate", "Complete date"],
+                  ["cycleDays", "Difference"],
+                ].map(([key, label]) => {
+                  const isActive = detailSort.key === key;
+                  const arrow = isActive ? (detailSort.direction === "asc" ? " ↑" : " ↓") : " ↕";
+                  return (
+                    <th key={key}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDetailSort((current) => ({
+                            key,
+                            direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
+                          }))
+                        }
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          font: "inherit",
+                          color: "inherit",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {label}
+                        {arrow}
+                      </button>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedDetailedRows.length > 0 ? (
+                paginatedDetailedRows.map((row) => {
+                  const statusMeta = getBeatsStatusMeta(row.statusCategory);
+                  return (
+                    <tr key={row.id}>
+                      <td>{row.podLeadName || "-"}</td>
+                      <td>{row.beatCode || "-"}</td>
+                      <td>{row.showName || "-"}</td>
+                      <td>{row.beatName || "-"}</td>
+                      <td>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            background: statusMeta.bg,
+                            color: statusMeta.color,
+                            fontWeight: 700,
+                            fontSize: 12,
+                          }}
+                        >
+                          {row.statusLabel || statusMeta.label}
+                        </span>
+                      </td>
+                      <td>{row.assignedDate ? formatDateLabel(row.assignedDate) : row.assignedDateRaw || row.rawBucketLabel || "-"}</td>
+                      <td>{row.completedDate ? formatDateLabel(row.completedDate) : row.completedDateRaw || "-"}</td>
+                      <td>{row.cycleDays == null ? "-" : `${formatNumber(row.cycleDays)} d`}</td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan="8" className="empty-cell">
+                    No detailed beats match the selected filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {detailPageOptions.length > 1 ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+            {detailPageOptions.map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                className={safeDetailPage === option.index ? "toggle-chip is-active" : "toggle-chip"}
+                onClick={() => setDetailPage(option.index)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {workflowPodChips.length > 0 ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 13, color: "var(--subtle)", fontWeight: 700 }}>Filter below tables:</span>
+            {workflowPodChips.map((podName) => {
+              const isActive = drilldownPod === podName;
+              return (
+                <button
+                  key={`workflow-pod-${podName}`}
+                  type="button"
+                  className={isActive ? "toggle-chip is-active" : "toggle-chip"}
+                  onClick={() => setDrilldownPod(isActive ? "all" : podName)}
+                  title={isActive ? "Click to Remove" : "Click to Filter"}
+                >
+                  {podName}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {workflowTablesWithAvailability.map((table) => (
+          <div key={table.id} style={{ display: "grid", gap: 12 }}>
+            <div className="pod-section-header">
+              <span className="pod-section-title">{table.title}</span>
+              <span className="pod-section-subtitle">{table.subtitle}</span>
+            </div>
+
+            <div className="table-wrap">
+              <table className="ops-table">
+                <thead>
+                  <tr>
+                    {table.columns.map(([key, label]) => {
+                      const isActive = table.sort.key === key;
+                      const arrow = isActive ? (table.sort.direction === "asc" ? " ↑" : " ↓") : " ↕";
+                      return (
+                        <th key={`${table.id}-${key}`}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setWorkflowSorts((current) => ({
+                                ...current,
+                                [table.id]: {
+                                  key,
+                                  direction:
+                                    current?.[table.id]?.key === key && current?.[table.id]?.direction === "asc" ? "desc" : "asc",
+                                },
+                              }))
+                            }
+                            style={{
+                              background: "none",
+                              border: "none",
+                              padding: 0,
+                              font: "inherit",
+                              color: "inherit",
+                              cursor: "pointer",
+                            }}
+                          >
+                            {label}
+                            {arrow}
+                          </button>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {table.paginatedRows.length > 0 ? (
+                    table.paginatedRows.map((row) => (
+                      <tr key={`${table.id}-${row.id}-${row.rowIndex || ""}`}>
+                        {table.columns.map(([key]) => (
+                          <td key={`${table.id}-${row.id}-${key}`}>
+                            {key.toLowerCase().includes("date") || key.toLowerCase().includes("eta")
+                              ? row[key]
+                                ? formatDateLabel(row[key])
+                                : "-"
+                              : row[key] || "-"}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={table.columns.length} className="empty-cell">
+                        No {table.title.toLowerCase()} rows match the selected filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {table.pageOptions.length > 1 ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {table.pageOptions.map((option) => (
+                  <button
+                    key={`${table.id}-${option.label}`}
+                    type="button"
+                    className={table.safePage === option.index ? "toggle-chip is-active" : "toggle-chip"}
+                    onClick={() =>
+                      setWorkflowPages((current) => ({
+                        ...current,
+                        [table.id]: option.index,
+                      }))
+                    }
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </ShareablePanel>
+  );
+}
+
+function PodTasksBarChart({ title, subtitle, items, maxValue, accentColor }) {
+  if (items.length === 0) {
+    return (
+      <>
+        <div className="pod-section-header">
+          <span className="pod-section-title">{title}</span>
+          <span className="pod-section-subtitle">{subtitle}</span>
+        </div>
+        <EmptyState text={`No ${title.toLowerCase()} right now.`} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="pod-section-header">
+        <span className="pod-section-title">{title}</span>
+        <span className="pod-section-subtitle">{subtitle}</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {items.map((item, i) => {
+          const isMax = i === 0;
+          const barColor = isMax ? accentColor : "#2d5a3d";
+          const pct = maxValue > 0 ? Math.max((item.count / maxValue) * 100, 4) : 0;
+          return (
+            <div key={item.podLead} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ width: 72, fontSize: 13, fontWeight: 500, color: "var(--ink)", textAlign: "right", flexShrink: 0 }}>
+                {item.podLead}
+              </span>
+              <div style={{ flex: 1, height: 28, borderRadius: 6, background: "var(--surface)", overflow: "hidden" }}>
+                <div style={{ width: `${pct}%`, height: "100%", borderRadius: 6, background: barColor, transition: "width 0.4s ease" }} />
+              </div>
+              <span style={{ width: 28, fontSize: 14, fontWeight: 700, color: isMax ? accentColor : "var(--ink-secondary)", textAlign: "right", flexShrink: 0 }}>
+                {item.count}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function PodTasksContent({ podTasksData, podTasksLoading, onShare, copyingSection }) {
+  if (podTasksLoading) {
+    return <EmptyState text="Loading POD tasks..." />;
+  }
+
+  if (!podTasksData) {
+    return <EmptyState text="POD tasks data is not available right now." />;
+  }
+
+  const { scriptsPendingByPod, beatsPendingByPod, totalScriptsPending, totalBeatsPending } = podTasksData;
+  const maxScripts = Math.max(...scriptsPendingByPod.map((r) => r.count), 1);
+  const maxBeats = Math.max(...beatsPendingByPod.map((r) => r.count), 1);
+
+  return (
+    <ShareablePanel
+      shareLabel="POD Tasks"
+      onShare={onShare}
+      isSharing={copyingSection === "POD Tasks"}
+    >
+      <div className="section-stack">
+        {/* Summary row */}
+        <div className="pod-summary-grid">
+          {[
+            { label: "Scripts to review", value: totalScriptsPending },
+            { label: "Beats to review", value: totalBeatsPending },
+          ].map((card) => (
+            <div key={card.label} className="metric-card">
+              <div className="metric-label">{card.label}</div>
+              <div className="metric-value">{card.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <PodTasksBarChart
+          title="Scripts pending approval"
+          subtitle="Scripts completed by writer, awaiting POD lead review"
+          items={scriptsPendingByPod}
+          maxValue={maxScripts}
+          accentColor="#c2703e"
+        />
+
+        <PodTasksBarChart
+          title="Beats pending approval"
+          subtitle="Beats from current week in review pending or iterate status"
+          items={beatsPendingByPod}
+          maxValue={maxBeats}
+          accentColor="#c2703e"
+        />
+      </div>
+    </ShareablePanel>
   );
 }
 
@@ -2040,10 +2644,8 @@ function ProductionContent({
         onShare={onShare}
         isSharing={copyingSection === "Production ACD sync"}
       >
-        <div className="funnel-section-head">
-          <div className="panel-subtitle">ACD Daily Sync</div>
-          <div className="panel-statline">{buildAcdSyncMeta(syncStatus)}</div>
-        </div>
+        <div className="panel-title">ACD Daily Sync</div>
+        <div className="panel-statline">{buildAcdSyncMeta(syncStatus)}</div>
         <div className="panel-stack">
           <div className="section-actions section-actions-left" data-share-ignore="true">
             <button
@@ -2065,12 +2667,10 @@ function ProductionContent({
       >
         <div className="panel-head">
           <div>
-            <div className="funnel-section-head">
-              <div className="panel-subtitle">{viewLabel} productivity chart</div>
-              <div className="panel-statline">
-                <span>{dataset.rows.length > 0 ? dataset.meta : acdMetricsData.emptyStateMessage || EMPTY_ACD_MESSAGE}</span>
-                {latestWorkDateLabel ? <span> Latest synced work date: {latestWorkDateLabel}</span> : null}
-              </div>
+            <div className="panel-title">{viewLabel} productivity chart</div>
+            <div className="panel-statline">
+              <span>{dataset.rows.length > 0 ? dataset.meta : acdMetricsData.emptyStateMessage || EMPTY_ACD_MESSAGE}</span>
+              {latestWorkDateLabel ? <span>Latest synced work date: {latestWorkDateLabel}</span> : null}
             </div>
           </div>
           <div className="production-toggle-wrap" data-share-ignore="true">
@@ -2099,10 +2699,8 @@ function ProductionContent({
         isSharing={copyingSection === "Production troubleshooting"}
         className="production-troubleshooting-panel"
       >
-        <div className="funnel-section-head">
-          <div className="panel-subtitle">ACD Sync Rules and Adherence Issues</div>
-          <div className="panel-statline">{buildAcdAdherenceMeta(syncStatus)}</div>
-        </div>
+        <div className="panel-title">ACD Sync Rules and Adherence Issues</div>
+        <div className="panel-statline">{buildAcdAdherenceMeta(syncStatus)}</div>
         <div className="rules-card">
           <div className="rules-card-title">Image sheet rules for ACD sync</div>
           <ol className="rules-list">
@@ -2167,23 +2765,13 @@ async function readJson(response) {
     return {};
   }
 
-  const payload = await response.json();
-  return payload && typeof payload === "object" ? payload : {};
+  return response.json();
 }
-
-const OVERVIEW_PERIOD_OPTIONS = EDITORIAL_FUNNEL_VIEW_OPTIONS;
 
 export default function UnifiedOpsApp() {
   const [activeView, setActiveView] = useState("overview");
-  const [overviewPeriod, setOverviewPeriod] = useState("current");
-  const [themeMode, setThemeMode] = useState("light");
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [selectedBeatOverviewWeekKey, setSelectedBeatOverviewWeekKey] = useState(getWeekSelection("last").weekKey);
-  const [expandedNavGroup, setExpandedNavGroup] = useState("overview");
-  const [writerTrackerData, setWriterTrackerData] = useState(null);
-  const [writerTrackerLoading, setWriterTrackerLoading] = useState(false);
-  const [writerTrackerError, setWriterTrackerError] = useState("");
-  const [selectedAnalyticsWeekKey, setSelectedAnalyticsWeekKey] = useState(getWeekSelection("last").weekKey);
+  const [editorialPeriod, setEditorialPeriod] = useState("current");
+  const [selectedAnalyticsWeekKey, setSelectedAnalyticsWeekKey] = useState(getWeekSelection("current").weekKey);
   const [plannerBoardSnapshot, setPlannerBoardSnapshot] = useState(null);
   const [overviewDataByPeriod, setOverviewDataByPeriod] = useState({});
   const [overviewLoadingByPeriod, setOverviewLoadingByPeriod] = useState(
@@ -2195,17 +2783,8 @@ export default function UnifiedOpsApp() {
     Object.fromEntries(OVERVIEW_PERIODS.map((period) => [period, true]))
   );
   const [productionErrorByPeriod, setProductionErrorByPeriod] = useState({});
-  const [podWiseView, setPodWiseView] = useState("performance");
-  const [podWiseWeek, setPodWiseWeek] = useState("next");
-  const [podWiseWeekTouched, setPodWiseWeekTouched] = useState(false);
   const [competitionData, setCompetitionData] = useState(null);
   const [competitionLoading, setCompetitionLoading] = useState(true);
-  const [podTasksData, setPodTasksData] = useState(null);
-  const [podTasksLoading, setPodTasksLoading] = useState(false);
-  const [podTasksError, setPodTasksError] = useState("");
-  const [beatOverviewData, setBeatOverviewData] = useState(null);
-  const [beatOverviewLoading, setBeatOverviewLoading] = useState(false);
-  const [beatOverviewError, setBeatOverviewError] = useState("");
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState("");
@@ -2219,6 +2798,12 @@ export default function UnifiedOpsApp() {
   const [copyingSection, setCopyingSection] = useState("");
   const [includeNewShowsPod, setIncludeNewShowsPod] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [podWiseView, setPodWiseView] = useState("performance");
+  const [podTasksData, setPodTasksData] = useState(null);
+  const [podTasksLoading, setPodTasksLoading] = useState(false);
+  const [beatsPerformanceData, setBeatsPerformanceData] = useState(null);
+  const [beatsPerformanceLoading, setBeatsPerformanceLoading] = useState(false);
+  const [beatsPerformanceError, setBeatsPerformanceError] = useState("");
 
   const nextWeekKey = useMemo(() => shiftWeekKey(getCurrentWeekKey(), 1), []);
   const nextWeekPlannerBoardMetrics = useMemo(() => {
@@ -2241,6 +2826,8 @@ export default function UnifiedOpsApp() {
         ...nextApiData,
         ...nextWeekPlannerBoardMetrics.overview,
         goodToGoBeatsCount: nextApiData.goodToGoBeatsCount ?? null,
+        reviewPendingCount: nextApiData.reviewPendingCount ?? 0,
+        iterateCount: nextApiData.iterateCount ?? 0,
         goodToGoTarget: nextApiData.goodToGoTarget ?? 30,
         ideationWeekBucket: nextApiData.ideationWeekBucket || "",
         goodToGoError: nextApiData.goodToGoError || nextOverviewError || "",
@@ -2286,35 +2873,6 @@ export default function UnifiedOpsApp() {
     [acdMetricsData, acdTimeView, acdViewType]
   );
   const analyticsSubtitle = useMemo(() => buildAnalyticsSubtitle(analyticsData), [analyticsData]);
-
-  useEffect(() => {
-    const savedValue = typeof window !== "undefined" ? window.localStorage.getItem(THEME_STORAGE_KEY) : "";
-    if (savedValue === "light" || savedValue === "dark") {
-      setThemeMode(savedValue);
-      return;
-    }
-
-    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-      setThemeMode("dark");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("data-theme", themeMode);
-    }
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
-    }
-  }, [themeMode]);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return undefined;
-    document.body.style.overflow = mobileNavOpen ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [mobileNavOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2400,52 +2958,11 @@ export default function UnifiedOpsApp() {
   }, [includeNewShowsPod]);
 
   useEffect(() => {
-    if (activeView !== "overview" || overviewPeriod !== "current") {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    async function loadWriterTracker() {
-      setWriterTrackerLoading(true);
-      setWriterTrackerError("");
-      try {
-        const response = await fetch(
-          `/api/dashboard/writer-tracker?includeNewShowsPod=${includeNewShowsPod}`,
-          { cache: "no-store" }
-        );
-        const payload = await readJson(response);
-        if (!response.ok) {
-          throw new Error(payload.error || "Unable to load writer tracker.");
-        }
-        if (!cancelled) {
-          setWriterTrackerData(payload);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setWriterTrackerError(error.message || "Unable to load writer tracker.");
-        }
-      } finally {
-        if (!cancelled) {
-          setWriterTrackerLoading(false);
-        }
-      }
-    }
-
-    void loadWriterTracker();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeView, overviewPeriod, includeNewShowsPod]);
-
-  useEffect(() => {
     let cancelled = false;
 
     async function loadCompetition() {
-      setCompetitionLoading(true);
       try {
-        const query = podWiseWeekTouched ? `?period=${encodeURIComponent(podWiseWeek)}` : "";
-        const response = await fetch(`/api/dashboard/competition${query}`, { cache: "no-store" });
+        const response = await fetch("/api/dashboard/competition", { cache: "no-store" });
         const payload = await readJson(response);
         if (!response.ok) {
           throw new Error(payload.error || "Unable to load competition data.");
@@ -2469,10 +2986,13 @@ export default function UnifiedOpsApp() {
     return () => {
       cancelled = true;
     };
-  }, [podWiseWeek, podWiseWeekTouched]);
+  }, []);
 
   useEffect(() => {
     if (activeView !== "pod-wise" || podWiseView !== "tasks") {
+      return undefined;
+    }
+    if (podTasksData) {
       return undefined;
     }
 
@@ -2480,23 +3000,18 @@ export default function UnifiedOpsApp() {
 
     async function loadPodTasks() {
       setPodTasksLoading(true);
-      setPodTasksError("");
       try {
-        const response = await fetch(
-          `/api/dashboard/pod-tasks?period=${encodeURIComponent(podWiseWeek)}`,
-          { cache: "no-store" }
-        );
+        const response = await fetch("/api/dashboard/pod-tasks", { cache: "no-store" });
         const payload = await readJson(response);
         if (!response.ok) {
           throw new Error(payload.error || "Unable to load POD tasks.");
         }
-
         if (!cancelled) {
           setPodTasksData(payload);
         }
-      } catch (error) {
+      } catch {
         if (!cancelled) {
-          setPodTasksError(error.message || "Unable to load POD tasks.");
+          setPodTasksData(null);
         }
       } finally {
         if (!cancelled) {
@@ -2509,52 +3024,49 @@ export default function UnifiedOpsApp() {
     return () => {
       cancelled = true;
     };
-  }, [activeView, podWiseView, podWiseWeek]);
+  }, [activeView, podWiseView, podTasksData]);
 
   useEffect(() => {
-    if (activeView !== "overview" || overviewPeriod !== "overview") {
+    if (activeView !== "beats-performance") {
+      return undefined;
+    }
+    if (beatsPerformanceData) {
       return undefined;
     }
 
     let cancelled = false;
 
-    async function loadBeatOverview() {
-      setBeatOverviewLoading(true);
-      setBeatOverviewError("");
+    async function loadBeatsPerformance() {
+      setBeatsPerformanceLoading(true);
+      setBeatsPerformanceError("");
 
       try {
-        const response = await fetch(
-          `/api/dashboard/beat-overview?week=${encodeURIComponent(selectedBeatOverviewWeekKey)}`,
-          { cache: "no-store" }
-        );
+        const response = await fetch("/api/dashboard/beats-performance", { cache: "no-store" });
         const payload = await readJson(response);
-        if (!response.ok) {
-          throw new Error(payload.error || "Unable to load end-to-end beat overview.");
+        if (!response.ok || payload.ok === false) {
+          throw new Error(payload.error || "Unable to load beats performance dashboard.");
         }
 
         if (!cancelled) {
-          setBeatOverviewData(payload);
-          if (payload?.selectedWeekKey && payload.selectedWeekKey !== selectedBeatOverviewWeekKey) {
-            setSelectedBeatOverviewWeekKey(payload.selectedWeekKey);
-          }
+          setBeatsPerformanceData(payload);
         }
       } catch (error) {
         if (!cancelled) {
-          setBeatOverviewData(null);
-          setBeatOverviewError(error.message || "Unable to load end-to-end beat overview.");
+          setBeatsPerformanceData(null);
+          setBeatsPerformanceError(error.message || "Unable to load beats performance dashboard.");
         }
       } finally {
         if (!cancelled) {
-          setBeatOverviewLoading(false);
+          setBeatsPerformanceLoading(false);
         }
       }
     }
 
-    void loadBeatOverview();
+    void loadBeatsPerformance();
     return () => {
       cancelled = true;
     };
-  }, [activeView, overviewPeriod, selectedBeatOverviewWeekKey]);
+  }, [activeView, beatsPerformanceData]);
 
   useEffect(() => {
     if (activeView !== "analytics") {
@@ -2568,10 +3080,11 @@ export default function UnifiedOpsApp() {
       setAnalyticsError("");
 
       try {
-        const response = await fetch(
-          `/api/dashboard/analytics?week=${encodeURIComponent(selectedAnalyticsWeekKey)}`,
-          { cache: "no-store" }
-        );
+        const multiWeekMatch = selectedAnalyticsWeekKey.match(/^last-(\d+)-weeks$/);
+        const analyticsUrl = multiWeekMatch
+          ? `/api/dashboard/analytics?weeks=${multiWeekMatch[1]}`
+          : `/api/dashboard/analytics?week=${encodeURIComponent(selectedAnalyticsWeekKey)}`;
+        const response = await fetch(analyticsUrl, { cache: "no-store" });
         const payload = await readJson(response);
         if (!response.ok) {
           throw new Error(payload.error || "Unable to load Analytics dashboard.");
@@ -2579,7 +3092,7 @@ export default function UnifiedOpsApp() {
 
         if (!cancelled) {
           setAnalyticsData(payload);
-          if (payload?.selectedWeekKey && payload.selectedWeekKey !== selectedAnalyticsWeekKey) {
+          if (!selectedAnalyticsWeekKey.startsWith("last-") && payload?.selectedWeekKey && payload.selectedWeekKey !== selectedAnalyticsWeekKey) {
             setSelectedAnalyticsWeekKey(payload.selectedWeekKey);
           }
         }
@@ -2765,32 +3278,6 @@ export default function UnifiedOpsApp() {
     }
   }
 
-  async function overrideBeatClassification(adCode, classification) {
-    const canEdit = await ensureEditAccess().catch((error) => {
-      setNotice({ tone: "error", text: error.message || "Unable to unlock edits." });
-      return false;
-    });
-    if (!canEdit) return;
-
-    try {
-      const response = await fetch("/api/dashboard/writer-tracker", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adCode, classification }),
-      });
-      const payload = await readJson(response);
-      if (!response.ok || payload.ok === false) {
-        throw new Error(payload.error || "Unable to save override.");
-      }
-
-      // Refresh writer tracker data
-      setWriterTrackerData(null);
-      setNotice({ tone: "success", text: `Beat ${adCode} reclassified as ${classification === "this_week" ? "This Week" : "Spillover"}.` });
-    } catch (error) {
-      setNotice({ tone: "error", text: error.message || "Unable to save override." });
-    }
-  }
-
   async function runAcdSync() {
     const canRunSync = await ensureEditAccess().catch((error) => {
       setNotice({ tone: "error", text: error.message || "Unable to unlock sync." });
@@ -2827,388 +3314,258 @@ export default function UnifiedOpsApp() {
     }
   }
 
-  useEffect(() => {
-    if (activeView === "overview") {
-      setExpandedNavGroup("overview");
-      return;
-    }
-
-    if (activeView === "pod-wise") {
-      setExpandedNavGroup("podWise");
-      return;
-    }
-
-    setExpandedNavGroup(null);
-  }, [activeView]);
-
-  function toggleNavGroup(groupKey) {
-    setExpandedNavGroup((current) => (current === groupKey ? null : groupKey));
-  }
-
-  function openOverviewPeriod(period) {
-    setActiveView("overview");
-    setOverviewPeriod(period);
-    setExpandedNavGroup("overview");
-    setMobileNavOpen(false);
-  }
-
-  function openPodWiseSubView(view) {
-    setActiveView("pod-wise");
-    setPodWiseView(view);
-    setExpandedNavGroup("podWise");
-    setMobileNavOpen(false);
-  }
-
-  const viewNavItems = [
-    ["planner", "Planner"],
-    ["analytics", "Analytics"],
-    ["production", "Production"],
-  ];
-  const moreNavItems = [
-    ["details", "Details"],
-  ];
-
   return (
     <>
-      <header className="app-topbar">
-        <div className="app-topbar-left">
-          <button
-            type="button"
-            className="mobile-nav-button"
-            onClick={() => setMobileNavOpen((current) => !current)}
-            aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-            aria-expanded={mobileNavOpen}
-          >
-            {mobileNavOpen ? "✕" : "☰"}
-          </button>
-          <div className="app-topbar-title">Fresh Takes Dashboard</div>
-        </div>
-        <label className="theme-switch" aria-label={themeMode === "light" ? "Switch to dark mode" : "Switch to light mode"}>
-          <span className="theme-switch-text">{themeMode === "light" ? "Light" : "Dark"}</span>
-          <input
-            type="checkbox"
-            checked={themeMode === "dark"}
-            onChange={() => setThemeMode((current) => (current === "light" ? "dark" : "light"))}
-          />
-          <span className="theme-switch-track" aria-hidden="true">
-            <span className="theme-switch-thumb" />
-          </span>
-        </label>
-      </header>
-      <button
-        type="button"
-        className={`mobile-nav-backdrop${mobileNavOpen ? " is-open" : ""}`}
-        onClick={() => setMobileNavOpen(false)}
-        aria-label="Close navigation"
-      />
       <div className="app-shell">
-        <aside className={`sidebar${mobileNavOpen ? " is-open" : ""}`}>
+        <nav className="sidebar" aria-label="Dashboard navigation">
           <div className="sidebar-brand">
-            <div className="sidebar-brand-name">Fresh Takes</div>
-            <div className="sidebar-brand-sub">Pocket FM</div>
+            <span className="sidebar-brand-name">Fresh Takes</span>
+            <span className="sidebar-brand-sub">Pocket FM</span>
           </div>
 
-          <nav className="sidebar-section" aria-label="Views">
-            <div className="sidebar-section-label">Views</div>
-            <div className="sidebar-group">
-              <button
-                type="button"
-                className={`sidebar-link sidebar-link-group${activeView === "overview" ? " active" : ""}`}
-                onClick={() => {
-                  setActiveView("overview");
-                  toggleNavGroup("overview");
-                }}
-                aria-expanded={expandedNavGroup === "overview"}
-              >
-                <span>Editorial Funnel</span>
-                <span className={`sidebar-group-chevron${expandedNavGroup === "overview" ? " is-open" : ""}`}>▾</span>
-              </button>
-              {expandedNavGroup === "overview" ? (
-                <div className="sidebar-subnav">
-                  {OVERVIEW_PERIOD_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className={`sidebar-sub-link${
-                        activeView === "overview" && overviewPeriod === option.id ? " active" : ""
-                      }`}
-                      onClick={() => openOverviewPeriod(option.id)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <div className="sidebar-group">
-              <button
-                type="button"
-                className={`sidebar-link sidebar-link-group${activeView === "pod-wise" ? " active" : ""}`}
-                onClick={() => {
-                  setActiveView("pod-wise");
-                  toggleNavGroup("podWise");
-                }}
-                aria-expanded={expandedNavGroup === "podWise"}
-              >
-                <span>POD Wise</span>
-                <span className={`sidebar-group-chevron${expandedNavGroup === "podWise" ? " is-open" : ""}`}>▾</span>
-              </button>
-              {expandedNavGroup === "podWise" ? (
-                <div className="sidebar-subnav">
-                  <button
-                    type="button"
-                    className={`sidebar-sub-link${activeView === "pod-wise" && podWiseView === "performance" ? " active" : ""}`}
-                    onClick={() => openPodWiseSubView("performance")}
-                  >
-                    Performance
-                  </button>
-                  <button
-                    type="button"
-                    className={`sidebar-sub-link${activeView === "pod-wise" && podWiseView === "tasks" ? " active" : ""}`}
-                    onClick={() => openPodWiseSubView("tasks")}
-                  >
-                    Tasks
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            {viewNavItems.map(([id, label]) => (
+          <div className="sidebar-section">
+            <div className="sidebar-section-label">VIEWS</div>
+            {[
+              ["overview", "Editorial Funnel"],
+              ["beats-performance", "Beats Performance"],
+              ["pod-wise", "POD Wise"],
+              ["planner", "Planner"],
+              ["analytics", "Analytics"],
+              ["production", "Production"],
+            ].map(([id, label]) => (
               <button
                 key={id}
                 type="button"
                 className={`sidebar-link${activeView === id ? " active" : ""}`}
-                onClick={() => {
-                  setActiveView(id);
-                  setExpandedNavGroup(null);
-                  setMobileNavOpen(false);
-                }}
+                onClick={() => setActiveView(id)}
               >
                 {label}
               </button>
             ))}
-          </nav>
+          </div>
 
-          <nav className="sidebar-section" aria-label="More">
-            <div className="sidebar-section-label">More</div>
-            {moreNavItems.map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={`sidebar-link${activeView === id ? " active" : ""}`}
-                onClick={() => {
-                  setActiveView(id);
-                  setExpandedNavGroup(null);
-                  setMobileNavOpen(false);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
-        </aside>
+          <div className="sidebar-section">
+            <div className="sidebar-section-label">MORE</div>
+            <button
+              type="button"
+              className={`sidebar-link${activeView === "details" ? " active" : ""}`}
+              onClick={() => setActiveView("details")}
+            >
+              Details
+            </button>
+          </div>
+        </nav>
 
         <main className="ops-main">
           <div className="ops-shell">
             {activeView === "overview" ? (
-              <Toolbar
-                kicker="This week's pipeline"
-                title="Editorial Funnel"
-                description="Scripts moving through review, testing, and production this week."
-                actions={
-                  <>
-                    <label className="toggle-label" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", userSelect: "none" }}>
+              <>
+                <div className="page-header">
+                  <div className="page-header-kicker">This Week's Pipeline</div>
+                  <h1 className="page-header-title">Editorial Funnel</h1>
+                  <p className="page-header-sub">Scripts moving through review, testing, and production this week</p>
+                </div>
+                <div className="section-shell">
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", userSelect: "none", color: "var(--ink)" }}>
                       <input
                         type="checkbox"
                         checked={includeNewShowsPod}
                         onChange={(e) => setIncludeNewShowsPod(e.target.checked)}
+                        style={{ accentColor: "var(--forest)" }}
                       />
                       Include new shows POD
                     </label>
                     <div className="week-toggle-group">
-                      {OVERVIEW_PERIOD_OPTIONS.map((option) => (
+                      {[
+                        { id: "last", label: "Last week" },
+                        { id: "current", label: "This week" },
+                        { id: "next", label: "Next week" },
+                      ].map((opt) => (
                         <button
-                          key={option.id}
+                          key={opt.id}
                           type="button"
-                          className={overviewPeriod === option.id ? "is-active" : ""}
-                          onClick={() => setOverviewPeriod(option.id)}
+                          className={editorialPeriod === opt.id ? "is-active" : ""}
+                          onClick={() => setEditorialPeriod(opt.id)}
                         >
-                          {option.label}
+                          {opt.label}
                         </button>
                       ))}
                     </div>
-                    {overviewPeriod === "overview" ? (
-                      <label className="toolbar-select">
-                        <span>Week</span>
-                        <select
-                          value={selectedBeatOverviewWeekKey}
-                          onChange={(event) => setSelectedBeatOverviewWeekKey(event.target.value)}
-                          disabled={beatOverviewLoading && !beatOverviewData}
-                        >
-                          {(Array.isArray(beatOverviewData?.weekOptions) ? beatOverviewData.weekOptions : []).map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
-                  </>
-                }
-              >
-                <OverviewContent
-                  period={overviewPeriod}
-                  overviewDataByPeriod={effectiveOverviewDataByPeriod}
-                  overviewLoadingByPeriod={effectiveOverviewLoadingByPeriod}
-                  overviewErrorByPeriod={effectiveOverviewErrorByPeriod}
-                  productionDataByPeriod={productionDataByPeriod}
-                  productionLoadingByPeriod={productionLoadingByPeriod}
-                  productionErrorByPeriod={productionErrorByPeriod}
-                  writerTrackerData={writerTrackerData}
-                  writerTrackerLoading={writerTrackerLoading}
-                  writerTrackerError={writerTrackerError}
-                  onOverrideBeat={overrideBeatClassification}
-                  onShare={copySection}
-                  copyingSection={copyingSection}
-                  beatOverviewData={beatOverviewData}
-                  beatOverviewLoading={beatOverviewLoading}
-                  beatOverviewError={beatOverviewError}
-                />
-              </Toolbar>
+                  </div>
+                  <OverviewContent
+                    overviewDataByPeriod={effectiveOverviewDataByPeriod}
+                    overviewLoadingByPeriod={effectiveOverviewLoadingByPeriod}
+                    overviewErrorByPeriod={effectiveOverviewErrorByPeriod}
+                    productionDataByPeriod={productionDataByPeriod}
+                    productionLoadingByPeriod={productionLoadingByPeriod}
+                    productionErrorByPeriod={productionErrorByPeriod}
+                    onShare={copySection}
+                    copyingSection={copyingSection}
+                    editorialPeriod={editorialPeriod}
+                    includeNewShowsPod={includeNewShowsPod}
+                    onIncludeNewShowsPodChange={setIncludeNewShowsPod}
+                  />
+                </div>
+              </>
             ) : null}
 
             {activeView === "pod-wise" ? (
-              <Toolbar
-                kicker="Team performance"
-                title="POD Wise"
-                description="Conversion rates and output by POD lead."
-                actions={
-                  <>
+              <>
+                <div className="page-header">
+                  <div className="page-header-kicker">Team Performance</div>
+                  <h1 className="page-header-title">POD Wise</h1>
+                  <p className="page-header-sub">Conversion rates and output by POD lead</p>
+                </div>
+                <div className="section-shell">
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
                     <div className="week-toggle-group">
-                      <button
-                        type="button"
-                        className={podWiseView === "performance" ? "is-active" : ""}
-                        onClick={() => setPodWiseView("performance")}
-                      >
-                        Performance
-                      </button>
-                      <button
-                        type="button"
-                        className={podWiseView === "tasks" ? "is-active" : ""}
-                        onClick={() => setPodWiseView("tasks")}
-                      >
-                        Tasks
-                      </button>
-                    </div>
-                    <div className="week-toggle-group">
-                      {POD_WISE_WEEK_OPTIONS.map((option) => (
+                      {[
+                        { id: "performance", label: "Performance" },
+                        { id: "tasks", label: "Tasks" },
+                      ].map((opt) => (
                         <button
-                          key={option.id}
+                          key={opt.id}
                           type="button"
-                          className={podWiseWeek === option.id ? "is-active" : ""}
-                          onClick={() => {
-                            setPodWiseWeek(option.id);
-                            setPodWiseWeekTouched(true);
-                          }}
+                          className={podWiseView === opt.id ? "is-active" : ""}
+                          onClick={() => setPodWiseView(opt.id)}
                         >
-                          {option.label}
+                          {opt.label}
                         </button>
                       ))}
                     </div>
-                  </>
-                }
-              >
-                <PodWiseContent
-                  view={podWiseView}
-                  competitionPodRows={competitionData?.podRows}
-                  competitionLoading={competitionLoading}
-                  competitionWeekLabel={competitionData?.weekLabel}
-                  competitionSelectionMode={competitionData?.selectionMode}
-                  podTasksData={podTasksData}
-                  podTasksLoading={podTasksLoading}
-                  podTasksError={podTasksError}
-                  onShare={copySection}
-                  copyingSection={copyingSection}
-                />
-              </Toolbar>
+                  </div>
+                  {podWiseView === "performance" ? (
+                    <PodWiseContent
+                      competitionPodRows={competitionData?.podRows}
+                      competitionLoading={competitionLoading}
+                      onShare={copySection}
+                      copyingSection={copyingSection}
+                    />
+                  ) : (
+                    <PodTasksContent
+                      podTasksData={podTasksData}
+                      podTasksLoading={podTasksLoading}
+                      onShare={copySection}
+                      copyingSection={copyingSection}
+                    />
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            {activeView === "beats-performance" ? (
+              <>
+                <div className="page-header">
+                  <div className="page-header-kicker">Beat Output</div>
+                  <h1 className="page-header-title">Beats Performance</h1>
+                  <p className="page-header-sub">POD-wise beat volume with writer efficiency and hit-rate context</p>
+                </div>
+                <div className="section-shell">
+                  <BeatsPerformanceContent
+                    beatsPerformanceData={beatsPerformanceData}
+                    beatsPerformanceLoading={beatsPerformanceLoading}
+                    beatsPerformanceError={beatsPerformanceError}
+                    onShare={copySection}
+                    copyingSection={copyingSection}
+                  />
+                </div>
+              </>
             ) : null}
 
             {activeView === "planner" ? (
-              <PlannerErrorBoundary>
-                <GanttTracker onPlannerSnapshotChange={setPlannerBoardSnapshot} />
-              </PlannerErrorBoundary>
+              <>
+                <div className="page-header">
+                  <div className="page-header-kicker">Weekly Planning</div>
+                  <h1 className="page-header-title">Planner</h1>
+                  <p className="page-header-sub">Beat assignments and stage tracking across PODs</p>
+                </div>
+                <PlannerErrorBoundary>
+                  <GanttTracker onPlannerSnapshotChange={setPlannerBoardSnapshot} />
+                </PlannerErrorBoundary>
+              </>
             ) : null}
 
             {activeView === "analytics" ? (
-              <Toolbar
-                kicker="Script performance"
-                title="Analytics"
-                subtitle={analyticsSubtitle || ""}
-                description="Week-on-week script test results from the Live tab."
-                actions={
-                  <label className="toolbar-select">
-                    <span>Week</span>
-                    <select
-                      value={selectedAnalyticsWeekKey}
-                      onChange={(event) => setSelectedAnalyticsWeekKey(event.target.value)}
-                      disabled={analyticsLoading && !analyticsData}
-                    >
-                      {(Array.isArray(analyticsData?.weekOptions) ? analyticsData.weekOptions : []).map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                }
-              >
-                <AnalyticsContent
-                  analyticsData={analyticsData}
-                  analyticsLoading={analyticsLoading}
-                  analyticsError={analyticsError}
-                  onShare={copySection}
-                  copyingSection={copyingSection}
-                  onToggleActioned={updateAnalyticsActioned}
-                  actionedBusyKey={analyticsActionedBusyKey}
-                />
-              </Toolbar>
+              <>
+                <div className="page-header">
+                  <div className="page-header-kicker">Script Performance</div>
+                  <h1 className="page-header-title">Analytics</h1>
+                  <p className="page-header-sub">{analyticsSubtitle || "Week-on-week script test results from the Live tab."}</p>
+                </div>
+                <div className="section-shell">
+                  <div className="section-toolbar">
+                    <label className="toolbar-select">
+                      <span>Week</span>
+                      <select
+                        value={selectedAnalyticsWeekKey}
+                        onChange={(event) => setSelectedAnalyticsWeekKey(event.target.value)}
+                        disabled={analyticsLoading && !analyticsData}
+                      >
+                        <option value="last-2-weeks">Last 2 weeks (incl. current)</option>
+                        <option value="last-4-weeks">Last 4 weeks</option>
+                        {(Array.isArray(analyticsData?.weekOptions) ? analyticsData.weekOptions : []).map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <AnalyticsContent
+                    analyticsData={analyticsData}
+                    analyticsLoading={analyticsLoading}
+                    analyticsError={analyticsError}
+                    onShare={copySection}
+                    copyingSection={copyingSection}
+                    onToggleActioned={updateAnalyticsActioned}
+                    actionedBusyKey={analyticsActionedBusyKey}
+                  />
+                </div>
+              </>
             ) : null}
 
             {activeView === "production" ? (
-              <Toolbar
-                kicker="Output tracking"
-                title="Production"
-                subtitle={productionSubtitle}
-                description="ACD productivity, image sheet tracking, and sync status."
-              >
-                <ProductionContent
-                  acdMetricsData={acdMetricsData}
-                  acdMetricsLoading={acdMetricsLoading}
-                  acdMetricsError={acdMetricsError}
-                  acdTimeView={acdTimeView}
-                  onTimeViewChange={setAcdTimeView}
-                  acdViewType={acdViewType}
-                  onViewTypeChange={setAcdViewType}
-                  onRunSync={runAcdSync}
-                  busyAction={busyAction}
-                  onShare={copySection}
-                  copyingSection={copyingSection}
-                />
-              </Toolbar>
+              <>
+                <div className="page-header">
+                  <div className="page-header-kicker">Output Tracking</div>
+                  <h1 className="page-header-title">Production</h1>
+                  <p className="page-header-sub">{productionSubtitle}</p>
+                </div>
+                <div className="section-shell">
+                  <ProductionContent
+                    acdMetricsData={acdMetricsData}
+                    acdMetricsLoading={acdMetricsLoading}
+                    acdMetricsError={acdMetricsError}
+                    acdTimeView={acdTimeView}
+                    onTimeViewChange={setAcdTimeView}
+                    acdViewType={acdViewType}
+                    onViewTypeChange={setAcdViewType}
+                    onRunSync={runAcdSync}
+                    busyAction={busyAction}
+                    onShare={copySection}
+                    copyingSection={copyingSection}
+                  />
+                </div>
+              </>
             ) : null}
 
             {activeView === "details" ? (
-              <Toolbar
-                kicker="Configuration"
-                title="Details"
-                description="Tracked teams, sync scope, and Analytics next-step logic."
-              >
-                <DetailsContent
-                  acdMetricsData={acdMetricsData}
-                  acdMetricsLoading={acdMetricsLoading}
-                  acdMetricsError={acdMetricsError}
-                  analyticsData={analyticsData}
-                />
-              </Toolbar>
+              <>
+                <div className="page-header">
+                  <div className="page-header-kicker">Configuration</div>
+                  <h1 className="page-header-title">Details</h1>
+                  <p className="page-header-sub">Tracked teams, sync scope, and Analytics next-step logic.</p>
+                </div>
+                <div className="section-shell">
+                  <DetailsContent
+                    acdMetricsData={acdMetricsData}
+                    acdMetricsLoading={acdMetricsLoading}
+                    acdMetricsError={acdMetricsError}
+                    analyticsData={analyticsData}
+                  />
+                </div>
+              </>
             ) : null}
           </div>
         </main>

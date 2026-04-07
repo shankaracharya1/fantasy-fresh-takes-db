@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fresh Takes — Warm Mineral v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f0ea;
+    --surface: #ece7de;
+    --card: #fffdf9;
+    --card-alt: #f9f5ee;
+    --border: #ddd6c9;
+    --border-strong: #c9c0b0;
+
+    --ink: #1c1917;
+    --ink-secondary: #44403c;
+    --muted: #a39e93;
+
+    --accent: #9f4e2e;
+    --accent-light: rgba(159,78,46,0.08);
+    --forest: #2d5a3d;
+    --forest-light: rgba(45,90,61,0.08);
+    --navy: #2e3a5c;
+    --navy-light: rgba(46,58,92,0.08);
+    --terracotta: #c2703e;
+    --terracotta-light: rgba(194,112,62,0.08);
+
+    --green: #2d5a3d;
+    --green-bg: rgba(45,90,61,0.1);
+    --amber: #9f6b15;
+    --amber-bg: rgba(159,107,21,0.1);
+    --red: #9f2e2e;
+    --red-bg: rgba(159,46,46,0.1);
+
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'DM Sans', system-ui, sans-serif;
+
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* === Layout: Sidebar + Main === */
+  .app-shell {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    min-height: 100vh;
+  }
+
+  /* === Sidebar === */
+  .sidebar {
+    background: var(--ink);
+    color: #fff;
+    padding: 28px 0;
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .sidebar-brand {
+    padding: 0 24px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    margin-bottom: 8px;
+  }
+  .sidebar-brand-name {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+  .sidebar-brand-sub {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    margin-top: 2px;
+    font-weight: 500;
+  }
+
+  .sidebar-section-label {
+    padding: 20px 24px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.3);
+  }
+
+  .sidebar-nav { display: grid; gap: 2px; padding: 0 12px; }
+  .sidebar-link {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.55);
+    text-decoration: none;
+    transition: all 150ms;
+    cursor: default;
+  }
+  .sidebar-link:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.85); }
+  .sidebar-link.active {
+    background: var(--accent);
+    color: #fff;
+  }
+  .sidebar-link .icon {
+    width: 18px; height: 18px; border-radius: 4px;
+    background: rgba(255,255,255,0.1);
+    flex-shrink: 0;
+  }
+  .sidebar-link.active .icon { background: rgba(255,255,255,0.2); }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 20px 24px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .sidebar-week {
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+  }
+  .sidebar-week strong {
+    color: rgba(255,255,255,0.7);
+    font-weight: 600;
+  }
+
+  /* === Main content === */
+  .main {
+    padding: 36px 40px 64px;
+    overflow-x: hidden;
+  }
+
+  /* === Page header === */
+  .page-header {
+    margin-bottom: 32px;
+  }
+  .page-header-kicker {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .page-header-title {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+  }
+  .page-header-sub {
+    font-size: 14px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* === Week switcher === */
+  .week-switcher {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: 28px;
+  }
+  .week-btn {
+    padding: 8px 18px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    transition: all 150ms;
+    font-family: var(--font-body);
+  }
+  .week-btn:hover { color: var(--ink-secondary); }
+  .week-btn.active {
+    background: var(--card);
+    color: var(--ink);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  /* === Metric cards — bento grid === */
+  .metrics-bento {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: auto auto;
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+  .metric-card {
+    padding: 22px;
+    border-radius: var(--radius-md);
+    background: var(--card);
+    border: 1px solid var(--border);
+    transition: border-color 200ms, transform 200ms;
+    position: relative;
+    overflow: hidden;
+  }
+  .metric-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+
+  .metric-card.span-2 { grid-column: span 2; }
+
+  .metric-card-accent {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .metric-card-accent.forest { background: var(--forest); }
+  .metric-card-accent.terracotta { background: var(--terracotta); }
+  .metric-card-accent.navy { background: var(--navy); }
+  .metric-card-accent.amber { background: var(--amber); }
+
+  .metric-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .metric-value {
+    font-family: var(--font-display);
+    font-size: 36px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .metric-value.forest { color: var(--forest); }
+  .metric-value.terracotta { color: var(--terracotta); }
+  .metric-value.red { color: var(--red); }
+  .metric-value.amber { color: var(--amber); }
+
+  .metric-hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  .metric-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    margin-top: 10px;
+  }
+  .metric-delta.up { background: var(--green-bg); color: var(--green); }
+  .metric-delta.down { background: var(--red-bg); color: var(--red); }
+  .metric-delta.flat { background: var(--surface); color: var(--muted); }
+
+  /* === Full-bleed section === */
+  .section-full {
+    margin: 0 -40px;
+    padding: 32px 40px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  .section-full-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 18px;
+  }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+  }
+  .section-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  /* === Table === */
+  .table-container {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--card);
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .data-table th {
+    background: var(--card-alt);
+    text-align: left;
+    padding: 12px 18px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table td {
+    padding: 14px 18px;
+    font-size: 14px;
+    color: var(--ink-secondary);
+    border-bottom: 1px solid rgba(221,214,201,0.5);
+  }
+  .data-table tbody tr:last-child td { border-bottom: none; }
+  .data-table tbody tr { transition: background 150ms; }
+  .data-table tbody tr:hover { background: var(--card-alt); }
+
+  .data-table td:first-child {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .status-badge.green { background: var(--green-bg); color: var(--green); }
+  .status-badge.amber { background: var(--amber-bg); color: var(--amber); }
+  .status-badge.red { background: var(--red-bg); color: var(--red); }
+
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .status-badge.green .status-dot { background: var(--green); }
+  .status-badge.amber .status-dot { background: var(--amber); }
+  .status-badge.red .status-dot { background: var(--red); }
+
+  /* === POD rank cards === */
+  .pod-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .pod-card {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 18px;
+    align-items: center;
+    padding: 20px 22px;
+    border-radius: var(--radius-md);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--forest);
+    transition: border-color 200ms, transform 200ms;
+  }
+  .pod-card:hover { transform: translateY(-1px); border-color: var(--border-strong); border-left-color: var(--forest); }
+
+  .pod-rank {
+    text-align: center;
+  }
+  .pod-rank-num {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--forest);
+    line-height: 1;
+  }
+  .pod-rank-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .pod-info {}
+  .pod-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--ink);
+    margin-bottom: 2px;
+  }
+  .pod-stat {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .pod-stat strong {
+    color: var(--ink-secondary);
+    font-weight: 600;
+  }
+
+  /* === Mini bar chart (pure CSS) === */
+  .mini-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 40px;
+    margin-top: 14px;
+  }
+  .mini-bar {
+    flex: 1;
+    border-radius: 3px 3px 0 0;
+    min-height: 4px;
+    transition: height 300ms ease;
+  }
+  .mini-bar.forest { background: var(--forest); }
+  .mini-bar.terracotta { background: var(--terracotta); }
+  .mini-bar.navy { background: var(--navy); }
+  .mini-bar.muted { background: var(--border); }
+
+  /* === Ghost button === */
+  .ghost-btn {
+    padding: 8px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-secondary);
+    background: var(--card);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-family: var(--font-body);
+    transition: all 150ms;
+  }
+  .ghost-btn:hover { border-color: var(--border-strong); background: var(--card-alt); }
+
+  /* === Design notes === */
+  .design-notes {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--ink);
+    color: rgba(255,255,255,0.7);
+    padding: 16px 40px;
+    font-size: 13px;
+    display: flex;
+    gap: 32px;
+    z-index: 100;
+  }
+  .design-notes strong { color: #fff; }
+  .design-notes .tag {
+    display: inline-flex;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    margin-left: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-name">Fresh Takes</div>
+      <div class="sidebar-brand-sub">Pocket FM Content Ops</div>
+    </div>
+
+    <div class="sidebar-section-label">Views</div>
+    <div class="sidebar-nav">
+      <a class="sidebar-link active"><span class="icon"></span> Editorial Funnel</a>
+      <a class="sidebar-link"><span class="icon"></span> POD Wise</a>
+      <a class="sidebar-link"><span class="icon"></span> Planner</a>
+      <a class="sidebar-link"><span class="icon"></span> Analytics</a>
+      <a class="sidebar-link"><span class="icon"></span> Production</a>
+    </div>
+
+    <div class="sidebar-section-label">Tools</div>
+    <div class="sidebar-nav">
+      <a class="sidebar-link"><span class="icon"></span> Script Changes</a>
+      <a class="sidebar-link"><span class="icon"></span> Adherence</a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-week">
+        <strong>Week 13</strong><br>
+        Mar 24 — Mar 30, 2026
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Page header -->
+    <div class="page-header">
+      <div class="page-header-kicker">This Week's Pipeline</div>
+      <h1 class="page-header-title">Editorial Funnel</h1>
+      <p class="page-header-sub">Scripts moving through review, testing, and production this week</p>
+    </div>
+
+    <!-- Week switcher -->
+    <div class="week-switcher">
+      <button class="week-btn">Last Week</button>
+      <button class="week-btn active">This Week</button>
+      <button class="week-btn">Next Week</button>
+    </div>
+
+    <!-- Bento metrics -->
+    <div class="metrics-bento">
+      <div class="metric-card">
+        <div class="metric-card-accent forest"></div>
+        <div class="metric-label">Scripts In</div>
+        <div class="metric-value forest">142</div>
+        <div class="metric-delta up">+12% vs last week</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-card-accent terracotta"></div>
+        <div class="metric-label">Conversion Rate</div>
+        <div class="metric-value terracotta">38%</div>
+        <div class="metric-hint">Target: 45%</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-card-accent navy"></div>
+        <div class="metric-label">Avg Turnaround</div>
+        <div class="metric-value">2.4<span style="font-size:18px;color:var(--muted);margin-left:2px">days</span></div>
+        <div class="metric-delta flat">No change</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-card-accent amber"></div>
+        <div class="metric-label">Active Writers</div>
+        <div class="metric-value">67</div>
+        <div class="metric-hint">4 below target</div>
+      </div>
+
+      <!-- Wide card with mini chart -->
+      <div class="metric-card span-2">
+        <div class="metric-label">Weekly Script Volume (last 8 weeks)</div>
+        <div class="mini-bars">
+          <div class="mini-bar forest" style="height:55%"></div>
+          <div class="mini-bar forest" style="height:68%"></div>
+          <div class="mini-bar forest" style="height:42%"></div>
+          <div class="mini-bar forest" style="height:78%"></div>
+          <div class="mini-bar forest" style="height:60%"></div>
+          <div class="mini-bar forest" style="height:85%"></div>
+          <div class="mini-bar terracotta" style="height:72%"></div>
+          <div class="mini-bar navy" style="height:90%"></div>
+        </div>
+      </div>
+
+      <div class="metric-card span-2">
+        <div class="metric-label">Stage Breakdown</div>
+        <div style="display:flex;gap:16px;margin-top:8px;">
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Ideation</div>
+            <div style="font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--ink);">34</div>
+          </div>
+          <div style="color:var(--border);font-size:22px;line-height:1.6;">→</div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Writing</div>
+            <div style="font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--ink);">52</div>
+          </div>
+          <div style="color:var(--border);font-size:22px;line-height:1.6;">→</div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Review</div>
+            <div style="font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--forest);">38</div>
+          </div>
+          <div style="color:var(--border);font-size:22px;line-height:1.6;">→</div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Testing</div>
+            <div style="font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--terracotta);">18</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full-bleed POD section -->
+    <div class="section-full">
+      <div class="section-full-header">
+        <div>
+          <div class="section-title">Top Performing PODs</div>
+          <div class="section-subtitle">Ranked by conversion rate this week</div>
+        </div>
+        <button class="ghost-btn">View All PODs</button>
+      </div>
+      <div class="pod-grid">
+        <div class="pod-card">
+          <div class="pod-rank">
+            <div class="pod-rank-num">1</div>
+            <div class="pod-rank-label">Rank</div>
+          </div>
+          <div class="pod-info">
+            <div class="pod-name">Aman K.</div>
+            <div class="pod-stat"><strong>52%</strong> conversion &middot; 24 scripts</div>
+          </div>
+        </div>
+        <div class="pod-card">
+          <div class="pod-rank">
+            <div class="pod-rank-num">2</div>
+            <div class="pod-rank-label">Rank</div>
+          </div>
+          <div class="pod-info">
+            <div class="pod-name">Priya S.</div>
+            <div class="pod-stat"><strong>47%</strong> conversion &middot; 18 scripts</div>
+          </div>
+        </div>
+        <div class="pod-card">
+          <div class="pod-rank">
+            <div class="pod-rank-num">3</div>
+            <div class="pod-rank-label">Rank</div>
+          </div>
+          <div class="pod-info">
+            <div class="pod-name">Sneha D.</div>
+            <div class="pod-stat"><strong>44%</strong> conversion &middot; 21 scripts</div>
+          </div>
+        </div>
+        <div class="pod-card">
+          <div class="pod-rank">
+            <div class="pod-rank-num">4</div>
+            <div class="pod-rank-label">Rank</div>
+          </div>
+          <div class="pod-info">
+            <div class="pod-name">Ravi M.</div>
+            <div class="pod-stat"><strong>38%</strong> conversion &middot; 12 scripts</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table section -->
+    <div style="margin-bottom:32px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;">
+        <div class="section-title">Pipeline Detail</div>
+        <button class="ghost-btn">Export</button>
+      </div>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>POD Lead</th>
+              <th>Scripts In</th>
+              <th>In Review</th>
+              <th>Approved</th>
+              <th>Conv. Rate</th>
+              <th>Avg TAT</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Aman K.</td>
+              <td>24</td>
+              <td>8</td>
+              <td>12</td>
+              <td>52%</td>
+              <td>1.8 days</td>
+              <td><span class="status-badge green"><span class="status-dot"></span>On Track</span></td>
+            </tr>
+            <tr>
+              <td>Priya S.</td>
+              <td>18</td>
+              <td>6</td>
+              <td>8</td>
+              <td>47%</td>
+              <td>2.1 days</td>
+              <td><span class="status-badge green"><span class="status-dot"></span>On Track</span></td>
+            </tr>
+            <tr>
+              <td>Sneha D.</td>
+              <td>21</td>
+              <td>9</td>
+              <td>9</td>
+              <td>44%</td>
+              <td>2.6 days</td>
+              <td><span class="status-badge amber"><span class="status-dot"></span>Behind</span></td>
+            </tr>
+            <tr>
+              <td>Ravi M.</td>
+              <td>12</td>
+              <td>5</td>
+              <td>4</td>
+              <td>38%</td>
+              <td>3.2 days</td>
+              <td><span class="status-badge red"><span class="status-dot"></span>At Risk</span></td>
+            </tr>
+            <tr>
+              <td>Meera P.</td>
+              <td>16</td>
+              <td>7</td>
+              <td>6</td>
+              <td>41%</td>
+              <td>2.4 days</td>
+              <td><span class="status-badge amber"><span class="status-dot"></span>Behind</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Design notes bar -->
+<div class="design-notes">
+  <div><strong>Warm Mineral v2</strong> — Full redesign concept</div>
+  <div>Fraunces + DM Sans <span class="tag">Fonts</span></div>
+  <div>Forest / Terracotta / Navy <span class="tag">Palette</span></div>
+  <div>Sidebar nav + Bento grid + Full-bleed sections <span class="tag">Layout</span></div>
+</div>
+
+</body>
+</html>

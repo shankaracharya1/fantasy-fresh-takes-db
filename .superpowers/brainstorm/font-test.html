@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Font Loading Test</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #f4f0ea; padding: 48px; font-family: system-ui; color: #1c1917; }
+  h1 { font-size: 24px; margin-bottom: 32px; }
+
+  .test-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 900px; }
+  .test-card {
+    padding: 28px;
+    border-radius: 14px;
+    background: #fffdf9;
+    border: 1px solid #ddd6c9;
+  }
+  .test-card h2 { font-size: 14px; margin-bottom: 16px; color: #a39e93; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+
+  .fraunces { font-family: 'Fraunces', Georgia, serif; }
+  .dm-sans { font-family: 'DM Sans', system-ui, sans-serif; }
+
+  .sample { margin-bottom: 12px; }
+  .sample-label { font-size: 11px; color: #a39e93; margin-bottom: 4px; font-family: system-ui; }
+
+  .status-bar {
+    margin-top: 32px;
+    padding: 16px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .status-bar.loading { background: #fff3cd; color: #9f6b15; }
+  .status-bar.success { background: rgba(45,90,61,0.1); color: #2d5a3d; }
+  .status-bar.fail { background: rgba(159,46,46,0.1); color: #9f2e2e; }
+</style>
+</head>
+<body>
+
+<h1>Font Loading Verification</h1>
+
+<div class="test-grid">
+  <div class="test-card">
+    <h2>Fraunces (Display)</h2>
+    <div class="sample">
+      <div class="sample-label">400 Regular</div>
+      <div class="fraunces" style="font-weight:400;font-size:28px;">Editorial Funnel 142</div>
+    </div>
+    <div class="sample">
+      <div class="sample-label">500 Medium</div>
+      <div class="fraunces" style="font-weight:500;font-size:28px;">Editorial Funnel 142</div>
+    </div>
+    <div class="sample">
+      <div class="sample-label">600 Semibold</div>
+      <div class="fraunces" style="font-weight:600;font-size:28px;">Editorial Funnel 142</div>
+    </div>
+    <div class="sample">
+      <div class="sample-label">700 Bold</div>
+      <div class="fraunces" style="font-weight:700;font-size:28px;">Editorial Funnel 142</div>
+    </div>
+    <div class="sample" style="margin-top:16px;">
+      <div class="sample-label">Metric values (36px, 600)</div>
+      <div class="fraunces" style="font-weight:600;font-size:36px;letter-spacing:-0.03em;">142 &middot; 38% &middot; 2.4d</div>
+    </div>
+  </div>
+
+  <div class="test-card">
+    <h2>DM Sans (Body)</h2>
+    <div class="sample">
+      <div class="sample-label">400 Regular</div>
+      <div class="dm-sans" style="font-weight:400;font-size:14px;">Scripts moving through review, testing, and production this week</div>
+    </div>
+    <div class="sample">
+      <div class="sample-label">500 Medium</div>
+      <div class="dm-sans" style="font-weight:500;font-size:14px;">Scripts moving through review, testing, and production this week</div>
+    </div>
+    <div class="sample">
+      <div class="sample-label">600 Semibold</div>
+      <div class="dm-sans" style="font-weight:600;font-size:14px;">Scripts moving through review, testing, and production this week</div>
+    </div>
+    <div class="sample">
+      <div class="sample-label">700 Bold</div>
+      <div class="dm-sans" style="font-weight:700;font-size:14px;">Scripts moving through review, testing, and production this week</div>
+    </div>
+    <div class="sample" style="margin-top:16px;">
+      <div class="sample-label">Labels (11px, 600, uppercase)</div>
+      <div class="dm-sans" style="font-weight:600;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#a39e93;">Scripts In &middot; Conversion Rate &middot; Avg Turnaround</div>
+    </div>
+  </div>
+</div>
+
+<div id="status" class="status-bar loading">Checking font loading...</div>
+
+<script>
+  // Use the Font Loading API to verify both fonts actually rendered
+  async function checkFonts() {
+    const status = document.getElementById('status');
+    const results = [];
+
+    try {
+      // Check if document.fonts is available
+      if (!document.fonts) {
+        status.className = 'status-bar fail';
+        status.textContent = 'Font Loading API not supported in this browser';
+        return;
+      }
+
+      // Wait for fonts to load (up to 5 seconds)
+      await document.fonts.ready;
+
+      const fontsToCheck = [
+        { family: 'Fraunces', weights: [400, 500, 600, 700] },
+        { family: 'DM Sans', weights: [400, 500, 600, 700] },
+      ];
+
+      for (const font of fontsToCheck) {
+        for (const weight of font.weights) {
+          const loaded = document.fonts.check(`${weight} 16px "${font.family}"`);
+          results.push({ family: font.family, weight, loaded });
+        }
+      }
+
+      const allLoaded = results.every(r => r.loaded);
+      const failedFonts = results.filter(r => !r.loaded);
+
+      if (allLoaded) {
+        status.className = 'status-bar success';
+        status.textContent = 'All fonts loaded successfully: Fraunces (400-700) + DM Sans (400-700)';
+      } else {
+        status.className = 'status-bar fail';
+        status.textContent = 'Failed to load: ' + failedFonts.map(f => `${f.family} ${f.weight}`).join(', ');
+      }
+    } catch (e) {
+      status.className = 'status-bar fail';
+      status.textContent = 'Error checking fonts: ' + e.message;
+    }
+  }
+
+  // Give fonts a moment to load, then check
+  setTimeout(checkFonts, 2000);
+</script>
+
+</body>
+</html>
