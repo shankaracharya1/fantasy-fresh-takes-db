@@ -316,8 +316,12 @@ export default function ProductionContent({
         onShare={onShare}
         isSharing={copyingSection === "Production ACD sync"}
       >
-        <div className="panel-title">ACD Daily Sync</div>
-        <div className="panel-statline">{buildAcdSyncMeta(syncStatus)}</div>
+        <div className="panel-head panel-head-tight">
+          <div>
+            <div className="panel-title">ACD Daily Sync</div>
+            <div className="panel-statline">{buildAcdSyncMeta(syncStatus)}</div>
+          </div>
+        </div>
         <div className="panel-stack">
           <div className="section-actions section-actions-left" data-share-ignore="true">
             <button
@@ -371,8 +375,12 @@ export default function ProductionContent({
         isSharing={copyingSection === "Production troubleshooting"}
         className="production-troubleshooting-panel"
       >
-        <div className="panel-title">ACD Sync Rules and Adherence Issues</div>
-        <div className="panel-statline">{buildAcdAdherenceMeta(syncStatus)}</div>
+        <div className="panel-head panel-head-tight">
+          <div>
+            <div className="panel-title">ACD Sync Rules and Adherence Issues</div>
+            <div className="panel-statline">{buildAcdAdherenceMeta(syncStatus)}</div>
+          </div>
+        </div>
         <div className="rules-card">
           <div className="rules-card-title">Image sheet rules for ACD sync</div>
           <ol className="rules-list">
@@ -404,8 +412,8 @@ export default function ProductionContent({
         </div>
 
         <div className="panel-stack" data-share-ignore="true">
-          <div className="panel-title" style={{ fontSize: 12 }}>Asset Type Filter</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div className="panel-title panel-title-xs">Asset Type Filter</div>
+          <div className="production-asset-filter-row">
             {ASSET_TYPE_OPTIONS.map((type) => {
               const isActive = selectedAssetTypes.includes(type);
               return (

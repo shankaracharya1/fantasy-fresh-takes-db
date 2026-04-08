@@ -659,6 +659,16 @@ select {
   background: color-mix(in oklab, var(--teal-bg) 65%, transparent);
 }
 
+.details-quick-note {
+  margin-top: 10px;
+  margin-bottom: 2px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--ink-secondary);
+  font-size: 0.84rem;
+}
+
 /* ─── Navigation & buttons ─── */
 
 .ops-nav {
@@ -1615,6 +1625,35 @@ select {
   white-space: nowrap;
 }
 
+.analytics-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analytics-kpi-chip {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  padding: 10px 12px;
+}
+
+.analytics-kpi-chip span {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.analytics-kpi-chip strong {
+  font-size: 16px;
+  line-height: 1.2;
+  color: var(--ink-bright);
+}
+
 .analytics-row.tone-gen-ai td {
   background: rgba(45, 90, 61, 0.18);
 }
@@ -1899,6 +1938,20 @@ select {
 
 .acd-chart-tooltip-row strong {
   color: var(--ink);
+}
+
+.panel-head-tight {
+  margin-bottom: 6px;
+}
+
+.panel-title-xs {
+  font-size: 12px;
+}
+
+.production-asset-filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ─── Adherence ─── */
@@ -2335,5 +2388,9 @@ select {
   .overview-section-actions {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .analytics-kpi-row {
+    grid-template-columns: 1fr;
   }
 }

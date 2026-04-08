@@ -72,6 +72,9 @@ export default function DetailsContent({ acdMetricsData, acdMetricsLoading, acdM
           Amount spent is a hard gate. Assets with less than $100 spend are classified as Testing / Drop.
           Attempts without a readable CPI are excluded from Analytics entirely.
         </div>
+        <div className="details-quick-note">
+          Use this section as the single source of truth before marking rows actioned in Analytics.
+        </div>
         <div className="details-logic-grid">
           <article className="details-logic-card">
             <div className="details-panel-subtitle">Gen AI</div>

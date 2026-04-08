@@ -110,6 +110,20 @@ export default function AnalyticsContent({
           <div className="panel-statline">{analyticsSubtitle}</div>
         </div>
       </div>
+      <div className="analytics-kpi-row">
+        <div className="analytics-kpi-chip">
+          <span>Visible</span>
+          <strong>{formatNumber(visibleRows.length)}</strong>
+        </div>
+        <div className="analytics-kpi-chip">
+          <span>Actioned</span>
+          <strong>{formatNumber(actionedCount)}</strong>
+        </div>
+        <div className="analytics-kpi-chip">
+          <span>Date range</span>
+          <strong>{analyticsData?.selectedWeekRangeLabel || "-"}</strong>
+        </div>
+      </div>
 
       <div className="section-stack">
         {analyticsError ? <div className="warning-note">{analyticsError}</div> : null}
