@@ -38,6 +38,8 @@ import {
 const THEME_STORAGE_KEY = "fresh-takes-theme-mode";
 const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab sync.";
 const DEFAULT_DASHBOARD_RANGE = buildDateRangeSelection({ period: "current", minDate: MIN_DASHBOARD_DATE });
+const DASHBOARD_CLIENT_REFRESH_MS = 5 * 60 * 1000;
+const DASHBOARD_CLIENT_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ─── Shell-only helpers ───────────────────────────────────────────────────────
 
@@ -192,6 +194,33 @@ async function readJson(response) {
   return response.json();
 }
 
+function readClientCache(key, ttlMs = DASHBOARD_CLIENT_CACHE_TTL_MS) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!Number.isFinite(parsed.savedAt) || Date.now() - parsed.savedAt > ttlMs) return null;
+    return parsed.payload ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeClientCache(key, payload) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        savedAt: Date.now(),
+        payload,
+      })
+    );
+  } catch {}
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function UnifiedOpsApp() {
@@ -230,7 +259,7 @@ export default function UnifiedOpsApp() {
   const [beatsPerformanceLoading, setBeatsPerformanceLoading] = useState(false);
   const [beatsPerformanceError, setBeatsPerformanceError] = useState("");
   const [lastNonQuickRange, setLastNonQuickRange] = useState(DEFAULT_DASHBOARD_RANGE);
-  const [isLastWeekQuickMode, setIsLastWeekQuickMode] = useState(false);
+  const [dateFilterMode, setDateFilterMode] = useState("custom");
   const normalizedHeaderRange = useMemo(
     () => buildDateRangeSelection({ ...dashboardDateRange, minDate: MIN_DASHBOARD_DATE }),
     [dashboardDateRange]
@@ -254,7 +283,8 @@ export default function UnifiedOpsApp() {
       }),
     []
   );
-  const isLastWeekSelected = isLastWeekQuickMode;
+  const isLastWeekSelected = dateFilterMode === "last-week";
+  const isCustomRangeSelected = dateFilterMode === "custom";
 
   useEffect(() => {
     const isQuickRange =
@@ -266,8 +296,8 @@ export default function UnifiedOpsApp() {
         startDate: normalizedHeaderRange.startDate,
         endDate: normalizedHeaderRange.endDate,
       });
-      if (isLastWeekQuickMode) {
-        setIsLastWeekQuickMode(false);
+      if (dateFilterMode === "last-week") {
+        setDateFilterMode("custom");
       }
     }
   }, [
@@ -275,7 +305,7 @@ export default function UnifiedOpsApp() {
     normalizedHeaderRange.endDate,
     lastWeekQuickRange.startDate,
     lastWeekQuickRange.endDate,
-    isLastWeekQuickMode,
+    dateFilterMode,
   ]);
 
   const setPeriodLoadingState = (setter, period, value) => {
@@ -334,9 +364,19 @@ export default function UnifiedOpsApp() {
 
     let cancelled = false;
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
+    const cacheKey = `overview:${rangeSelection.startDate}:${rangeSelection.endDate}:${includeNewShowsPod ? "with-new" : "bau"}`;
 
-    async function loadOverviewSection() {
-      setOverviewLoading(true);
+    const cachedPayload = readClientCache(cacheKey);
+    if (cachedPayload) {
+      setOverviewData(cachedPayload);
+      setOverviewLoading(false);
+      setOverviewError("");
+    }
+
+    async function loadOverviewSection({ forceLoading = false } = {}) {
+      if (forceLoading || (!overviewData && !cachedPayload)) {
+        setOverviewLoading(true);
+      }
       setOverviewError("");
 
       try {
@@ -352,21 +392,28 @@ export default function UnifiedOpsApp() {
         if (!cancelled) {
           setOverviewData(overviewPayload);
           setOverviewLoading(false);
+          writeClientCache(cacheKey, overviewPayload);
         }
       } catch (error) {
         if (!cancelled) {
-          setOverviewData(null);
-          setOverviewError(error.message || "Unable to load Overview metrics.");
+          if (!overviewData && !cachedPayload) {
+            setOverviewData(null);
+            setOverviewError(error.message || "Unable to load Overview metrics.");
+          }
           setOverviewLoading(false);
         }
       }
     }
 
-    void loadOverviewSection();
+    void loadOverviewSection({ forceLoading: !cachedPayload && !overviewData });
+    const intervalId = window.setInterval(() => {
+      void loadOverviewSection({ forceLoading: false });
+    }, DASHBOARD_CLIENT_REFRESH_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange, includeNewShowsPod]);
+  }, [activeView, dashboardDateRange, includeNewShowsPod, overviewData]);
 
   useEffect(() => {
     if (activeView !== "leadership-overview") {
@@ -375,9 +422,19 @@ export default function UnifiedOpsApp() {
 
     let cancelled = false;
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
+    const cacheKey = `leadership-overview:${rangeSelection.startDate}:${rangeSelection.endDate}`;
 
-    async function loadLeadershipOverview() {
-      setLeadershipOverviewLoading(true);
+    const cachedPayload = readClientCache(cacheKey);
+    if (cachedPayload) {
+      setLeadershipOverviewData(cachedPayload);
+      setLeadershipOverviewLoading(false);
+      setLeadershipOverviewError("");
+    }
+
+    async function loadLeadershipOverview({ forceLoading = false } = {}) {
+      if (forceLoading || (!leadershipOverviewData && !cachedPayload)) {
+        setLeadershipOverviewLoading(true);
+      }
       setLeadershipOverviewError("");
 
       try {
@@ -392,21 +449,28 @@ export default function UnifiedOpsApp() {
         if (!cancelled) {
           setLeadershipOverviewData(payload);
           setLeadershipOverviewLoading(false);
+          writeClientCache(cacheKey, payload);
         }
       } catch (error) {
         if (!cancelled) {
-          setLeadershipOverviewData(null);
-          setLeadershipOverviewError(error?.message || "Unable to load Overview.");
+          if (!leadershipOverviewData && !cachedPayload) {
+            setLeadershipOverviewData(null);
+            setLeadershipOverviewError(error?.message || "Unable to load Overview.");
+          }
           setLeadershipOverviewLoading(false);
         }
       }
     }
 
-    void loadLeadershipOverview();
+    void loadLeadershipOverview({ forceLoading: !cachedPayload && !leadershipOverviewData });
+    const intervalId = window.setInterval(() => {
+      void loadLeadershipOverview({ forceLoading: false });
+    }, DASHBOARD_CLIENT_REFRESH_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange]);
+  }, [activeView, dashboardDateRange, leadershipOverviewData]);
 
   useEffect(() => {
     if (activeView !== "pod-wise" || podWiseView !== "performance") {
@@ -414,11 +478,19 @@ export default function UnifiedOpsApp() {
     }
 
     let cancelled = false;
+    const rangeSelection = buildDateRangeSelection(dashboardDateRange);
+    const cacheKey = `pod-wise-performance:${rangeSelection.startDate}:${rangeSelection.endDate}`;
+    const cachedPayload = readClientCache(cacheKey);
+    if (cachedPayload) {
+      setCompetitionData(cachedPayload);
+      setCompetitionLoading(false);
+    }
 
-    async function loadCompetition() {
-      setCompetitionLoading(true);
+    async function loadCompetition({ forceLoading = false } = {}) {
+      if (forceLoading || (!competitionData && !cachedPayload)) {
+        setCompetitionLoading(true);
+      }
       try {
-        const rangeSelection = buildDateRangeSelection(dashboardDateRange);
         const response = await fetch(
           `/api/dashboard/competition?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}`,
           { cache: "no-store" }
@@ -430,10 +502,13 @@ export default function UnifiedOpsApp() {
 
         if (!cancelled) {
           setCompetitionData(payload);
+          writeClientCache(cacheKey, payload);
         }
       } catch {
         if (!cancelled) {
-          setCompetitionData(null);
+          if (!competitionData && !cachedPayload) {
+            setCompetitionData(null);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -442,11 +517,15 @@ export default function UnifiedOpsApp() {
       }
     }
 
-    void loadCompetition();
+    void loadCompetition({ forceLoading: !cachedPayload && !competitionData });
+    const intervalId = window.setInterval(() => {
+      void loadCompetition({ forceLoading: false });
+    }, DASHBOARD_CLIENT_REFRESH_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
-  }, [activeView, podWiseView, dashboardDateRange]);
+  }, [activeView, podWiseView, dashboardDateRange, competitionData]);
 
   useEffect(() => {
     if (activeView !== "pod-wise" || podWiseView !== "tasks") {
@@ -570,13 +649,22 @@ export default function UnifiedOpsApp() {
     }
 
     let cancelled = false;
+    const rangeSelection = buildDateRangeSelection(dashboardDateRange);
+    const cacheKey = `analytics:${rangeSelection.startDate}:${rangeSelection.endDate}`;
+    const cachedPayload = readClientCache(cacheKey);
+    if (cachedPayload) {
+      setAnalyticsData(cachedPayload);
+      setAnalyticsLoading(false);
+      setAnalyticsError("");
+    }
 
-    async function loadAnalytics() {
-      setAnalyticsLoading(true);
+    async function loadAnalytics({ forceLoading = false } = {}) {
+      if (forceLoading || (!analyticsData && !cachedPayload)) {
+        setAnalyticsLoading(true);
+      }
       setAnalyticsError("");
 
       try {
-        const rangeSelection = buildDateRangeSelection(dashboardDateRange);
         const analyticsUrl = `/api/dashboard/analytics?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}`;
         const response = await fetch(analyticsUrl, { cache: "no-store" });
         const payload = await readJson(response);
@@ -586,11 +674,14 @@ export default function UnifiedOpsApp() {
 
         if (!cancelled) {
           setAnalyticsData(payload);
+          writeClientCache(cacheKey, payload);
         }
       } catch (error) {
         if (!cancelled) {
-          setAnalyticsData(null);
-          setAnalyticsError(error.message || "Unable to load Analytics dashboard.");
+          if (!analyticsData && !cachedPayload) {
+            setAnalyticsData(null);
+            setAnalyticsError(error.message || "Unable to load Analytics dashboard.");
+          }
         }
       } finally {
         if (!cancelled) {
@@ -599,11 +690,15 @@ export default function UnifiedOpsApp() {
       }
     }
 
-    void loadAnalytics();
+    void loadAnalytics({ forceLoading: !cachedPayload && !analyticsData });
+    const intervalId = window.setInterval(() => {
+      void loadAnalytics({ forceLoading: false });
+    }, DASHBOARD_CLIENT_REFRESH_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange]);
+  }, [activeView, dashboardDateRange, analyticsData]);
 
   async function requestAcdMetrics(cancelState = null) {
     if (!cancelState?.cancelled) {
@@ -878,27 +973,32 @@ export default function UnifiedOpsApp() {
                     className={`app-topbar-quick-btn${isLastWeekSelected ? " is-active" : ""}`}
                     disabled={headerDateRangeDisabled}
                     onClick={() => {
-                      if (isLastWeekSelected) {
-                        setIsLastWeekQuickMode(false);
-                        setDashboardDateRange(
-                          buildDateRangeSelection({
-                            startDate: lastNonQuickRange.startDate,
-                            endDate: lastNonQuickRange.endDate,
-                            minDate: MIN_DASHBOARD_DATE,
-                          })
-                        );
-                        return;
-                      }
-
                       setLastNonQuickRange({
                         startDate: normalizedHeaderRange.startDate,
                         endDate: normalizedHeaderRange.endDate,
                       });
-                      setIsLastWeekQuickMode(true);
+                      setDateFilterMode("last-week");
                       setDashboardDateRange(lastWeekQuickRange);
                     }}
                   >
                     Last week
+                  </button>
+                  <button
+                    type="button"
+                    className={`app-topbar-quick-btn${isCustomRangeSelected ? " is-active" : ""}`}
+                    disabled={headerDateRangeDisabled}
+                    onClick={() => {
+                      setDateFilterMode("custom");
+                      setDashboardDateRange(
+                        buildDateRangeSelection({
+                          startDate: lastNonQuickRange.startDate,
+                          endDate: lastNonQuickRange.endDate,
+                          minDate: MIN_DASHBOARD_DATE,
+                        })
+                      );
+                    }}
+                  >
+                    Custom range
                   </button>
                   <label className="app-topbar-date-field">
                     <span className="app-topbar-date-label">Start date</span>
@@ -910,7 +1010,7 @@ export default function UnifiedOpsApp() {
                       value={normalizedHeaderRange.startDate}
                       disabled={headerDateRangeDisabled}
                       onChange={(event) => {
-                        setIsLastWeekQuickMode(false);
+                        setDateFilterMode("custom");
                         setDashboardDateRange((current) =>
                           buildDateRangeSelection({
                             startDate: event.target.value,
@@ -930,7 +1030,7 @@ export default function UnifiedOpsApp() {
                       value={normalizedHeaderRange.endDate}
                       disabled={headerDateRangeDisabled}
                       onChange={(event) => {
-                        setIsLastWeekQuickMode(false);
+                        setDateFilterMode("custom");
                         setDashboardDateRange((current) =>
                           buildDateRangeSelection({
                             startDate: current?.startDate || normalizedHeaderRange.startDate,

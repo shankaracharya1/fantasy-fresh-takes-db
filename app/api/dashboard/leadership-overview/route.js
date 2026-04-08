@@ -239,6 +239,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
       scriptCode: normalizeText(row?.scriptCode),
       podLeadName: normalizeText(row?.podLeadRaw || row?.podLeadName),
       writerName: normalizeText(row?.writerName),
+      cdName: normalizeText(row?.cd),
       showName: normalizeText(row?.showName),
       beatName: normalizeText(row?.beatName),
       productionType: normalizeText(row?.productionType),
@@ -263,6 +264,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
       scriptCode: normalizeText(row?.scriptCode),
       podLeadName: normalizeText(row?.podLeadRaw || row?.podLeadName),
       writerName: normalizeText(row?.writerName),
+      cdName: normalizeText(row?.cd),
       showName: normalizeText(row?.showName),
       beatName: normalizeText(row?.beatName),
       productionType: normalizeText(row?.productionType),
@@ -403,7 +405,7 @@ function buildFullGenAiRows(rows) {
   const deduped = new Map();
 
   for (const row of Array.isArray(rows) ? rows : []) {
-    if (!row?.liveDate || !isAnalyticsEligibleProductionType(row?.productionType)) continue;
+    if (!row?.liveDate) continue;
     const assetCodeKey = normalizeKey(row?.assetCode);
     if (!assetCodeKey) continue;
     if (!deduped.has(assetCodeKey) || isBetterAttemptRow(row, deduped.get(assetCodeKey))) {
@@ -506,7 +508,9 @@ export async function GET(request) {
       confidenceNote: "",
       filters: buildFilterOptions(scopedBeatRows),
       beatRows: scopedBeatRows,
+      allBeatRows: beatRows,
       workflowRows: scopedWorkflowRows,
+      allWorkflowRows: workflowRows,
       approvedMatchedRows,
       fullGenAiRows,
       currentWeekUpdateRows,

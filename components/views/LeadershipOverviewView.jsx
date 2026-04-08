@@ -1,24 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   MetricCard,
-  EmptyState,
+  formatNumber,
   formatMetricValue,
   formatPercent,
   normalizePodFilterKey,
-  CHART_TONE_POSITIVE,
 } from "./shared.jsx";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  LabelList,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { getWeekSelection } from "../../lib/week-view.js";
 
 const FOCUS_POD_LEADS = [
   { key: "berman", label: "Berman" },
@@ -27,6 +17,21 @@ const FOCUS_POD_LEADS = [
   { key: "gilatar", label: "Gilatar" },
   { key: "woodward", label: "Woodward" },
 ];
+const SECTION3_ASSET_TYPE_OPTIONS = ["GA", "GI", "GU"];
+const SECTION3_ASSET_TYPE_LABELS = {
+  GA: "Q1 + TN",
+  GI: "Auto AI",
+  GU: "Full GenAI",
+};
+const SECTION3_MINUTES_PER_ASSET = 2.5;
+
+function detectAssetTypeFromCode(assetCode) {
+  const normalized = String(assetCode || "").trim().toUpperCase();
+  if (normalized.startsWith("GA")) return "GA";
+  if (normalized.startsWith("GI")) return "GI";
+  if (normalized.startsWith("GU")) return "GU";
+  return "OTHER";
+}
 
 function resolveFocusPodLabel(podLeadName) {
   const normalized = normalizePodFilterKey(podLeadName || "");
@@ -43,16 +48,57 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   const overviewLoading = Boolean(leadershipOverviewLoading);
   const overviewError = leadershipOverviewError || "";
   const [expandedPods, setExpandedPods] = useState({});
+  const [expandedCds, setExpandedCds] = useState({});
+  const [section2Mode, setSection2Mode] = useState("custom");
+  const [section3AssetTypes, setSection3AssetTypes] = useState(SECTION3_ASSET_TYPE_OPTIONS);
   const beatRows = Array.isArray(overviewData?.beatRows) ? overviewData.beatRows : [];
+  const allBeatRows = Array.isArray(overviewData?.allBeatRows) ? overviewData.allBeatRows : beatRows;
   const workflowRows = Array.isArray(overviewData?.workflowRows) ? overviewData.workflowRows : [];
-  const approvedMatchedRows = Array.isArray(overviewData?.approvedMatchedRows) ? overviewData.approvedMatchedRows : [];
+  const allWorkflowRows = Array.isArray(overviewData?.allWorkflowRows) ? overviewData.allWorkflowRows : workflowRows;
   const fullGenAiRows = Array.isArray(overviewData?.fullGenAiRows) ? overviewData.fullGenAiRows : [];
-  const currentWeekUpdateRows = Array.isArray(overviewData?.currentWeekUpdateRows) ? overviewData.currentWeekUpdateRows : [];
   const scopedBeatRows = beatRows;
   const scopedWorkflowRows = workflowRows;
-  const scopedApprovedMatchedRows = approvedMatchedRows;
   const scopedFullGenAiRows = fullGenAiRows;
   const selectedRangeLabel = overviewData?.selectedWeekRangeLabel || "";
+  const lastWeekSelection = getWeekSelection("last");
+  const currentWeekSelection = getWeekSelection("current");
+  const inRange = (dateValue, range) => {
+    const date = String(dateValue || "").trim();
+    return Boolean(date) && date >= range.weekStart && date <= range.weekEnd;
+  };
+  const section2BeatRows =
+    section2Mode === "last"
+      ? allBeatRows.filter((row) => inRange(row.primaryDate, lastWeekSelection))
+      : section2Mode === "current"
+        ? allBeatRows.filter((row) => inRange(row.primaryDate, currentWeekSelection))
+        : scopedBeatRows;
+  const section2WorkflowRows =
+    section2Mode === "last"
+      ? allWorkflowRows.filter((row) => inRange(row.stageDate, lastWeekSelection))
+      : section2Mode === "current"
+        ? allWorkflowRows.filter((row) => inRange(row.stageDate, currentWeekSelection))
+        : scopedWorkflowRows;
+  const section2Columns =
+    section2Mode === "last"
+      ? [
+          { key: "readyForProductionCount", label: "Ready for Production" },
+          { key: "productionCount", label: "Production" },
+          { key: "liveCount", label: "Live" },
+        ]
+      : section2Mode === "current"
+        ? [
+            { key: "ideationCount", label: "Beats", podOnly: true },
+            { key: "editorialCount", label: "Editorial" },
+            { key: "readyForProductionCount", label: "Ready for Production" },
+            { key: "productionCount", label: "Production" },
+          ]
+        : [
+            { key: "ideationCount", label: "Ideation", podOnly: true },
+            { key: "editorialCount", label: "Editorial" },
+            { key: "readyForProductionCount", label: "Ready for Production" },
+            { key: "productionCount", label: "Production" },
+            { key: "liveCount", label: "Live" },
+          ];
 
   const countByStatus = (rows, statusCategory) => rows.filter((row) => row.statusCategory === statusCategory).length;
   const approvedBeats = countByStatus(scopedBeatRows, "approved");
@@ -71,7 +117,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
     liveCount: 0,
   });
 
-  const outputData = (() => {
+  const outputData = useMemo(() => {
     const podMap = new Map(FOCUS_POD_LEADS.map((pod) => [pod.label, buildMetricsRow(pod.label)]));
     const writerMap = new Map();
 
@@ -95,22 +141,12 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
       return writerMap.get(key);
     };
 
-    for (const row of scopedBeatRows) {
+    for (const row of section2BeatRows) {
       const podEntry = getPodRow(row.podLeadName);
       if (podEntry) podEntry.ideationCount += 1;
     }
 
-    for (const row of scopedApprovedMatchedRows) {
-      const podEntry = getPodRow(row.podLeadName);
-      const writerEntry = getWriterRow(row.podLeadName, row.writerName);
-      if (podEntry) podEntry.deliveredCount += 1;
-      if (writerEntry) {
-        writerEntry.deliveredCount += 1;
-        writerEntry.ideationCount += 1;
-      }
-    }
-
-    for (const row of scopedWorkflowRows) {
+    for (const row of section2WorkflowRows) {
       const podEntry = getPodRow(row.podLeadName);
       const writerEntry = getWriterRow(row.podLeadName, row.writerName);
 
@@ -149,50 +185,97 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
     );
 
     return { podRows, writerRowsByPod };
-  })();
+  }, [section2BeatRows, section2WorkflowRows]);
   const allPodsExpanded =
     outputData.podRows.length > 0 &&
     outputData.podRows.every((row) => Boolean(expandedPods[row.podLeadName]));
 
-  const throughputByAcd = Array.from(
-    scopedWorkflowRows
-      .filter((row) => row.source === "production" || row.source === "live")
-      .reduce((map, row) => {
-        const acdNames = Array.isArray(row?.acdNames) && row.acdNames.length > 0 ? row.acdNames : ["Unassigned"];
-        for (const acdName of acdNames) {
-          const key = normalizePodFilterKey(acdName || "Unassigned");
-          if (!map.has(key)) {
-            map.set(key, {
-              acdName: acdName || "Unassigned",
-              productionAssets: new Set(),
-              liveAssets: new Set(),
-            });
-          }
-          const entry = map.get(key);
-          const assetCode = String(row?.assetCode || row?.scriptCode || `${row?.showName}-${row?.beatName}`).trim();
-          if (row.source === "production") entry.productionAssets.add(assetCode);
-          else entry.liveAssets.add(assetCode);
-        }
-        return map;
-      }, new Map())
-      .values()
-  )
-    .map((entry) => {
-      const productionCount = entry.productionAssets.size;
-      const liveCount = entry.liveAssets.size;
-      const totalCount = productionCount + liveCount;
-      return {
-        acdName: entry.acdName,
-        productionCount,
-        liveCount,
-        totalCount,
-      };
-    })
-    .sort((a, b) => b.totalCount - a.totalCount || a.acdName.localeCompare(b.acdName))
-    .slice(0, 8);
+  const throughputByCd = useMemo(() => {
+    const cdMap = new Map();
+    const selectedTypes = new Set(section3AssetTypes);
+    const throughputRows = scopedWorkflowRows.filter((row) => {
+      if (!(row.source === "production" || row.source === "live")) return false;
+      const assetType = detectAssetTypeFromCode(row?.assetCode || row?.scriptCode);
+      return selectedTypes.has(assetType);
+    });
 
-  const fullGenAiByBeat = Array.from(
-    scopedFullGenAiRows.reduce((map, row) => {
+    const ensureCdEntry = (cdName) => {
+      const key = normalizePodFilterKey(cdName || "Unassigned");
+      if (!cdMap.has(key)) {
+        cdMap.set(key, {
+          cdName: cdName || "Unassigned",
+          productionAssets: new Set(),
+          liveAssets: new Set(),
+          acdMap: new Map(),
+        });
+      }
+      return cdMap.get(key);
+    };
+
+    const ensureAcdEntry = (cdEntry, acdName) => {
+      const acdKey = normalizePodFilterKey(acdName || "Unassigned");
+      if (!cdEntry.acdMap.has(acdKey)) {
+        cdEntry.acdMap.set(acdKey, {
+          acdName: acdName || "Unassigned",
+          productionAssets: new Set(),
+          liveAssets: new Set(),
+        });
+      }
+      return cdEntry.acdMap.get(acdKey);
+    };
+
+    for (const row of throughputRows) {
+      const cdName = String(row?.cdName || row?.cd || "Unassigned").trim() || "Unassigned";
+      const acdNames = Array.isArray(row?.acdNames) && row.acdNames.length > 0 ? row.acdNames : ["Unassigned"];
+      const assetCode = String(row?.assetCode || row?.scriptCode || `${row?.showName}-${row?.beatName}`).trim();
+      if (!assetCode) continue;
+
+      const cdEntry = ensureCdEntry(cdName);
+      if (row.source === "production") cdEntry.productionAssets.add(assetCode);
+      if (row.source === "live") cdEntry.liveAssets.add(assetCode);
+
+      for (const acdName of acdNames) {
+        const acdEntry = ensureAcdEntry(cdEntry, acdName);
+        if (row.source === "production") acdEntry.productionAssets.add(assetCode);
+        if (row.source === "live") acdEntry.liveAssets.add(assetCode);
+      }
+    }
+
+    return Array.from(cdMap.values())
+      .map((cdEntry) => {
+        const acdRows = Array.from(cdEntry.acdMap.values())
+          .map((acdEntry) => {
+            const productionCount = acdEntry.productionAssets.size;
+            const liveCount = acdEntry.liveAssets.size;
+            const productionMinutes = Number((productionCount * SECTION3_MINUTES_PER_ASSET).toFixed(1));
+            const liveMinutes = Number((liveCount * SECTION3_MINUTES_PER_ASSET).toFixed(1));
+            return {
+              acdName: acdEntry.acdName,
+              productionMinutes,
+              liveMinutes,
+              totalMinutes: Number((productionMinutes + liveMinutes).toFixed(1)),
+            };
+          })
+          .sort((a, b) => b.totalMinutes - a.totalMinutes || a.acdName.localeCompare(b.acdName));
+
+        const productionCount = cdEntry.productionAssets.size;
+        const liveCount = cdEntry.liveAssets.size;
+        const productionMinutes = Number((productionCount * SECTION3_MINUTES_PER_ASSET).toFixed(1));
+        const liveMinutes = Number((liveCount * SECTION3_MINUTES_PER_ASSET).toFixed(1));
+        return {
+          cdName: cdEntry.cdName,
+          productionMinutes,
+          liveMinutes,
+          totalMinutes: Number((productionMinutes + liveMinutes).toFixed(1)),
+          acdRows,
+        };
+      })
+      .sort((a, b) => b.totalMinutes - a.totalMinutes || a.cdName.localeCompare(b.cdName));
+  }, [scopedWorkflowRows, section3AssetTypes]);
+
+  const fullGenAiByBeat = useMemo(() =>
+    Array.from(
+      scopedFullGenAiRows.reduce((map, row) => {
       const key = `${row.showName}|${row.beatName}`;
       if (!map.has(key)) {
         map.set(key, {
@@ -206,13 +289,14 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
       entry.attempts += 1;
       if (row.success) entry.successCount += 1;
       return map;
-    }, new Map()).values()
-  )
-    .map((entry) => ({
-      ...entry,
-      hitRate: entry.attempts > 0 ? Number(((entry.successCount / entry.attempts) * 100).toFixed(1)) : null,
-    }))
-    .sort((a, b) => b.attempts - a.attempts || a.showName.localeCompare(b.showName) || a.beatName.localeCompare(b.beatName));
+      }, new Map()).values()
+    )
+      .map((entry) => ({
+        ...entry,
+        hitRate: entry.attempts > 0 ? Number(((entry.successCount / entry.attempts) * 100).toFixed(1)) : null,
+      }))
+      .sort((a, b) => b.attempts - a.attempts || a.showName.localeCompare(b.showName) || a.beatName.localeCompare(b.beatName))
+  , [scopedFullGenAiRows]);
 
   const beatsMetricCards = [
     { label: "Approved Beats", value: overviewLoading ? "..." : formatMetricValue(approvedBeats) },
@@ -265,8 +349,18 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
             <div className="overview-section-kicker">Section 2</div>
             <div className="overview-section-title">Writer and POD output</div>
           </div>
-          <div className="overview-section-actions">
-            <div className="overview-section-note">Click a POD row to expand writer-level details inline.</div>
+          <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end" }}>
+            <div className="week-toggle-group">
+              {[
+                ["custom", "Custom"],
+                ["last", "Last week"],
+                ["current", "Current week"],
+              ].map(([id, label]) => (
+                <button key={id} type="button" className={section2Mode === id ? "is-active" : ""} onClick={() => setSection2Mode(id)}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               className="ghost-button overview-section-link"
@@ -295,11 +389,9 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
             <thead>
               <tr>
                 <th>POD / Writer</th>
-                <th>Ideation</th>
-                <th>Editorial</th>
-                <th>Ready for Production</th>
-                <th>Production</th>
-                <th>Live</th>
+                {section2Columns.map((column) => (
+                  <th key={column.key}>{column.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -329,24 +421,37 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
                           {isExpanded ? "▾" : "▸"} {podRow.podLeadName || "-"}
                         </button>
                       </td>
-                      <td>{formatMetricValue(podRow.ideationCount)}</td>
-                      <td>{formatMetricValue(podRow.editorialCount)}</td>
-                      <td>{formatMetricValue(podRow.readyForProductionCount)}</td>
-                      <td>{formatMetricValue(podRow.productionCount)}</td>
-                      <td>{formatMetricValue(podRow.liveCount)}</td>
+                      {section2Columns.map((column) => (
+                        <td key={`pod-${podRow.podLeadName}-${column.key}`}>
+                          {formatMetricValue(podRow[column.key])}
+                        </td>
+                      ))}
                     </tr>
                   );
 
                   const writerTrs = isExpanded
                     ? writerRows.map((writerRow) => (
-                        <tr key={`writer-${podRow.podLeadName}-${writerRow.writerName}`}>
-                          <td style={{ paddingLeft: 34, color: "var(--subtle)" }}>• {writerRow.writerName || "-"}</td>
-                          <td>{formatMetricValue(writerRow.ideationCount)}</td>
-                          <td>{formatMetricValue(writerRow.editorialCount)}</td>
-                          <td>{formatMetricValue(writerRow.readyForProductionCount)}</td>
-                          <td>{formatMetricValue(writerRow.productionCount)}</td>
-                          <td>{formatMetricValue(writerRow.liveCount)}</td>
-                        </tr>
+                        (() => {
+                          const visibleWriterKeys = section2Columns
+                            .filter((column) => !column.podOnly)
+                            .map((column) => column.key);
+                          const isWriterZeroAcross =
+                            visibleWriterKeys.every((key) => Number(writerRow[key] || 0) === 0);
+
+                          const zeroStyle = isWriterZeroAcross ? { color: "var(--red)", fontWeight: 700 } : undefined;
+                          return (
+                            <tr key={`writer-${podRow.podLeadName}-${writerRow.writerName}`}>
+                              <td style={{ paddingLeft: 34, color: isWriterZeroAcross ? "var(--red)" : "var(--subtle)", fontWeight: isWriterZeroAcross ? 700 : 500 }}>
+                                • {writerRow.writerName || "-"}
+                              </td>
+                              {section2Columns.map((column) => (
+                                <td key={`writer-${podRow.podLeadName}-${writerRow.writerName}-${column.key}`} style={zeroStyle}>
+                                  {column.podOnly ? "-" : formatMetricValue(writerRow[column.key])}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })()
                       ))
                     : [];
 
@@ -354,11 +459,14 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
                 })
               ) : (
                 <tr>
-                  <td colSpan="6">No output rows available for this filter yet.</td>
+                  <td colSpan={1 + section2Columns.length}>No output rows available for this filter yet.</td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+        <div className="overview-section-note" style={{ marginTop: 10, color: "var(--red)" }}>
+          Writer rows shown in red indicate zero output across all stage columns for the selected date range.
         </div>
       </section>
 
@@ -370,33 +478,101 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
             <div className="overview-section-kicker">Section 3</div>
             <div className="overview-section-title">Production throughput</div>
           </div>
-          <button type="button" className="ghost-button overview-section-link" onClick={() => onNavigate?.("production")}>
-            Open Production
-          </button>
+          <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end" }}>
+            <label className="toolbar-select" style={{ minWidth: 180 }}>
+              <span>Assets</span>
+              <select
+                multiple
+                value={section3AssetTypes}
+                onChange={(event) => {
+                  const values = Array.from(event.target.selectedOptions).map((option) => option.value);
+                  setSection3AssetTypes(values.length > 0 ? values : SECTION3_ASSET_TYPE_OPTIONS);
+                }}
+              >
+                {SECTION3_ASSET_TYPE_OPTIONS.map((type) => (
+                  <option key={type} value={type}>
+                    {SECTION3_ASSET_TYPE_LABELS[type] || type}
+                  </option>
+                ))}
+              </select>
+              <span style={{ fontSize: 11, color: "var(--muted)", letterSpacing: "normal", textTransform: "none", fontWeight: 500 }}>
+                Hold Shift (or Cmd/Ctrl) to multi-select
+              </span>
+            </label>
+          </div>
         </div>
         <div className="panel-card overview-panel-card">
           <div className="panel-head" style={{ marginBottom: 8 }}>
             <div>
               <div className="panel-title">ACD productivity</div>
-              <div className="panel-statline">A compact date-range view of production and live movement, shaped for the PRD's POD x ACD lens.</div>
+              <div className="panel-statline">CD-level rollup with collapsible ACD detail. Throughput is shown as minutes produced.</div>
             </div>
           </div>
-          <div style={{ width: "100%", height: 280 }}>
-            {throughputByAcd.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={throughputByAcd} layout="vertical" margin={{ top: 8, right: 24, left: 24, bottom: 8 }}>
-                  <CartesianGrid horizontal={false} strokeDasharray="3 3" />
-                  <XAxis type="number" allowDecimals={false} />
-                  <YAxis type="category" dataKey="acdName" width={140} />
-                  <Tooltip />
-                  <Bar dataKey="totalCount" fill={CHART_TONE_POSITIVE} radius={[0, 8, 8, 0]}>
-                    <LabelList dataKey="totalCount" position="right" />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyState text="No throughput rows available for this filter yet." />
-            )}
+          <div className="table-wrap">
+            <table className="ops-table overview-table">
+              <thead>
+                <tr>
+                  <th>CD / ACD</th>
+                  <th>Production (min)</th>
+                  <th>Live (min)</th>
+                  <th>Total (min)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {throughputByCd.length > 0 ? (
+                  throughputByCd.flatMap((cdRow) => {
+                    const isExpanded = Boolean(expandedCds[cdRow.cdName]);
+                    const cdTr = (
+                      <tr key={`cd-${cdRow.cdName}`} style={{ fontWeight: 700 }}>
+                        <td>
+                          <button
+                            type="button"
+                            className="as-link"
+                            onClick={() =>
+                              setExpandedCds((current) => ({
+                                ...current,
+                                [cdRow.cdName]: !current[cdRow.cdName],
+                              }))
+                            }
+                            style={{
+                              padding: 0,
+                              border: "none",
+                              background: "transparent",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {isExpanded ? "▾" : "▸"} {cdRow.cdName || "-"}
+                          </button>
+                        </td>
+                        <td>{formatNumber(cdRow.productionMinutes)}</td>
+                        <td>{formatNumber(cdRow.liveMinutes)}</td>
+                        <td>{formatNumber(cdRow.totalMinutes)}</td>
+                      </tr>
+                    );
+
+                    const acdTrs = isExpanded
+                      ? cdRow.acdRows.map((acdRow) => (
+                          <tr key={`acd-${cdRow.cdName}-${acdRow.acdName}`}>
+                            <td style={{ paddingLeft: 34, color: "var(--subtle)" }}>• {acdRow.acdName || "-"}</td>
+                            <td>{formatNumber(acdRow.productionMinutes)}</td>
+                            <td>{formatNumber(acdRow.liveMinutes)}</td>
+                            <td>{formatNumber(acdRow.totalMinutes)}</td>
+                          </tr>
+                        ))
+                      : [];
+
+                    return [cdTr, ...acdTrs];
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="4">No throughput rows available for this filter yet.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="overview-section-note" style={{ marginTop: 8 }}>
+            Click a CD row to expand ACD-level throughput.
           </div>
         </div>
       </section>
@@ -457,51 +633,6 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
         </div>
       </section>
 
-      <hr className="section-divider" />
-
-      <section className="overview-flow-section">
-        <div className="overview-section-head">
-          <div>
-            <div className="overview-section-kicker">Section 5</div>
-            <div className="overview-section-title">Current week update</div>
-          </div>
-          <div className="overview-section-note">A shareable mid-week progress snapshot for POD leads and leadership.</div>
-        </div>
-        <div className="table-wrap">
-          <table className="ops-table overview-table">
-            <thead>
-              <tr>
-                <th>POD</th>
-                <th>Writer</th>
-                <th>Beats</th>
-                <th>Editorial</th>
-                <th>Ready for Production</th>
-                <th>Production</th>
-                <th>Live</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentWeekUpdateRows.length > 0 ? (
-                currentWeekUpdateRows.map((row) => (
-                  <tr key={`${row.podLeadName}-${row.writerName}`}>
-                    <td>{row.podLeadName || "-"}</td>
-                    <td>{row.writerName || "-"}</td>
-                    <td>{formatMetricValue(row.beats)}</td>
-                    <td>{formatMetricValue(row.editorial)}</td>
-                    <td>{formatMetricValue(row.readyForProduction)}</td>
-                    <td>{formatMetricValue(row.production)}</td>
-                    <td>{formatMetricValue(row.live)}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="7">No current week update rows available yet.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -28,6 +29,15 @@ import {
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
 const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab sync.";
+const ASSET_TYPE_OPTIONS = ["GA", "GI", "GU"];
+
+function detectAssetType(assetCode) {
+  const normalized = String(assetCode || "").trim().toUpperCase();
+  if (normalized.startsWith("GA")) return "GA";
+  if (normalized.startsWith("GI")) return "GI";
+  if (normalized.startsWith("GU")) return "GU";
+  return "OTHER";
+}
 
 function buildAcdSyncMeta(syncStatus) {
   const latest = syncStatus?.latestRun;
@@ -249,6 +259,8 @@ export default function ProductionContent({
   onShare,
   copyingSection,
 }) {
+  const [selectedAssetTypes, setSelectedAssetTypes] = useState(ASSET_TYPE_OPTIONS);
+
   if (acdMetricsLoading) {
     return <EmptyState text="Loading Production dashboard..." />;
   }
@@ -270,6 +282,26 @@ export default function ProductionContent({
   const failureReasonRows = Array.isArray(acdMetricsData.failureReasonRows) ? acdMetricsData.failureReasonRows : [];
   const totalFailedSheets = Number(syncStatus.totalFailedSheets || 0);
   const totalCdsAffected = Array.isArray(syncStatus.adherenceRows) ? syncStatus.adherenceRows.length : 0;
+  const filteredAdherenceIssueRows = useMemo(() => {
+    const selected = new Set(selectedAssetTypes);
+    return adherenceIssueRows
+      .map((row) => {
+        const filteredAssets = (Array.isArray(row.assets) ? row.assets : []).filter((asset) =>
+          selected.has(detectAssetType(asset?.assetCode))
+        );
+        return {
+          ...row,
+          assets: filteredAssets,
+          totalAssetsNotAdhering: filteredAssets.length,
+        };
+      })
+      .filter((row) => Number(row.totalAssetsNotAdhering || 0) > 0);
+  }, [adherenceIssueRows, selectedAssetTypes]);
+  const filteredTotalAssets = filteredAdherenceIssueRows.reduce(
+    (sum, row) => sum + Number(row.totalAssetsNotAdhering || 0),
+    0
+  );
+  const filteredCdsAffected = new Set(filteredAdherenceIssueRows.map((row) => row.cdName || "")).size;
 
   return (
     <div className="section-stack">
@@ -362,12 +394,39 @@ export default function ProductionContent({
 
         <div className="troubleshoot-summary-grid">
           <div className="troubleshoot-summary-card">
-            <span>Total failed sheets</span>
-            <strong>{formatNumber(totalFailedSheets)}</strong>
+            <span>Filtered non-adhering assets</span>
+            <strong>{formatNumber(filteredTotalAssets || totalFailedSheets)}</strong>
           </div>
           <div className="troubleshoot-summary-card">
-            <span>Total CDs affected</span>
-            <strong>{formatNumber(totalCdsAffected)}</strong>
+            <span>Filtered CDs affected</span>
+            <strong>{formatNumber(filteredCdsAffected || totalCdsAffected)}</strong>
+          </div>
+        </div>
+
+        <div className="panel-stack" data-share-ignore="true">
+          <div className="panel-title" style={{ fontSize: 12 }}>Asset Type Filter</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {ASSET_TYPE_OPTIONS.map((type) => {
+              const isActive = selectedAssetTypes.includes(type);
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  className={isActive ? "toggle-chip is-active" : "toggle-chip"}
+                  onClick={() =>
+                    setSelectedAssetTypes((current) => {
+                      if (current.includes(type)) {
+                        const next = current.filter((item) => item !== type);
+                        return next.length > 0 ? next : current;
+                      }
+                      return [...current, type];
+                    })
+                  }
+                >
+                  {type}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -384,7 +443,7 @@ export default function ProductionContent({
 
         <div>
           <div className="panel-title">Image Sheet Adherence Issues</div>
-          <AcdAdherenceTable rows={adherenceIssueRows} />
+          <AcdAdherenceTable rows={filteredAdherenceIssueRows} />
         </div>
       </ShareablePanel>
     </div>

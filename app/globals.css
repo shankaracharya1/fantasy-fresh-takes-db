@@ -288,9 +288,7 @@ select {
 }
 
 [data-theme="dark"] .app-topbar {
-  background:
-    linear-gradient(180deg, rgba(19, 22, 29, 0.95) 0%, rgba(19, 22, 29, 0.86) 100%),
-    var(--card);
+  background: var(--card);
 }
 
 .app-topbar-copy {
@@ -952,10 +950,20 @@ select {
 [data-theme="dark"] .metric-card,
 [data-theme="dark"] .rank-card,
 [data-theme="dark"] .panel-card {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
-    var(--card);
+  background: var(--card);
   box-shadow: 0 20px 34px -30px rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="dark"] body {
+  background: var(--bg);
+}
+
+[data-theme="dark"] body::before {
+  display: none;
+}
+
+[data-theme="dark"] .sidebar {
+  background: var(--card);
 }
 
 [data-theme="dark"] .metric-card:hover,
@@ -1482,6 +1490,11 @@ select {
   background:
     radial-gradient(circle at top right, var(--terracotta-light), transparent 36%),
     var(--card);
+}
+
+[data-theme="dark"] .overview-flow-section,
+[data-theme="dark"] .overview-panel-card {
+  background: var(--card);
 }
 
 .overview-table {
