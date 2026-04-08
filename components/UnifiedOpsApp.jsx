@@ -1519,28 +1519,44 @@ function LeadershipOverviewContent({
   );
 
   return (
-    <div className="section-stack">
+    <div className="section-stack overview-flow-shell">
       {overviewError ? <div className="warning-note">{overviewError}</div> : null}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-        <div className="week-toggle-group">
-          {filterOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={selectedFilterId === option.id ? "is-active" : ""}
-              onClick={() => setSelectedFilterId(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
+
+      <div className="overview-hero">
+        <div className="overview-hero-copy">
+          <div className="overview-hero-kicker">PRD-aligned leadership view</div>
+          <div className="overview-hero-title">One place to track beats, output, production movement, and Gen AI readiness.</div>
+          <div className="overview-hero-subtitle">
+            The flow follows the PRD directly: beats first, then POD and writer output, then production throughput, Full Gen AI, and a mid-week progress view.
+          </div>
+        </div>
+        <div className="overview-hero-actions">
+          <div className="week-toggle-group">
+            {filterOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={selectedFilterId === option.id ? "is-active" : ""}
+                onClick={() => setSelectedFilterId(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <div className="overview-range-pill">{selectedRangeLabel || "Select a week"}</div>
         </div>
       </div>
-      <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: -8 }}>{selectedRangeLabel || "Select a week"}</div>
 
       <hr className="section-divider" />
 
-      <div>
-        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 10 }}>Section 1. Beats</div>
+      <section className="overview-flow-section">
+        <div className="overview-section-head">
+          <div>
+            <div className="overview-section-kicker">Section 1</div>
+            <div className="overview-section-title">Beats</div>
+          </div>
+          <div className="overview-section-note">How many are in play, and how many actually converted last week.</div>
+        </div>
         <div className="metric-grid four-col">
           {renderLinkMetricCard({ label: "Total Beats", value: overviewLoading ? "..." : formatMetricValue(totalBeats), delta: totalBeatsDelta, onClick: () => onNavigate?.("beats-performance") })}
           {renderLinkMetricCard({ label: "Approved Beats", value: overviewLoading ? "..." : formatMetricValue(approvedBeats), delta: approvedBeatsDelta, onClick: () => onNavigate?.("beats-performance") })}
@@ -1549,14 +1565,17 @@ function LeadershipOverviewContent({
           {renderLinkMetricCard({ label: "Abandoned", value: overviewLoading ? "..." : formatMetricValue(abandonedBeats), delta: abandonedDelta, onClick: () => onNavigate?.("beats-performance") })}
           {renderLinkMetricCard({ label: "Delivered Beats", value: overviewLoading ? "..." : formatMetricValue(deliveredBeats), delta: deliveredDelta, onClick: () => onNavigate?.("beats-performance") })}
         </div>
-      </div>
+      </section>
 
       <hr className="section-divider" />
 
-      <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 14, fontWeight: 500 }}>Section 2. Writer and POD output</div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <section className="overview-flow-section">
+        <div className="overview-section-head">
+          <div>
+            <div className="overview-section-kicker">Section 2</div>
+            <div className="overview-section-title">Writer and POD output</div>
+          </div>
+          <div className="overview-section-actions">
             <div className="week-toggle-group">
               {[
                 ["pod", "POD"],
@@ -1572,8 +1591,8 @@ function LeadershipOverviewContent({
             </button>
           </div>
         </div>
-        <div style={{ overflowX: "auto" }}>
-          <table className="ops-table">
+        <div className="table-wrap">
+          <table className="ops-table overview-table">
             <thead>
               <tr>
                 <th>{outputMode === "pod" ? "POD" : "POD"}</th>
@@ -1608,22 +1627,25 @@ function LeadershipOverviewContent({
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       <hr className="section-divider" />
 
-      <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 14, fontWeight: 500 }}>Section 3. Production</div>
+      <section className="overview-flow-section">
+        <div className="overview-section-head">
+          <div>
+            <div className="overview-section-kicker">Section 3</div>
+            <div className="overview-section-title">Production throughput</div>
+          </div>
           <button type="button" className="ghost-button overview-section-link" onClick={() => onNavigate?.("production")}>
             Open Production
           </button>
         </div>
-        <div className="panel-card">
+        <div className="panel-card overview-panel-card">
           <div className="panel-head" style={{ marginBottom: 8 }}>
             <div>
               <div className="panel-title">ACD productivity</div>
-              <div className="panel-statline">Smaller rolling view for the selected week’s production and live movement.</div>
+              <div className="panel-statline">A compact weekly view of production and live movement, shaped for the PRD’s POD x ACD lens.</div>
             </div>
           </div>
           <div style={{ width: "100%", height: 280 }}>
@@ -1644,12 +1666,18 @@ function LeadershipOverviewContent({
             )}
           </div>
         </div>
-      </div>
+      </section>
 
       <hr className="section-divider" />
 
-      <div>
-        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 10 }}>Section 4. Full Gen AI</div>
+      <section className="overview-flow-section">
+        <div className="overview-section-head">
+          <div>
+            <div className="overview-section-kicker">Section 4</div>
+            <div className="overview-section-title">Full Gen AI</div>
+          </div>
+          <div className="overview-section-note">Which beats moved forward, how many attempts happened, and what actually worked.</div>
+        </div>
         <div className="metric-grid three-col">
           <MetricCard label="Assets passed to Full Gen AI" value={overviewLoading ? "..." : formatMetricValue(scopedFullGenAiRows.length)} />
           <MetricCard label="Success" value={overviewLoading ? "..." : formatMetricValue(scopedFullGenAiRows.filter((row) => row.success).length)} />
@@ -1664,8 +1692,8 @@ function LeadershipOverviewContent({
             }
           />
         </div>
-        <div style={{ overflowX: "auto", marginTop: 14 }}>
-          <table className="ops-table">
+        <div className="table-wrap">
+          <table className="ops-table overview-table">
             <thead>
               <tr>
                 <th>Show</th>
@@ -1694,14 +1722,20 @@ function LeadershipOverviewContent({
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       <hr className="section-divider" />
 
-      <div>
-        <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 10 }}>Section 5. Current week update</div>
-        <div style={{ overflowX: "auto" }}>
-          <table className="ops-table">
+      <section className="overview-flow-section">
+        <div className="overview-section-head">
+          <div>
+            <div className="overview-section-kicker">Section 5</div>
+            <div className="overview-section-title">Current week update</div>
+          </div>
+          <div className="overview-section-note">A shareable mid-week progress snapshot for POD leads and leadership.</div>
+        </div>
+        <div className="table-wrap">
+          <table className="ops-table overview-table">
             <thead>
               <tr>
                 <th>POD</th>
@@ -1734,7 +1768,7 @@ function LeadershipOverviewContent({
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
