@@ -580,7 +580,9 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
             <div className="overview-section-kicker">Section 4</div>
             <div className="overview-section-title">Full Gen AI</div>
           </div>
-          <div className="overview-section-note">Which beats moved forward, how many attempts happened, and what actually worked.</div>
+          <div className="overview-section-note">
+            {overviewLoading ? "Rows: ..." : `Rows: ${formatMetricValue(fullGenAiByBeat.length)}`}
+          </div>
         </div>
         <div className="metric-grid three-col">
           <MetricCard label="Assets passed to Full Gen AI" value={overviewLoading ? "..." : formatMetricValue(scopedFullGenAiRows.length)} />
