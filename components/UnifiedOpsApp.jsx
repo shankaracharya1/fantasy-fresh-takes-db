@@ -3921,14 +3921,7 @@ export default function UnifiedOpsApp() {
         <main className="ops-main">
           <div className="app-topbar">
             <div className="app-topbar-copy">
-              <div className="app-topbar-kicker">Fresh Takes Dashboard</div>
-              <div className="app-topbar-title-row">
-                <h1 className="app-topbar-title">Content Operations Command Center</h1>
-                <span className="app-topbar-view-pill">{activeViewLabelMap[activeView] || "Dashboard"}</span>
-              </div>
-              <p className="app-topbar-subtitle">
-                Built on the current ops foundation, with the new PRD flowing into Overview, Editorial, and POD performance next.
-              </p>
+              <h1 className="app-topbar-title">{activeViewLabelMap[activeView] || "Dashboard"}</h1>
             </div>
 
             <label className="theme-switch" aria-label="Toggle dark mode">
@@ -3947,249 +3940,193 @@ export default function UnifiedOpsApp() {
 
           <div className="ops-shell">
             {activeView === "leadership-overview" ? (
-              <>
-                <div className="page-header">
-                  <div className="page-header-kicker">Leadership Snapshot</div>
-                  <h1 className="page-header-title">Overview</h1>
-                  <p className="page-header-sub">Beats, POD output, production throughput, and Full Gen AI in one weekly view</p>
-                </div>
-                <div className="section-shell">
-                  <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-                    <div className="week-toggle-group">
-                      {[
-                        { id: "last", label: "Last week" },
-                        { id: "current", label: "This week" },
-                        { id: "next", label: "Next week" },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className={editorialPeriod === opt.id ? "is-active" : ""}
-                          onClick={() => setEditorialPeriod(opt.id)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
+              <div className="section-shell">
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+                  <div className="week-toggle-group">
+                    {[
+                      { id: "last", label: "Last week" },
+                      { id: "current", label: "This week" },
+                      { id: "next", label: "Next week" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={editorialPeriod === opt.id ? "is-active" : ""}
+                        onClick={() => setEditorialPeriod(opt.id)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
-                  <LeadershipOverviewContent
-                    leadershipOverviewData={leadershipOverviewDataByPeriod?.[editorialPeriod]}
-                    leadershipOverviewLoading={leadershipOverviewLoadingByPeriod?.[editorialPeriod]}
-                    leadershipOverviewError={leadershipOverviewErrorByPeriod?.[editorialPeriod]}
-                    onNavigate={setActiveView}
-                  />
                 </div>
-              </>
+                <LeadershipOverviewContent
+                  leadershipOverviewData={leadershipOverviewDataByPeriod?.[editorialPeriod]}
+                  leadershipOverviewLoading={leadershipOverviewLoadingByPeriod?.[editorialPeriod]}
+                  leadershipOverviewError={leadershipOverviewErrorByPeriod?.[editorialPeriod]}
+                  onNavigate={setActiveView}
+                />
+              </div>
             ) : null}
 
             {activeView === "overview" ? (
-              <>
-                <div className="page-header">
-                  <div className="page-header-kicker">This Week's Pipeline</div>
-                  <h1 className="page-header-title">Editorial Funnel</h1>
-                  <p className="page-header-sub">Scripts moving through review, testing, and production this week</p>
-                </div>
-                <div className="section-shell">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", userSelect: "none", color: "var(--ink)" }}>
-                      <input
-                        type="checkbox"
-                        checked={includeNewShowsPod}
-                        onChange={(e) => setIncludeNewShowsPod(e.target.checked)}
-                        style={{ accentColor: "var(--forest)" }}
-                      />
-                      Include new shows POD
-                    </label>
-                    <div className="week-toggle-group">
-                      {[
-                        { id: "last", label: "Last week" },
-                        { id: "current", label: "This week" },
-                        { id: "next", label: "Next week" },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className={editorialPeriod === opt.id ? "is-active" : ""}
-                          onClick={() => setEditorialPeriod(opt.id)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
+              <div className="section-shell">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer", userSelect: "none", color: "var(--ink)" }}>
+                    <input
+                      type="checkbox"
+                      checked={includeNewShowsPod}
+                      onChange={(e) => setIncludeNewShowsPod(e.target.checked)}
+                      style={{ accentColor: "var(--forest)" }}
+                    />
+                    Include new shows POD
+                  </label>
+                  <div className="week-toggle-group">
+                    {[
+                      { id: "last", label: "Last week" },
+                      { id: "current", label: "This week" },
+                      { id: "next", label: "Next week" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={editorialPeriod === opt.id ? "is-active" : ""}
+                        onClick={() => setEditorialPeriod(opt.id)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
-                  <OverviewContent
-                    overviewDataByPeriod={effectiveOverviewDataByPeriod}
-                    overviewLoadingByPeriod={effectiveOverviewLoadingByPeriod}
-                    overviewErrorByPeriod={effectiveOverviewErrorByPeriod}
-                    productionDataByPeriod={productionDataByPeriod}
-                    productionLoadingByPeriod={productionLoadingByPeriod}
-                    productionErrorByPeriod={productionErrorByPeriod}
-                    onShare={copySection}
-                    copyingSection={copyingSection}
-                    editorialPeriod={editorialPeriod}
-                    includeNewShowsPod={includeNewShowsPod}
-                    onIncludeNewShowsPodChange={setIncludeNewShowsPod}
-                  />
                 </div>
-              </>
+                <OverviewContent
+                  overviewDataByPeriod={effectiveOverviewDataByPeriod}
+                  overviewLoadingByPeriod={effectiveOverviewLoadingByPeriod}
+                  overviewErrorByPeriod={effectiveOverviewErrorByPeriod}
+                  productionDataByPeriod={productionDataByPeriod}
+                  productionLoadingByPeriod={productionLoadingByPeriod}
+                  productionErrorByPeriod={productionErrorByPeriod}
+                  onShare={copySection}
+                  copyingSection={copyingSection}
+                  editorialPeriod={editorialPeriod}
+                  includeNewShowsPod={includeNewShowsPod}
+                  onIncludeNewShowsPodChange={setIncludeNewShowsPod}
+                />
+              </div>
             ) : null}
 
             {activeView === "pod-wise" ? (
-              <>
-                <div className="page-header">
-                  <div className="page-header-kicker">Team Performance</div>
-                  <h1 className="page-header-title">POD Wise</h1>
-                  <p className="page-header-sub">Conversion rates and output by POD lead</p>
-                </div>
-                <div className="section-shell">
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-                    <div className="week-toggle-group">
-                      {[
-                        { id: "performance", label: "Performance" },
-                        { id: "tasks", label: "Tasks" },
-                      ].map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className={podWiseView === opt.id ? "is-active" : ""}
-                          onClick={() => setPodWiseView(opt.id)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
+              <div className="section-shell">
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+                  <div className="week-toggle-group">
+                    {[
+                      { id: "performance", label: "Performance" },
+                      { id: "tasks", label: "Tasks" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={podWiseView === opt.id ? "is-active" : ""}
+                        onClick={() => setPodWiseView(opt.id)}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
-                  {podWiseView === "performance" ? (
-                    <PodWiseContent
-                      competitionPodRows={competitionData?.podRows}
-                      competitionLoading={competitionLoading}
-                      onShare={copySection}
-                      copyingSection={copyingSection}
-                    />
-                  ) : (
-                    <PodTasksContent
-                      podTasksData={podTasksData}
-                      podTasksLoading={podTasksLoading}
-                      onShare={copySection}
-                      copyingSection={copyingSection}
-                    />
-                  )}
                 </div>
-              </>
+                {podWiseView === "performance" ? (
+                  <PodWiseContent
+                    competitionPodRows={competitionData?.podRows}
+                    competitionLoading={competitionLoading}
+                    onShare={copySection}
+                    copyingSection={copyingSection}
+                  />
+                ) : (
+                  <PodTasksContent
+                    podTasksData={podTasksData}
+                    podTasksLoading={podTasksLoading}
+                    onShare={copySection}
+                    copyingSection={copyingSection}
+                  />
+                )}
+              </div>
             ) : null}
 
             {activeView === "beats-performance" ? (
-              <>
-                <div className="page-header">
-                  <div className="page-header-kicker">Beat Output</div>
-                  <h1 className="page-header-title">Beats Performance</h1>
-                  <p className="page-header-sub">POD-wise beat volume with writer efficiency and hit-rate context</p>
-                </div>
-                <div className="section-shell">
-                  <BeatsPerformanceContent
-                    beatsPerformanceData={beatsPerformanceData}
-                    beatsPerformanceLoading={beatsPerformanceLoading}
-                    beatsPerformanceError={beatsPerformanceError}
-                    onShare={copySection}
-                    copyingSection={copyingSection}
-                  />
-                </div>
-              </>
+              <div className="section-shell">
+                <BeatsPerformanceContent
+                  beatsPerformanceData={beatsPerformanceData}
+                  beatsPerformanceLoading={beatsPerformanceLoading}
+                  beatsPerformanceError={beatsPerformanceError}
+                  onShare={copySection}
+                  copyingSection={copyingSection}
+                />
+              </div>
             ) : null}
 
             {activeView === "planner" ? (
-              <>
-                <div className="page-header">
-                  <div className="page-header-kicker">Weekly Planning</div>
-                  <h1 className="page-header-title">Planner</h1>
-                  <p className="page-header-sub">Beat assignments and stage tracking across PODs</p>
-                </div>
-                <PlannerErrorBoundary>
-                  <GanttTracker onPlannerSnapshotChange={setPlannerBoardSnapshot} />
-                </PlannerErrorBoundary>
-              </>
+              <PlannerErrorBoundary>
+                <GanttTracker onPlannerSnapshotChange={setPlannerBoardSnapshot} />
+              </PlannerErrorBoundary>
             ) : null}
 
             {activeView === "analytics" ? (
-              <>
-                <div className="page-header">
-                  <div className="page-header-kicker">Script Performance</div>
-                  <h1 className="page-header-title">Analytics</h1>
-                  <p className="page-header-sub">{analyticsSubtitle || "Week-on-week script test results from the Live tab."}</p>
+              <div className="section-shell">
+                <div className="section-toolbar">
+                  <label className="toolbar-select">
+                    <span>Week</span>
+                    <select
+                      value={selectedAnalyticsWeekKey}
+                      onChange={(event) => setSelectedAnalyticsWeekKey(event.target.value)}
+                      disabled={analyticsLoading && !analyticsData}
+                    >
+                      <option value="last-2-weeks">Last 2 weeks (incl. current)</option>
+                      <option value="last-4-weeks">Last 4 weeks</option>
+                      {(Array.isArray(analyticsData?.weekOptions) ? analyticsData.weekOptions : []).map((option) => (
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
-                <div className="section-shell">
-                  <div className="section-toolbar">
-                    <label className="toolbar-select">
-                      <span>Week</span>
-                      <select
-                        value={selectedAnalyticsWeekKey}
-                        onChange={(event) => setSelectedAnalyticsWeekKey(event.target.value)}
-                        disabled={analyticsLoading && !analyticsData}
-                      >
-                        <option value="last-2-weeks">Last 2 weeks (incl. current)</option>
-                        <option value="last-4-weeks">Last 4 weeks</option>
-                        {(Array.isArray(analyticsData?.weekOptions) ? analyticsData.weekOptions : []).map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <AnalyticsContent
-                    analyticsData={analyticsData}
-                    analyticsLoading={analyticsLoading}
-                    analyticsError={analyticsError}
-                    onShare={copySection}
-                    copyingSection={copyingSection}
-                    onToggleActioned={updateAnalyticsActioned}
-                    actionedBusyKey={analyticsActionedBusyKey}
-                  />
-                </div>
-              </>
+                <AnalyticsContent
+                  analyticsData={analyticsData}
+                  analyticsLoading={analyticsLoading}
+                  analyticsError={analyticsError}
+                  onShare={copySection}
+                  copyingSection={copyingSection}
+                  onToggleActioned={updateAnalyticsActioned}
+                  actionedBusyKey={analyticsActionedBusyKey}
+                />
+              </div>
             ) : null}
 
             {activeView === "production" ? (
-              <>
-                <div className="page-header">
-                  <div className="page-header-kicker">Output Tracking</div>
-                  <h1 className="page-header-title">Production</h1>
-                  <p className="page-header-sub">{productionSubtitle}</p>
-                </div>
-                <div className="section-shell">
-                  <ProductionContent
-                    acdMetricsData={acdMetricsData}
-                    acdMetricsLoading={acdMetricsLoading}
-                    acdMetricsError={acdMetricsError}
-                    acdTimeView={acdTimeView}
-                    onTimeViewChange={setAcdTimeView}
-                    acdViewType={acdViewType}
-                    onViewTypeChange={setAcdViewType}
-                    onRunSync={runAcdSync}
-                    busyAction={busyAction}
-                    onShare={copySection}
-                    copyingSection={copyingSection}
-                  />
-                </div>
-              </>
+              <div className="section-shell">
+                <ProductionContent
+                  acdMetricsData={acdMetricsData}
+                  acdMetricsLoading={acdMetricsLoading}
+                  acdMetricsError={acdMetricsError}
+                  acdTimeView={acdTimeView}
+                  onTimeViewChange={setAcdTimeView}
+                  acdViewType={acdViewType}
+                  onViewTypeChange={setAcdViewType}
+                  onRunSync={runAcdSync}
+                  busyAction={busyAction}
+                  onShare={copySection}
+                  copyingSection={copyingSection}
+                />
+              </div>
             ) : null}
 
             {activeView === "details" ? (
-              <>
-                <div className="page-header">
-                  <div className="page-header-kicker">Configuration</div>
-                  <h1 className="page-header-title">Details</h1>
-                  <p className="page-header-sub">Tracked teams, sync scope, and Analytics next-step logic.</p>
-                </div>
-                <div className="section-shell">
-                  <DetailsContent
-                    acdMetricsData={acdMetricsData}
-                    acdMetricsLoading={acdMetricsLoading}
-                    acdMetricsError={acdMetricsError}
-                    analyticsData={analyticsData}
-                  />
-                </div>
-              </>
+              <div className="section-shell">
+                <DetailsContent
+                  acdMetricsData={acdMetricsData}
+                  acdMetricsLoading={acdMetricsLoading}
+                  acdMetricsError={acdMetricsError}
+                  analyticsData={analyticsData}
+                />
+              </div>
             ) : null}
           </div>
         </main>

@@ -283,22 +283,6 @@ select {
   min-width: 0;
 }
 
-.app-topbar-kicker {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 6px;
-}
-
-.app-topbar-title-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
 .app-topbar-title {
   margin: 0;
   font-family: var(--font-display);
@@ -307,28 +291,6 @@ select {
   line-height: 1.05;
   color: var(--ink-bright);
   letter-spacing: -0.02em;
-}
-
-.app-topbar-view-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border);
-  background: var(--accent-light);
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.app-topbar-subtitle {
-  margin: 8px 0 0;
-  max-width: 720px;
-  color: var(--muted);
-  font-size: 0.95rem;
-  line-height: 1.55;
 }
 
 .theme-switch {
@@ -383,41 +345,6 @@ select {
 
 .theme-switch input:checked + .theme-switch-track .theme-switch-thumb {
   transform: translateX(24px);
-}
-
-/* ─── Page header ─── */
-
-.page-header {
-  padding: 34px 30px 18px;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
-}
-
-.page-header-kicker {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 6px;
-}
-
-.page-header-title {
-  font-family: var(--font-display);
-  font-size: clamp(1.8rem, 3vw, 2.55rem);
-  font-weight: 600;
-  line-height: 1.1;
-  color: var(--ink-bright);
-  letter-spacing: -0.02em;
-  margin: 0 0 6px;
-}
-
-.page-header-sub {
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1.5;
-  margin: 0;
-  max-width: 720px;
 }
 
 /* ─── Page shell (legacy) ─── */
@@ -2205,10 +2132,6 @@ select {
 
   .sidebar {
     display: none;
-  }
-
-  .page-header {
-    padding: 22px 18px 18px;
   }
 
   .overview-hero {
