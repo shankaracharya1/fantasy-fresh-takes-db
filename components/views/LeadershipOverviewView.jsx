@@ -300,6 +300,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
       }))
       .sort((a, b) => b.attempts - a.attempts || a.showName.localeCompare(b.showName) || a.beatName.localeCompare(b.beatName))
   , [scopedFullGenAiRows]);
+  const successfulAnglesCount = fullGenAiByBeat.filter((row) => Number(row.successCount || 0) > 0).length;
 
   const beatsMetricCards = [
     { label: "Approved Beats", value: overviewLoading ? "..." : formatMetricValue(approvedBeats) },
@@ -602,7 +603,11 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
         </div>
         <div className="metric-grid three-col">
           <MetricCard label="Assets passed to Full Gen AI" value={overviewLoading ? "..." : formatMetricValue(scopedFullGenAiRows.length)} />
-          <MetricCard label="Success" value={overviewLoading ? "..." : formatMetricValue(scopedFullGenAiRows.filter((row) => row.success).length)} />
+          <MetricCard
+            label="Successful angles (formula)"
+            value={overviewLoading ? "..." : formatMetricValue(successfulAnglesCount)}
+            hint="Angle counts only when formula thresholds are met"
+          />
           <MetricCard
             label="Overall hit rate"
             value={
@@ -650,9 +655,12 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
         <div className="overview-guidelines-card">
           <div className="overview-guidelines-title">Success definition and guidelines</div>
           <div className="overview-guidelines-line">
-            Success means the beat has at least one successful Full Gen AI outcome in the selected date range.
+            A successful angle is one where all formula thresholds pass for that attempt.
           </div>
-          <div className="overview-guidelines-line">Hit rate = (Success / Attempts) x 100.</div>
+          <div className="overview-guidelines-line">
+            Formula: Amount Spent &gt;= 100, Q1 Completion &gt; 10%, CTI &gt;= 12%, Absolute Completion &gt;= 1.8%, CPI &lt;= 12.
+          </div>
+          <div className="overview-guidelines-line">Hit rate = (successful attempts / attempts) x 100.</div>
           <div className="overview-guidelines-line">Rows shaded light green have one or more successful outcomes.</div>
           <div className="overview-guidelines-line">
             Beats with zero success in the selected range stay unshaded and should be reviewed for iteration.
