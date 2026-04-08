@@ -29,6 +29,12 @@ function buildOverviewNotes({ overviewError, overviewData }) {
   if (overviewData?.goodToGoError) {
     notes.push(overviewData.goodToGoError);
   }
+  if (overviewData?.analyticsSourceError) {
+    notes.push(`Analytics source warning: ${overviewData.analyticsSourceError}`);
+  }
+  if (overviewData?.ideationSourceError) {
+    notes.push(`Ideation source warning: ${overviewData.ideationSourceError}`);
+  }
 
   return notes.filter(Boolean);
 }

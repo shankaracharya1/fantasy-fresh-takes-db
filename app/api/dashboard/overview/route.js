@@ -544,6 +544,7 @@ function buildLastWeekPayload(liveRows, analyticsRows, { includeNewShowsPod = fa
     hitRateNumerator: hitRateData.hitRateNumerator,
     hitRateDenominator: hitRateData.hitRateDenominator,
     beatsFunnel: hitRateData.beatsFunnel,
+    analyticsSourceError: "",
   };
 }
 
@@ -593,6 +594,7 @@ function buildRangePayload(liveRows, analyticsRows, rangeSelection, { includeNew
     hitRateNumerator: hitRateData.hitRateNumerator,
     hitRateDenominator: hitRateData.hitRateDenominator,
     beatsFunnel: hitRateData.beatsFunnel,
+    analyticsSourceError: "",
   };
 }
 
@@ -605,20 +607,36 @@ export async function GET(request) {
 
   try {
     if (startDate || endDate) {
-      const [{ rows: liveRows }, { rows: analyticsRows }] = await Promise.all([
+      const [{ rows: liveRows }, analyticsResult] = await Promise.all([
         fetchLiveTabRows(),
-        fetchAnalyticsLiveTabRows(),
+        fetchAnalyticsLiveTabRows()
+          .then((result) => ({ rows: result?.rows || [], error: "" }))
+          .catch((error) => ({
+            rows: [],
+            error: error?.message || "Analytics source unavailable.",
+          })),
       ]);
       const rangeSelection = buildDateRangeSelection({ startDate, endDate });
-      return NextResponse.json(buildRangePayload(liveRows, analyticsRows, rangeSelection, { includeNewShowsPod }));
+      return NextResponse.json({
+        ...buildRangePayload(liveRows, analyticsResult.rows, rangeSelection, { includeNewShowsPod }),
+        analyticsSourceError: analyticsResult.error,
+      });
     }
 
     if (period === "last") {
-      const [{ rows: liveRows }, { rows: analyticsRows }] = await Promise.all([
+      const [{ rows: liveRows }, analyticsResult] = await Promise.all([
         fetchLiveTabRows(),
-        fetchAnalyticsLiveTabRows(),
+        fetchAnalyticsLiveTabRows()
+          .then((result) => ({ rows: result?.rows || [], error: "" }))
+          .catch((error) => ({
+            rows: [],
+            error: error?.message || "Analytics source unavailable.",
+          })),
       ]);
-      return NextResponse.json(buildLastWeekPayload(liveRows, analyticsRows, { includeNewShowsPod }));
+      return NextResponse.json({
+        ...buildLastWeekPayload(liveRows, analyticsResult.rows, { includeNewShowsPod }),
+        analyticsSourceError: analyticsResult.error,
+      });
     }
 
     const plannerState = await loadPlannerWeek(period, { includeNewShowsPod });
