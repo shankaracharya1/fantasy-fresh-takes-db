@@ -3,6 +3,7 @@ import { hasEditSession } from "../../../../lib/auth.js";
 import { fetchAnalyticsLiveTabRows, isAnalyticsEligibleProductionType } from "../../../../lib/live-tab.js";
 import { readJsonObject, writeJsonObject } from "../../../../lib/storage.js";
 import {
+  buildDateRangeSelection,
   formatWeekRangeLabel,
   getWeekSelection,
   getWeekWindowFromReference,
@@ -447,6 +448,7 @@ function buildAnalyticsRow(row, actioned = false) {
 
   return {
     rowIndex: Number(row?.rowIndex || 0),
+    analyticsWeekKey: String(row?.analyticsWeekKey || "").trim(),
     showName: String(row?.showName || "").trim() || "Unknown show",
     beatName: String(row?.beatName || "").trim() || "Unknown beat",
     assetCode: String(row?.assetCode || "").trim(),
@@ -463,6 +465,8 @@ export async function GET(request) {
   const url = new URL(request.url);
   const requestedWeekKey = normalizeWeekKey(url.searchParams.get("week"));
   const requestedWeeks = url.searchParams.get("weeks");
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
   const currentWeekKey = getWeekSelection("current").weekKey;
   const lastWeekKey = getWeekSelection("last").weekKey;
 
@@ -476,8 +480,19 @@ export async function GET(request) {
     let selectedWeekKey;
     let selectedWeekEnd;
     let selectedLabel;
+    let filteredRows = analyticsRows;
 
-    if (requestedWeeks) {
+    if (startDate || endDate) {
+      const rangeSelection = buildDateRangeSelection({ startDate, endDate, period: "current" });
+      filteredRows = analyticsRows.filter((row) => {
+        const liveDate = String(row?.liveDate || "").trim();
+        return liveDate && liveDate >= rangeSelection.startDate && liveDate <= rangeSelection.endDate;
+      });
+      selectedWeekKeys = [];
+      selectedWeekKey = `${rangeSelection.startDate}:${rangeSelection.endDate}`;
+      selectedWeekEnd = rangeSelection.endDate;
+      selectedLabel = "Selected date range";
+    } else if (requestedWeeks) {
       const weekCount = Math.min(Math.max(Number(requestedWeeks) || 2, 1), 8);
       selectedWeekKeys = [];
       let wk = currentWeekKey;
@@ -504,7 +519,7 @@ export async function GET(request) {
       { id: "last-4-weeks", label: "Last 4 weeks" },
     ];
 
-    const tableRows = buildDedupedAttemptRows(analyticsRows, selectedWeekKeys)
+    const tableRows = buildDedupedAttemptRows(filteredRows, selectedWeekKeys)
       .map((row) => buildAnalyticsRow(row, getActionedValue(actionedState, selectedWeekKeys[0], row?.assetCode)))
       .sort(
         (a, b) =>
@@ -521,7 +536,9 @@ export async function GET(request) {
       selectedWeekLabel: selectedLabel,
       selectedWeekRangeLabel: requestedWeeks
         ? `${formatWeekRangeLabel(selectedWeekKeys[selectedWeekKeys.length - 1], selectedWeekEnd)}`
-        : formatWeekRangeLabel(selectedWeekKeys[0], selectedWeekEnd),
+        : startDate || endDate
+          ? formatWeekRangeLabel(buildDateRangeSelection({ startDate, endDate }).startDate, selectedWeekEnd)
+          : formatWeekRangeLabel(selectedWeekKeys[0], selectedWeekEnd),
       multiWeekOptions,
       weekOptions,
       rowCount: tableRows.length,

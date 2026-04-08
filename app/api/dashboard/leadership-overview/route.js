@@ -9,7 +9,7 @@ import {
   isAnalyticsEligibleProductionType,
 } from "../../../../lib/live-tab.js";
 import { matchAngleName } from "../../../../lib/fuzzy-match.js";
-import { formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
+import { buildDateRangeSelection, formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -459,8 +459,11 @@ function buildCurrentWeekUpdateRows(beatRows, workflowRows, weekSelection) {
 }
 
 export async function GET(request) {
-  const period = normalizeWeekView(new URL(request.url).searchParams.get("period") || "current");
-  const weekSelection = getWeekSelection(period);
+  const url = new URL(request.url);
+  const period = normalizeWeekView(url.searchParams.get("period") || "current");
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
+  const weekSelection = startDate || endDate ? buildDateRangeSelection({ startDate, endDate, period }) : getWeekSelection(period);
 
   try {
     const [ideationResult, editorialResult, readyResult, productionResult, liveResult, analyticsResult] = await Promise.all([
@@ -489,10 +492,10 @@ export async function GET(request) {
 
     return NextResponse.json({
       ok: true,
-      period,
+      period: startDate || endDate ? "range" : period,
       selectedWeekKey: weekSelection.weekKey,
       selectedWeekRangeLabel: formatWeekRangeLabel(weekSelection.weekStart, weekSelection.weekEnd),
-      confidenceNote: "This overview is intentionally scoped to a single week. Longer periods can reduce confidence because stages shift across weeks.",
+      confidenceNote: "This overview is intentionally scoped to the selected date range. Longer periods can reduce confidence because stages shift over time.",
       filters: buildFilterOptions(scopedBeatRows),
       beatRows: scopedBeatRows,
       workflowRows: scopedWorkflowRows,

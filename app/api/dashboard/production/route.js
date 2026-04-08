@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { NextResponse } from "next/server";
-import { buildProductionMetricsFromLiveTab, fetchLiveTabRows } from "../../../../lib/live-tab.js";
-import { formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
+import { buildProductionMetricsFromLiveTab, buildProductionMetricsFromLiveTabRange, fetchLiveTabRows } from "../../../../lib/live-tab.js";
+import { buildDateRangeSelection, formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
 
 const require = createRequire(import.meta.url);
 const {
@@ -262,11 +262,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request) {
-  const period = normalizeWeekView(new URL(request.url).searchParams.get("period"));
-  const weekSelection = getWeekSelection(period);
+  const url = new URL(request.url);
+  const period = normalizeWeekView(url.searchParams.get("period"));
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
+  const rangeSelection = buildDateRangeSelection({ startDate, endDate, period });
+  const useExplicitRange = Boolean(startDate || endDate);
+  const weekSelection = useExplicitRange ? rangeSelection : getWeekSelection(period);
 
   try {
-    if (period === "next") {
+    if (!useExplicitRange && period === "next") {
       return NextResponse.json({
         ok: true,
         period,
@@ -345,7 +350,9 @@ export async function GET(request) {
     };
 
     if (liveTabResult.status === "fulfilled") {
-      productionMetrics = buildProductionMetricsFromLiveTab(liveTabResult.value.rows, period);
+      productionMetrics = useExplicitRange
+        ? buildProductionMetricsFromLiveTabRange(liveTabResult.value.rows, rangeSelection.startDate, rangeSelection.endDate)
+        : buildProductionMetricsFromLiveTab(liveTabResult.value.rows, period);
     } else {
       liveTabError = liveTabResult.reason?.message || "Unable to load Live-tab production metrics.";
     }
@@ -356,7 +363,8 @@ export async function GET(request) {
 
     return NextResponse.json({
       ok: true,
-      period,
+      period: useExplicitRange ? "range" : period,
+      selectionMode: useExplicitRange ? "date-range" : "week",
       weekStart: productionMetrics.weekStart,
       weekEnd: productionMetrics.weekEnd,
       weekLabel: productionMetrics.weekLabel,

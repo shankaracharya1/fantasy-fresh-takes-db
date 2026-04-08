@@ -21,7 +21,7 @@ import {
   mergeWeekData,
   mergeWriterConfig,
 } from "../../../../lib/tracker-data.js";
-import { formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
+import { buildDateRangeSelection, formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
 
 const CONFIG_PATH = "config/writer-config.json";
 const LIFETIME_SINCE = "2026-03-10";
@@ -336,7 +336,10 @@ async function loadWeeklyCompetitionData(rosterMeta, period) {
 export async function GET(request) {
   const url = new URL(request.url);
   const rawPeriod = String(url.searchParams.get("period") || "").trim().toLowerCase();
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
   const hasPeriodFilter = rawPeriod === "last" || rawPeriod === "current" || rawPeriod === "next";
+  const hasDateRangeFilter = Boolean(startDate || endDate);
   const period = normalizeWeekView(rawPeriod || "current");
 
   try {
@@ -348,15 +351,40 @@ export async function GET(request) {
     const pods = buildPodsModel(currentConfig, weekData).filter((pod) => isVisiblePlannerPodLeadName(pod?.cl));
     const rosterMeta = buildPodRosterMeta(pods);
 
-    if (hasPeriodFilter) {
-      const weekly = await loadWeeklyCompetitionData(rosterMeta, period);
+    if (hasPeriodFilter || hasDateRangeFilter) {
+      const selection = hasDateRangeFilter ? buildDateRangeSelection({ startDate, endDate, period }) : null;
+      const weekly = await loadWeeklyCompetitionData(rosterMeta, hasDateRangeFilter ? selection.period : period);
+      const effectiveWeekSelection = hasDateRangeFilter ? selection : getWeekSelection(weekly.period);
+      const [liveResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
+        fetchLiveTabRows(),
+        fetchAnalyticsLiveTabRows(),
+        fetchEditorialTabRows(),
+        fetchProductionTabRows(),
+      ]);
+      const scriptsMap = buildScriptsPerPodForWeek(liveResult.rows, effectiveWeekSelection);
+      const hitRateMap = computeHitRatePerPodForWeek(analyticsResult.rows, effectiveWeekSelection);
+      const beatsMap = buildLwEditorialOutputPerPod(editorialResult.rows, productionResult.rows, effectiveWeekSelection);
+      const podRows = rosterMeta.podOrder.map((podLeadName) => {
+        const hitStats = hitRateMap.get(podLeadName) || { totalLive: 0, hits: 0 };
+        return {
+          podLeadName,
+          lifetimeBeats: beatsMap.get(podLeadName) || 0,
+          lifetimeScripts: scriptsMap.get(podLeadName) || 0,
+          hitRateNumerator: hitStats.hits,
+          hitRateDenominator: hitStats.totalLive,
+          hitRate: hitStats.totalLive > 0 ? Number(((hitStats.hits / hitStats.totalLive) * 100).toFixed(1)) : null,
+          lwEditorialOutput: beatsMap.get(podLeadName) || 0,
+          writerCount: Number(rosterMeta.podWriterCounts[podLeadName] || 0),
+        };
+      });
+
       return NextResponse.json({
         ok: true,
-        podRows: weekly.podRows,
-        period: weekly.period,
-        weekKey: weekly.weekKey,
-        weekLabel: weekly.weekLabel,
-        selectionMode: "week",
+        podRows,
+        period: hasDateRangeFilter ? "range" : weekly.period,
+        weekKey: effectiveWeekSelection.weekKey,
+        weekLabel: formatWeekRangeLabel(effectiveWeekSelection.weekStart, effectiveWeekSelection.weekEnd),
+        selectionMode: hasDateRangeFilter ? "date-range" : "week",
       });
     }
 

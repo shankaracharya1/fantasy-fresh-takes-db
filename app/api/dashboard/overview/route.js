@@ -5,6 +5,7 @@ import {
   TARGET_FLOOR,
   buildGoodToGoBeatsMetricsFromIdeationTab,
   buildReleasedFreshTakeAttemptsForPeriod,
+  buildReleasedFreshTakeAttemptsForRange,
   buildTatSummaryFromRows,
   fetchAnalyticsLiveTabRows,
   fetchIdeationTabRows,
@@ -25,7 +26,7 @@ import {
   mergeWeekData,
   mergeWriterConfig,
 } from "../../../../lib/tracker-data.js";
-import { formatWeekRangeLabel, getWeekSelection, getWeekWindowFromReference, normalizeWeekView } from "../../../../lib/week-view.js";
+import { buildDateRangeSelection, formatWeekRangeLabel, getWeekSelection, getWeekWindowFromReference, normalizeWeekView } from "../../../../lib/week-view.js";
 
 const CONFIG_PATH = "config/writer-config.json";
 export const runtime = "nodejs";
@@ -247,14 +248,13 @@ function isBetterAttemptRow(nextRow, currentRow) {
   return Number(nextRow?.rowIndex || 0) > Number(currentRow?.rowIndex || 0);
 }
 
-function buildLastWeekHitRateAndFunnel(analyticsRows, { includeNewShowsPod = false } = {}) {
-  const lastWeek = getWeekSelection("last");
-  const lastWeekKey = lastWeek.weekKey;
+function buildHitRateAndFunnelForSelection(analyticsRows, selection, { includeNewShowsPod = false } = {}) {
+  const selectionStart = selection?.startDate || selection?.weekStart || "";
+  const selectionEnd = selection?.endDate || selection?.weekEnd || selectionStart;
 
   const weekFiltered = (Array.isArray(analyticsRows) ? analyticsRows : []).filter((row) => {
     if (!row?.liveDate) return false;
-    const window = getWeekWindowFromReference(row.liveDate);
-    if (window.weekStart !== lastWeekKey) return false;
+    if (row.liveDate < selectionStart || row.liveDate > selectionEnd) return false;
     if (!includeNewShowsPod && isNonBauPodLeadName(row?.podLeadName)) return false;
     return true;
   });
@@ -318,7 +318,7 @@ function buildLastWeekPayload(liveRows, analyticsRows, { includeNewShowsPod = fa
     ? allFreshTakeRows
     : allFreshTakeRows.filter((row) => !isNonBauPodLeadName(row?.podLeadName));
   const tatSummary = buildTatSummaryFromRows(freshTakeRows);
-  const hitRateData = buildLastWeekHitRateAndFunnel(analyticsRows, { includeNewShowsPod });
+  const hitRateData = buildHitRateAndFunnelForSelection(analyticsRows, weekSelection, { includeNewShowsPod });
 
   return {
     ok: true,
@@ -352,12 +352,72 @@ function buildLastWeekPayload(liveRows, analyticsRows, { includeNewShowsPod = fa
   };
 }
 
+function buildRangePayload(liveRows, analyticsRows, rangeSelection, { includeNewShowsPod = false } = {}) {
+  const rangeLabel = rangeSelection.rangeLabel || formatWeekRangeLabel(rangeSelection.startDate, rangeSelection.endDate);
+  const allFreshTakeRows = buildReleasedFreshTakeAttemptsForRange(
+    liveRows,
+    rangeSelection.startDate,
+    rangeSelection.endDate
+  );
+  const freshTakeRows = includeNewShowsPod
+    ? allFreshTakeRows
+    : allFreshTakeRows.filter((row) => !isNonBauPodLeadName(row?.podLeadName));
+  const tatSummary = buildTatSummaryFromRows(freshTakeRows);
+  const filteredAnalyticsRows = (Array.isArray(analyticsRows) ? analyticsRows : []).filter((row) => {
+    const liveDate = String(row?.liveDate || "").trim();
+    return liveDate && liveDate >= rangeSelection.startDate && liveDate <= rangeSelection.endDate;
+  });
+  const hitRateData = buildHitRateAndFunnelForSelection(filteredAnalyticsRows, rangeSelection, { includeNewShowsPod });
+
+  return {
+    ok: true,
+    period: "range",
+    selectionMode: "date-range",
+    startDate: rangeSelection.startDate,
+    endDate: rangeSelection.endDate,
+    weekStart: rangeSelection.startDate,
+    weekEnd: rangeSelection.endDate,
+    weekKey: rangeSelection.startDate,
+    weekLabel: rangeLabel,
+    hasPlannerData: false,
+    hasWeekData: freshTakeRows.length > 0,
+    emptyStateMessage: freshTakeRows.length > 0 ? "" : `No released fresh takes were found in the Live tab for ${rangeLabel}.`,
+    plannerBeatCount: null,
+    throughputBeatCount: freshTakeRows.length,
+    goodToGoBeatsCount: null,
+    goodToGoTarget: GOOD_TO_GO_BEATS_TARGET,
+    ideationWeekBucket: "",
+    freshTakeCount: freshTakeRows.length,
+    plannedReleaseCount: null,
+    inProductionBeatCount: null,
+    productionOutputCount: null,
+    targetFloor: TARGET_FLOOR,
+    tatSummary,
+    tatEmptyMessage: tatSummary.eligibleAssetCount > 0 ? "" : `No eligible production TAT rows were found in ${rangeLabel}.`,
+    hitRate: hitRateData.hitRate,
+    hitRateNumerator: hitRateData.hitRateNumerator,
+    hitRateDenominator: hitRateData.hitRateDenominator,
+    beatsFunnel: hitRateData.beatsFunnel,
+  };
+}
+
 export async function GET(request) {
   const url = new URL(request.url);
   const period = normalizeWeekView(url.searchParams.get("period"));
+  const startDate = url.searchParams.get("startDate");
+  const endDate = url.searchParams.get("endDate");
   const includeNewShowsPod = url.searchParams.get("includeNewShowsPod") === "true";
 
   try {
+    if (startDate || endDate) {
+      const [{ rows: liveRows }, { rows: analyticsRows }] = await Promise.all([
+        fetchLiveTabRows(),
+        fetchAnalyticsLiveTabRows(),
+      ]);
+      const rangeSelection = buildDateRangeSelection({ startDate, endDate });
+      return NextResponse.json(buildRangePayload(liveRows, analyticsRows, rangeSelection, { includeNewShowsPod }));
+    }
+
     if (period === "last") {
       const [{ rows: liveRows }, { rows: analyticsRows }] = await Promise.all([
         fetchLiveTabRows(),
