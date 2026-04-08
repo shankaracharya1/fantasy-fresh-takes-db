@@ -313,7 +313,7 @@ function buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows) {
   );
 }
 
-function buildCurrentWeekPayload(plannerState, { liveRows = [], ideationRows = [] } = {}) {
+function buildCurrentWeekPayload(plannerState, { liveRows = [], ideationRows = [], ideationSourceError = "" } = {}) {
   const timing = buildPlannerTimingSummary(plannerState.plannerBeats);
   const allProductionAssetCount = countAllAssetsWithStage(plannerState.pods, "production");
   const allLiveOnMetaAssetCount = countAllAssetsWithStage(plannerState.pods, "live_on_meta");
@@ -353,10 +353,11 @@ function buildCurrentWeekPayload(plannerState, { liveRows = [], ideationRows = [
     writingEmptyMessage: timing.writingEmptyMessage,
     clReviewEmptyMessage: timing.clReviewEmptyMessage,
     podThroughputRows: buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows),
+    ideationSourceError,
   };
 }
 
-function buildNextWeekPayload(plannerState, ideationRows) {
+function buildNextWeekPayload(plannerState, ideationRows, { ideationSourceError = "" } = {}) {
   const gtgMetrics = buildGoodToGoBeatsMetricsFromIdeationTab(ideationRows, "next", {
     sourceWeekOffsetWeeks: -1,
   });
@@ -402,6 +403,7 @@ function buildNextWeekPayload(plannerState, ideationRows) {
     scriptsPerWriter: activeWriterCount > 0 ? Number((allProductionAssetCount / activeWriterCount).toFixed(1)) : null,
     writingEmptyMessage: timing.writingEmptyMessage,
     clReviewEmptyMessage: timing.clReviewEmptyMessage,
+    ideationSourceError,
   };
 }
 
@@ -622,13 +624,39 @@ export async function GET(request) {
     const plannerState = await loadPlannerWeek(period, { includeNewShowsPod });
 
     if (period === "current") {
-      const [{ rows: liveRows }, { rows: ideationRows }] = await Promise.all([fetchLiveTabRows(), fetchIdeationTabRows()]);
-      return NextResponse.json(buildCurrentWeekPayload(plannerState, { liveRows, ideationRows }));
+      const [{ rows: liveRows }, ideationResult] = await Promise.all([
+        fetchLiveTabRows(),
+        fetchIdeationTabRows()
+          .then((result) => ({ rows: result?.rows || [], error: "" }))
+          .catch((error) => ({
+            rows: [],
+            error:
+              error?.message ||
+              "The Ideation tracker tab is not accessible. Check the sheet sharing settings.",
+          })),
+      ]);
+      return NextResponse.json(
+        buildCurrentWeekPayload(plannerState, {
+          liveRows,
+          ideationRows: ideationResult.rows,
+          ideationSourceError: ideationResult.error,
+        })
+      );
     }
 
     if (period === "next") {
-      const { rows: ideationRows } = await fetchIdeationTabRows();
-      return NextResponse.json(buildNextWeekPayload(plannerState, ideationRows));
+      const ideationResult = await fetchIdeationTabRows()
+        .then((result) => ({ rows: result?.rows || [], error: "" }))
+        .catch((error) => ({
+          rows: [],
+          error:
+            error?.message || "The Ideation tracker tab is not accessible. Check the sheet sharing settings.",
+        }));
+      return NextResponse.json(
+        buildNextWeekPayload(plannerState, ideationResult.rows, {
+          ideationSourceError: ideationResult.error,
+        })
+      );
     }
   } catch (error) {
     return NextResponse.json(

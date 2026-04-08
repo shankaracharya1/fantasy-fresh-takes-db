@@ -477,7 +477,13 @@ export async function GET(request) {
 
   try {
     const [ideationResult, editorialResult, readyResult, productionResult, liveResult, analyticsResult] = await Promise.all([
-      fetchIdeationTabRows(),
+      fetchIdeationTabRows()
+        .then((value) => ({ rows: value?.rows || [], error: "" }))
+        .catch((error) => ({
+          rows: [],
+          error:
+            error?.message || "The Ideation tracker tab is not accessible. Check the sheet sharing settings.",
+        })),
       fetchEditorialWorkflowRows(),
       fetchReadyForProductionWorkflowRows().catch(() => ({ rows: [] })),
       fetchProductionWorkflowRows().catch(() => ({ rows: [] })),
@@ -516,6 +522,7 @@ export async function GET(request) {
       approvedMatchedRows,
       fullGenAiRows,
       fullGenAiSourceError: analyticsResult?.error || "",
+      ideationSourceError: ideationResult?.error || "",
       currentWeekUpdateRows,
     });
   } catch (error) {
