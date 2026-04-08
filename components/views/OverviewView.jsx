@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 
 import {
   MetricCard,
@@ -55,6 +56,96 @@ function getHitRateColor(rate) {
   return "#9f2e2e";
 }
 
+function EditorialPodThroughputTable({ rows = [] }) {
+  const [expandedPods, setExpandedPods] = useState({});
+  const allExpanded = rows.length > 0 && rows.every((row) => Boolean(expandedPods[row.podLeadName]));
+
+  return (
+    <div>
+      <div className="overview-section-actions" style={{ justifyContent: "flex-end", marginBottom: 8 }}>
+        <button
+          type="button"
+          className="ghost-button overview-section-link"
+          onClick={() =>
+            setExpandedPods(
+              allExpanded ? {} : Object.fromEntries(rows.map((row) => [row.podLeadName, true]))
+            )
+          }
+        >
+          {allExpanded ? "Collapse all pods" : "Open POD Wise"}
+        </button>
+      </div>
+      <div className="table-wrap">
+        <table className="ops-table overview-table">
+          <thead>
+            <tr>
+              <th>POD / Writer</th>
+              <th>LW to Production (GA/GI, approved)</th>
+              <th>This week beats</th>
+              <th>WIP</th>
+              <th>Review with CL</th>
+              <th>On track for next week</th>
+              <th>Thu status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length > 0 ? (
+              rows.flatMap((row) => {
+                const isExpanded = Boolean(expandedPods[row.podLeadName]);
+                const podRow = (
+                  <tr key={`pod-${row.podLeadName}`} style={{ fontWeight: 700 }}>
+                    <td>
+                      <button
+                        type="button"
+                        className="as-link"
+                        onClick={() =>
+                          setExpandedPods((current) => ({
+                            ...current,
+                            [row.podLeadName]: !current[row.podLeadName],
+                          }))
+                        }
+                        style={{ padding: 0, border: "none", background: "transparent", fontWeight: 700 }}
+                      >
+                        {isExpanded ? "▾" : "▸"} {row.podLeadName || "-"}
+                      </button>
+                    </td>
+                    <td>{formatMetricValue(row.lwProductionCount)}</td>
+                    <td>{formatMetricValue(row.thisWeekBeatsCount)}</td>
+                    <td>{formatMetricValue(row.wipCount)}</td>
+                    <td>{formatMetricValue(row.reviewWithClCount)}</td>
+                    <td>{formatMetricValue(row.onTrackCount)}</td>
+                    <td>{row.thuStatusMessage || "-"}</td>
+                  </tr>
+                );
+
+                const writerRows = isExpanded
+                  ? (Array.isArray(row.writerRows) ? row.writerRows : []).map((writer) => (
+                      <tr key={`writer-${row.podLeadName}-${writer.writerName}`}>
+                        <td style={{ paddingLeft: 34, color: "var(--subtle)" }}>• {writer.writerName || "-"}</td>
+                        <td>{formatMetricValue(writer.lwProductionCount)}</td>
+                        <td>{formatMetricValue(writer.thisWeekBeatsCount)}</td>
+                        <td>{formatMetricValue(writer.wipCount)}</td>
+                        <td>{formatMetricValue(writer.reviewWithClCount)}</td>
+                        <td>{formatMetricValue(writer.onTrackCount)}</td>
+                        <td>-</td>
+                      </tr>
+                    ))
+                  : [];
+
+                return [podRow, ...writerRows];
+              })
+            ) : (
+              <tr>
+                <td colSpan="7">No POD throughput rows available yet.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sub-views ────────────────────────────────────────────────────────────────
 
 export function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError }) {
@@ -69,6 +160,14 @@ export function OverviewCurrentWeek({ overviewData, overviewLoading, overviewErr
 
   return (
     <div className="section-stack">
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>POD throughput ranking</div>
+        <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
+          Ranked by last week scripts pushed to production (Fresh Takes + GA/GI + approved beats), with writer drilldown.
+        </div>
+        <EditorialPodThroughputTable rows={Array.isArray(overviewData?.podThroughputRows) ? overviewData.podThroughputRows : []} />
+      </div>
+      <hr className="section-divider" />
       <div className="metric-grid three-col">
         <MetricCard
           label="Unique beats this week"

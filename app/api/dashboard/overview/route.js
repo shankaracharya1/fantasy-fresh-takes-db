@@ -11,6 +11,7 @@ import {
   fetchIdeationTabRows,
   fetchLiveTabRows,
   isAnalyticsEligibleProductionType,
+  isFreshTakesLabel,
 } from "../../../../lib/live-tab.js";
 import {
   buildPlannerBeatInventory,
@@ -121,7 +122,182 @@ function buildPlannerTimingSummary(plannerBeats) {
   };
 }
 
-function buildCurrentWeekPayload(plannerState) {
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+
+function normalizeKey(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function makeBeatKey(showName, beatName) {
+  const show = normalizeKey(showName);
+  const beat = normalizeKey(beatName);
+  return show && beat ? `${show}|${beat}` : "";
+}
+
+function isApprovedIdeationStatus(statusLabel) {
+  const status = normalizeKey(statusLabel);
+  return status === "gtg" || status === "gtg - minor changes" || status === "approved";
+}
+
+function getAssetTypeFromAssetCode(assetCode) {
+  const code = normalizeText(assetCode).toUpperCase();
+  if (code.startsWith("GA")) return "GA";
+  if (code.startsWith("GI")) return "GI";
+  if (code.startsWith("GU")) return "GU";
+  return "OTHER";
+}
+
+function getLatestAssetStage(asset) {
+  const days = Array.isArray(asset?.days) ? asset.days : [];
+  for (let idx = days.length - 1; idx >= 0; idx -= 1) {
+    const stage = normalizeKey(days[idx]);
+    if (stage) return stage;
+  }
+  return "";
+}
+
+function buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows) {
+  const approvedBeatKeys = new Set(
+    (Array.isArray(ideationRows) ? ideationRows : [])
+      .filter((row) => isApprovedIdeationStatus(row?.status || row?.beatsStatus))
+      .map((row) => makeBeatKey(row?.showName, row?.beatName))
+      .filter(Boolean)
+  );
+
+  const lwRows = buildReleasedFreshTakeAttemptsForPeriod(liveRows, "last").filter((row) => {
+    if (!isFreshTakesLabel(row?.reworkType) && normalizeKey(row?.reworkType) !== "new q1") return false;
+    const type = getAssetTypeFromAssetCode(row?.assetCode);
+    if (!(type === "GA" || type === "GI")) return false;
+    const beatKey = makeBeatKey(row?.showName, row?.beatName);
+    return beatKey && approvedBeatKeys.has(beatKey);
+  });
+
+  const podMap = new Map();
+  const ensurePod = (podLeadName) => {
+    const podName = normalizeText(podLeadName) || "Unknown POD";
+    if (!podMap.has(podName)) {
+      podMap.set(podName, {
+        podLeadName: podName,
+        lwProductionCount: 0,
+        thisWeekBeatsCount: 0,
+        wipCount: 0,
+        reviewWithClCount: 0,
+        onTrackCount: 0,
+        thuStatusMessage: "Needs Thursday update",
+        writerRows: [],
+      });
+    }
+    return podMap.get(podName);
+  };
+
+  const writerMap = new Map();
+  const ensureWriter = (podLeadName, writerName) => {
+    const podName = normalizeText(podLeadName) || "Unknown POD";
+    const safeWriter = normalizeText(writerName) || "Unknown writer";
+    const key = `${normalizeKey(podName)}|${normalizeKey(safeWriter)}`;
+    if (!writerMap.has(key)) {
+      writerMap.set(key, {
+        podLeadName: podName,
+        writerName: safeWriter,
+        lwProductionCount: 0,
+        thisWeekBeatsCount: 0,
+        wipCount: 0,
+        reviewWithClCount: 0,
+        onTrackCount: 0,
+      });
+    }
+    return writerMap.get(key);
+  };
+
+  for (const row of lwRows) {
+    const pod = ensurePod(row?.podLeadName);
+    const writer = ensureWriter(row?.podLeadName, row?.writerName);
+    pod.lwProductionCount += 1;
+    writer.lwProductionCount += 1;
+  }
+
+  const pods = Array.isArray(plannerState?.pods) ? plannerState.pods : [];
+  for (const pod of pods) {
+    const podName = normalizeText(pod?.cl);
+    const podEntry = ensurePod(podName);
+    let submittedByThu = 0;
+
+    for (const writer of Array.isArray(pod?.writers) ? pod.writers : []) {
+      const writerEntry = ensureWriter(podName, writer?.name);
+      for (const beat of Array.isArray(writer?.beats) ? writer.beats : []) {
+        writerEntry.thisWeekBeatsCount += 1;
+        podEntry.thisWeekBeatsCount += 1;
+
+        let beatHasSubmittedByThu = false;
+        let bestStageRank = -1;
+        let bestStageKey = "";
+        for (const asset of Array.isArray(beat?.assets) ? beat.assets : []) {
+          const latestStage = getLatestAssetStage(asset);
+          const rank =
+            latestStage.includes("live") ? 4 :
+            latestStage.includes("production") ? 3 :
+            latestStage.includes("cl") ? 2 :
+            latestStage.includes("write") || latestStage.includes("ideation") ? 1 : 0;
+          if (rank > bestStageRank) {
+            bestStageRank = rank;
+            bestStageKey = latestStage;
+          }
+
+          const days = Array.isArray(asset?.days) ? asset.days : [];
+          const reachedByThu = days.slice(0, 4).some((value) => {
+            const stage = normalizeKey(value);
+            return stage.includes("production") || stage.includes("live");
+          });
+          if (reachedByThu) {
+            beatHasSubmittedByThu = true;
+          }
+        }
+
+        if (beatHasSubmittedByThu) {
+          submittedByThu += 1;
+        }
+
+        if (bestStageKey.includes("production") || bestStageKey.includes("live")) {
+          podEntry.onTrackCount += 1;
+          writerEntry.onTrackCount += 1;
+        } else if (bestStageKey.includes("cl")) {
+          podEntry.reviewWithClCount += 1;
+          writerEntry.reviewWithClCount += 1;
+        } else {
+          podEntry.wipCount += 1;
+          writerEntry.wipCount += 1;
+        }
+      }
+    }
+
+    podEntry.thuStatusMessage = submittedByThu > 0 ? "Thu update sent" : "Needs Thursday update";
+  }
+
+  for (const writer of writerMap.values()) {
+    const pod = ensurePod(writer.podLeadName);
+    pod.writerRows.push(writer);
+  }
+
+  for (const pod of podMap.values()) {
+    pod.writerRows.sort(
+      (a, b) =>
+        b.lwProductionCount - a.lwProductionCount ||
+        b.onTrackCount - a.onTrackCount ||
+        a.writerName.localeCompare(b.writerName)
+    );
+  }
+
+  return Array.from(podMap.values()).sort(
+    (a, b) =>
+      b.lwProductionCount - a.lwProductionCount ||
+      b.onTrackCount - a.onTrackCount ||
+      a.podLeadName.localeCompare(b.podLeadName)
+  );
+}
+
+function buildCurrentWeekPayload(plannerState, { liveRows = [], ideationRows = [] } = {}) {
   const timing = buildPlannerTimingSummary(plannerState.plannerBeats);
   const allProductionAssetCount = countAllAssetsWithStage(plannerState.pods, "production");
   const allLiveOnMetaAssetCount = countAllAssetsWithStage(plannerState.pods, "live_on_meta");
@@ -160,6 +336,7 @@ function buildCurrentWeekPayload(plannerState) {
     scriptsPerWriter: activeWriterCount > 0 ? Number((allProductionAssetCount / activeWriterCount).toFixed(1)) : null,
     writingEmptyMessage: timing.writingEmptyMessage,
     clReviewEmptyMessage: timing.clReviewEmptyMessage,
+    podThroughputRows: buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows),
   };
 }
 
@@ -429,7 +606,8 @@ export async function GET(request) {
     const plannerState = await loadPlannerWeek(period, { includeNewShowsPod });
 
     if (period === "current") {
-      return NextResponse.json(buildCurrentWeekPayload(plannerState));
+      const [{ rows: liveRows }, { rows: ideationRows }] = await Promise.all([fetchLiveTabRows(), fetchIdeationTabRows()]);
+      return NextResponse.json(buildCurrentWeekPayload(plannerState, { liveRows, ideationRows }));
     }
 
     if (period === "next") {
