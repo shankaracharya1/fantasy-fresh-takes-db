@@ -36,6 +36,7 @@ const ACD_VIEW_OPTIONS = [
   { id: "acd", label: "ACD" },
   { id: "cd", label: "CD" },
 ];
+const THEME_STORAGE_KEY = "fresh-takes-theme-mode";
 const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab sync.";
 const CHART_TONE_POSITIVE = "#2d5a3d";
 const CHART_TONE_WARNING = "#c2703e";
@@ -3228,6 +3229,7 @@ async function readJson(response) {
 
 export default function UnifiedOpsApp() {
   const [activeView, setActiveView] = useState("leadership-overview");
+  const [themeMode, setThemeMode] = useState("light");
   const [editorialPeriod, setEditorialPeriod] = useState("current");
   const [selectedAnalyticsWeekKey, setSelectedAnalyticsWeekKey] = useState(getWeekSelection("current").weekKey);
   const [plannerBoardSnapshot, setPlannerBoardSnapshot] = useState(null);
@@ -3267,6 +3269,30 @@ export default function UnifiedOpsApp() {
   const [beatsPerformanceData, setBeatsPerformanceData] = useState(null);
   const [beatsPerformanceLoading, setBeatsPerformanceLoading] = useState(false);
   const [beatsPerformanceError, setBeatsPerformanceError] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (storedTheme === "light" || storedTheme === "dark") {
+      setThemeMode(storedTheme);
+      return;
+    }
+
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setThemeMode(prefersDark ? "dark" : "light");
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.documentElement.setAttribute("data-theme", themeMode);
+    window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+  }, [themeMode]);
 
   const nextWeekKey = useMemo(() => shiftWeekKey(getCurrentWeekKey(), 1), []);
   const nextWeekPlannerBoardMetrics = useMemo(() => {
@@ -3855,6 +3881,17 @@ export default function UnifiedOpsApp() {
     }
   }
 
+  const activeViewLabelMap = {
+    "leadership-overview": "Overview",
+    overview: "Editorial Funnel",
+    "beats-performance": "Beats Performance",
+    "pod-wise": "POD Wise",
+    planner: "Planner",
+    analytics: "Analytics",
+    production: "Production",
+    details: "Details",
+  };
+
   return (
     <>
       <div className="app-shell">
@@ -3899,6 +3936,32 @@ export default function UnifiedOpsApp() {
         </nav>
 
         <main className="ops-main">
+          <div className="app-topbar">
+            <div className="app-topbar-copy">
+              <div className="app-topbar-kicker">Fresh Takes Dashboard</div>
+              <div className="app-topbar-title-row">
+                <h1 className="app-topbar-title">Content Operations Command Center</h1>
+                <span className="app-topbar-view-pill">{activeViewLabelMap[activeView] || "Dashboard"}</span>
+              </div>
+              <p className="app-topbar-subtitle">
+                Built on the current ops foundation, with the new PRD flowing into Overview, Editorial, and POD performance next.
+              </p>
+            </div>
+
+            <label className="theme-switch" aria-label="Toggle dark mode">
+              <span className="theme-switch-label">{themeMode === "dark" ? "Dark" : "Light"}</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={themeMode === "dark"}
+                onChange={(event) => setThemeMode(event.target.checked ? "dark" : "light")}
+              />
+              <span className="theme-switch-track" aria-hidden="true">
+                <span className="theme-switch-thumb" />
+              </span>
+            </label>
+          </div>
+
           <div className="ops-shell">
             {activeView === "leadership-overview" ? (
               <>
