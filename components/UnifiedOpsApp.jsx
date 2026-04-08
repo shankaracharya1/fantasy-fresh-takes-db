@@ -973,6 +973,17 @@ export default function UnifiedOpsApp() {
                     className={`app-topbar-quick-btn${isLastWeekSelected ? " is-active" : ""}`}
                     disabled={headerDateRangeDisabled}
                     onClick={() => {
+                      if (isLastWeekSelected) {
+                        setDateFilterMode("custom");
+                        setDashboardDateRange(
+                          buildDateRangeSelection({
+                            startDate: lastNonQuickRange.startDate,
+                            endDate: lastNonQuickRange.endDate,
+                            minDate: MIN_DASHBOARD_DATE,
+                          })
+                        );
+                        return;
+                      }
                       setLastNonQuickRange({
                         startDate: normalizedHeaderRange.startDate,
                         endDate: normalizedHeaderRange.endDate,
