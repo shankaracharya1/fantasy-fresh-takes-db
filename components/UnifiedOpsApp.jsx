@@ -20,6 +20,7 @@ import AnalyticsContent from "./views/AnalyticsView.jsx";
 import PodWiseContent, { PodTasksContent } from "./views/PodWiseView.jsx";
 import BeatsPerformanceContent from "./views/BeatsPerformanceView.jsx";
 import ProductionContent from "./views/ProductionView.jsx";
+import Planner2Content from "./views/Planner2View.jsx";
 import { PlannerErrorBoundary } from "./views/shared.jsx";
 
 // ─── Shared utilities ─────────────────────────────────────────────────────────
@@ -260,6 +261,9 @@ export default function UnifiedOpsApp() {
   const [beatsPerformanceData, setBeatsPerformanceData] = useState(null);
   const [beatsPerformanceLoading, setBeatsPerformanceLoading] = useState(false);
   const [beatsPerformanceError, setBeatsPerformanceError] = useState("");
+  const [planner2Data, setPlanner2Data] = useState(null);
+  const [planner2Loading, setPlanner2Loading] = useState(false);
+  const [planner2Error, setPlanner2Error] = useState("");
   const [lastNonQuickRange, setLastNonQuickRange] = useState(DEFAULT_DASHBOARD_RANGE);
   const [dateFilterMode, setDateFilterMode] = useState("custom");
   const normalizedHeaderRange = useMemo(
@@ -270,12 +274,14 @@ export default function UnifiedOpsApp() {
     activeView === "overview" ||
     activeView === "leadership-overview" ||
     activeView === "pod-wise" ||
-    activeView === "analytics";
+    activeView === "analytics" ||
+    activeView === "planner2";
   const headerDateRangeDisabled =
     (activeView === "overview" && overviewLoading) ||
     (activeView === "leadership-overview" && leadershipOverviewLoading) ||
     (activeView === "pod-wise" && competitionLoading) ||
-    (activeView === "analytics" && analyticsLoading && !analyticsData);
+    (activeView === "analytics" && analyticsLoading && !analyticsData) ||
+    (activeView === "planner2" && planner2Loading && !planner2Data);
   const lastWeekQuickRange = useMemo(
     () =>
       buildDateRangeSelection({
@@ -648,6 +654,65 @@ export default function UnifiedOpsApp() {
   }, [activeView]);
 
   useEffect(() => {
+    if (activeView !== "planner2") {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const rangeSelection = buildDateRangeSelection(dashboardDateRange);
+    const cacheKey = `planner2:${rangeSelection.startDate}:${rangeSelection.endDate}`;
+    const cachedPayload = readClientCache(cacheKey);
+    if (cachedPayload) {
+      setPlanner2Data(cachedPayload);
+      setPlanner2Loading(false);
+      setPlanner2Error("");
+    }
+
+    async function loadPlanner2({ forceLoading = false } = {}) {
+      if (forceLoading || (!planner2Data && !cachedPayload)) {
+        setPlanner2Loading(true);
+      }
+      setPlanner2Error("");
+
+      try {
+        const response = await fetch(
+          `/api/dashboard/planner2?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}`,
+          { cache: "no-store" }
+        );
+        const payload = await readJson(response);
+        if (!response.ok || payload.ok === false) {
+          throw new Error(payload.error || "Unable to load Planner2.");
+        }
+
+        if (!cancelled) {
+          setPlanner2Data(payload);
+          writeClientCache(cacheKey, payload);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          if (!planner2Data && !cachedPayload) {
+            setPlanner2Data(null);
+            setPlanner2Error(error.message || "Unable to load Planner2.");
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setPlanner2Loading(false);
+        }
+      }
+    }
+
+    void loadPlanner2({ forceLoading: !cachedPayload && !planner2Data });
+    const intervalId = window.setInterval(() => {
+      void loadPlanner2({ forceLoading: false });
+    }, DASHBOARD_CLIENT_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeView, dashboardDateRange, planner2Data]);
+
+  useEffect(() => {
     if (activeView !== "analytics") {
       return undefined;
     }
@@ -917,6 +982,7 @@ export default function UnifiedOpsApp() {
     "beats-performance": "Beats Performance",
     "pod-wise": "POD Wise",
     planner: "Planner",
+    planner2: "Planner2",
     analytics: "Analytics",
     production: "Production",
     details: "Details",
@@ -938,6 +1004,7 @@ export default function UnifiedOpsApp() {
               ["overview", "Editorial Funnel"],
               ["pod-wise", "POD Wise"],
               ["planner", "Planner"],
+              ["planner2", "Planner2"],
               ["analytics", "Analytics"],
               ["production", "Production"],
             ].map(([id, label]) => (
@@ -1168,6 +1235,18 @@ export default function UnifiedOpsApp() {
               <PlannerErrorBoundary>
                 <GanttTracker onPlannerSnapshotChange={setPlannerBoardSnapshot} />
               </PlannerErrorBoundary>
+            ) : null}
+
+            {activeView === "planner2" ? (
+              <div className="section-shell">
+                <Planner2Content
+                  planner2Data={planner2Data}
+                  planner2Loading={planner2Loading}
+                  planner2Error={planner2Error}
+                  onShare={copySection}
+                  copyingSection={copyingSection}
+                />
+              </div>
             ) : null}
 
             {activeView === "analytics" ? (
