@@ -275,12 +275,14 @@ export default function UnifiedOpsApp() {
     activeView === "leadership-overview" ||
     activeView === "pod-wise" ||
     activeView === "analytics" ||
+    activeView === "production" ||
     activeView === "planner2";
   const headerDateRangeDisabled =
     (activeView === "overview" && overviewLoading) ||
     (activeView === "leadership-overview" && leadershipOverviewLoading) ||
     (activeView === "pod-wise" && competitionLoading) ||
     (activeView === "analytics" && analyticsLoading && !analyticsData) ||
+    (activeView === "production" && acdMetricsLoading && !acdMetricsData) ||
     (activeView === "planner2" && planner2Loading && !planner2Data);
   const lastWeekQuickRange = useMemo(
     () =>
