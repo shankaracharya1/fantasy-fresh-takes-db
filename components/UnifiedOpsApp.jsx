@@ -229,6 +229,8 @@ export default function UnifiedOpsApp() {
   const [beatsPerformanceData, setBeatsPerformanceData] = useState(null);
   const [beatsPerformanceLoading, setBeatsPerformanceLoading] = useState(false);
   const [beatsPerformanceError, setBeatsPerformanceError] = useState("");
+  const [lastNonQuickRange, setLastNonQuickRange] = useState(DEFAULT_DASHBOARD_RANGE);
+  const [isLastWeekQuickMode, setIsLastWeekQuickMode] = useState(false);
   const normalizedHeaderRange = useMemo(
     () => buildDateRangeSelection({ ...dashboardDateRange, minDate: MIN_DASHBOARD_DATE }),
     [dashboardDateRange]
@@ -252,9 +254,29 @@ export default function UnifiedOpsApp() {
       }),
     []
   );
-  const isLastWeekSelected =
-    normalizedHeaderRange.startDate === lastWeekQuickRange.startDate &&
-    normalizedHeaderRange.endDate === lastWeekQuickRange.endDate;
+  const isLastWeekSelected = isLastWeekQuickMode;
+
+  useEffect(() => {
+    const isQuickRange =
+      normalizedHeaderRange.startDate === lastWeekQuickRange.startDate &&
+      normalizedHeaderRange.endDate === lastWeekQuickRange.endDate;
+
+    if (!isQuickRange) {
+      setLastNonQuickRange({
+        startDate: normalizedHeaderRange.startDate,
+        endDate: normalizedHeaderRange.endDate,
+      });
+      if (isLastWeekQuickMode) {
+        setIsLastWeekQuickMode(false);
+      }
+    }
+  }, [
+    normalizedHeaderRange.startDate,
+    normalizedHeaderRange.endDate,
+    lastWeekQuickRange.startDate,
+    lastWeekQuickRange.endDate,
+    isLastWeekQuickMode,
+  ]);
 
   const setPeriodLoadingState = (setter, period, value) => {
     setter((current) => ({ ...current, [period]: value }));
@@ -815,7 +837,6 @@ export default function UnifiedOpsApp() {
             {[
               ["leadership-overview", "Overview"],
               ["overview", "Editorial Funnel"],
-              ["beats-performance", "Beats Performance"],
               ["pod-wise", "POD Wise"],
               ["planner", "Planner"],
               ["analytics", "Analytics"],
@@ -856,7 +877,26 @@ export default function UnifiedOpsApp() {
                     type="button"
                     className={`app-topbar-quick-btn${isLastWeekSelected ? " is-active" : ""}`}
                     disabled={headerDateRangeDisabled}
-                    onClick={() => setDashboardDateRange(lastWeekQuickRange)}
+                    onClick={() => {
+                      if (isLastWeekSelected) {
+                        setIsLastWeekQuickMode(false);
+                        setDashboardDateRange(
+                          buildDateRangeSelection({
+                            startDate: lastNonQuickRange.startDate,
+                            endDate: lastNonQuickRange.endDate,
+                            minDate: MIN_DASHBOARD_DATE,
+                          })
+                        );
+                        return;
+                      }
+
+                      setLastNonQuickRange({
+                        startDate: normalizedHeaderRange.startDate,
+                        endDate: normalizedHeaderRange.endDate,
+                      });
+                      setIsLastWeekQuickMode(true);
+                      setDashboardDateRange(lastWeekQuickRange);
+                    }}
                   >
                     Last week
                   </button>
@@ -869,15 +909,16 @@ export default function UnifiedOpsApp() {
                       max={normalizedHeaderRange.endDate}
                       value={normalizedHeaderRange.startDate}
                       disabled={headerDateRangeDisabled}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setIsLastWeekQuickMode(false);
                         setDashboardDateRange((current) =>
                           buildDateRangeSelection({
                             startDate: event.target.value,
                             endDate: current?.endDate || normalizedHeaderRange.endDate,
                             minDate: MIN_DASHBOARD_DATE,
                           })
-                        )
-                      }
+                        );
+                      }}
                     />
                   </label>
                   <label className="app-topbar-date-field">
@@ -888,15 +929,16 @@ export default function UnifiedOpsApp() {
                       min={normalizedHeaderRange.startDate || MIN_DASHBOARD_DATE}
                       value={normalizedHeaderRange.endDate}
                       disabled={headerDateRangeDisabled}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        setIsLastWeekQuickMode(false);
                         setDashboardDateRange((current) =>
                           buildDateRangeSelection({
                             startDate: current?.startDate || normalizedHeaderRange.startDate,
                             endDate: event.target.value,
                             minDate: MIN_DASHBOARD_DATE,
                           })
-                        )
-                      }
+                        );
+                      }}
                     />
                   </label>
                 </div>

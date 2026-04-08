@@ -4,6 +4,7 @@ import {
   fetchEditorialWorkflowRows,
   fetchIdeationTabRows,
   fetchLiveWorkflowRows,
+  parseLiveDate,
   fetchProductionWorkflowRows,
   fetchReadyForProductionWorkflowRows,
   isAnalyticsEligibleProductionType,
@@ -156,7 +157,14 @@ function buildFilterOptions(beatRows) {
 function buildBeatRows(rows) {
   return (Array.isArray(rows) ? rows : [])
     .map((row, index) => {
-      const primaryDate = normalizeText(row?.completedDate || row?.assignedDate || row?.beatsAssignedDate);
+      const parsedCompletedDate = parseLiveDate(row?.completedDate);
+      const parsedAssignedDate = parseLiveDate(row?.assignedDate);
+      const parsedBeatsAssignedDate = parseLiveDate(row?.beatsAssignedDate);
+      const primaryDate =
+        parsedCompletedDate ||
+        parsedAssignedDate ||
+        parsedBeatsAssignedDate ||
+        normalizeText(row?.completedDate || row?.assignedDate || row?.beatsAssignedDate);
       const timeParts = getTimeParts(primaryDate);
       return {
         id: `beat-row-${index + 1}`,
@@ -495,7 +503,7 @@ export async function GET(request) {
       period: startDate || endDate ? "range" : period,
       selectedWeekKey: weekSelection.weekKey,
       selectedWeekRangeLabel: formatWeekRangeLabel(weekSelection.weekStart, weekSelection.weekEnd),
-      confidenceNote: "This overview is intentionally scoped to the selected date range. Longer periods can reduce confidence because stages shift over time.",
+      confidenceNote: "",
       filters: buildFilterOptions(scopedBeatRows),
       beatRows: scopedBeatRows,
       workflowRows: scopedWorkflowRows,

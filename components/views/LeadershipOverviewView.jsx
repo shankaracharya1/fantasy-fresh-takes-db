@@ -20,18 +20,35 @@ import {
   YAxis,
 } from "recharts";
 
+const FOCUS_POD_LEADS = [
+  { key: "berman", label: "Berman" },
+  { key: "roth", label: "Roth" },
+  { key: "lee", label: "Lee" },
+  { key: "gilatar", label: "Gilatar" },
+  { key: "woodward", label: "Woodward" },
+];
+
+function resolveFocusPodLabel(podLeadName) {
+  const normalized = normalizePodFilterKey(podLeadName || "");
+  for (const pod of FOCUS_POD_LEADS) {
+    if (normalized.includes(pod.key)) {
+      return pod.label;
+    }
+  }
+  return "";
+}
+
 export default function LeadershipOverviewContent({ leadershipOverviewData, leadershipOverviewLoading, leadershipOverviewError, onNavigate }) {
   const overviewData = leadershipOverviewData || null;
   const overviewLoading = Boolean(leadershipOverviewLoading);
   const overviewError = leadershipOverviewError || "";
-  const [outputMode, setOutputMode] = useState("pod");
+  const [expandedPods, setExpandedPods] = useState({});
   const beatRows = Array.isArray(overviewData?.beatRows) ? overviewData.beatRows : [];
   const workflowRows = Array.isArray(overviewData?.workflowRows) ? overviewData.workflowRows : [];
   const approvedMatchedRows = Array.isArray(overviewData?.approvedMatchedRows) ? overviewData.approvedMatchedRows : [];
   const fullGenAiRows = Array.isArray(overviewData?.fullGenAiRows) ? overviewData.fullGenAiRows : [];
   const currentWeekUpdateRows = Array.isArray(overviewData?.currentWeekUpdateRows) ? overviewData.currentWeekUpdateRows : [];
   const scopedBeatRows = beatRows;
-  const previousBeatRows = [];
   const scopedWorkflowRows = workflowRows;
   const scopedApprovedMatchedRows = approvedMatchedRows;
   const scopedFullGenAiRows = fullGenAiRows;
@@ -43,80 +60,99 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   const iterateBeats = countByStatus(scopedBeatRows, "iterate");
   const abandonedBeats = countByStatus(scopedBeatRows, "abandoned");
 
-  const deltaMetaFor = (currentValue, previousValue) => {
-    return { text: "Selected date range", color: "var(--subtle)" };
-  };
+  const buildMetricsRow = (podLeadName, writerName = "") => ({
+    podLeadName,
+    writerName,
+    ideationCount: 0,
+    deliveredCount: 0,
+    editorialCount: 0,
+    readyForProductionCount: 0,
+    productionCount: 0,
+    liveCount: 0,
+  });
 
-  const approvedBeatsDelta = deltaMetaFor(approvedBeats, countByStatus(previousBeatRows, "approved"));
-  const reviewPendingDelta = deltaMetaFor(reviewPendingBeats, countByStatus(previousBeatRows, "review_pending"));
-  const iterateDelta = deltaMetaFor(iterateBeats, countByStatus(previousBeatRows, "iterate"));
-  const abandonedDelta = deltaMetaFor(abandonedBeats, countByStatus(previousBeatRows, "abandoned"));
+  const outputData = (() => {
+    const podMap = new Map(FOCUS_POD_LEADS.map((pod) => [pod.label, buildMetricsRow(pod.label)]));
+    const writerMap = new Map();
 
-  const buildOutputRows = () => {
-    const grouped = new Map();
-
-    const ensureRow = (podLeadName, writerName) => {
-      const safePod = normalizePodFilterKey(podLeadName || "Unassigned");
-      const safeWriter = normalizePodFilterKey(writerName || "Unassigned");
-      const key = outputMode === "pod" ? safePod : `${safePod}|${safeWriter}`;
-
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          podLeadName: podLeadName || "Unassigned",
-          writerName: writerName || "Unassigned",
-          ideationCount: 0,
-          deliveredCount: 0,
-          editorialCount: 0,
-          readyForProductionCount: 0,
-          productionCount: 0,
-          liveCount: 0,
-        });
+    const getPodRow = (podLeadName) => {
+      const canonicalPod = resolveFocusPodLabel(podLeadName);
+      if (!canonicalPod) return null;
+      if (!podMap.has(canonicalPod)) {
+        podMap.set(canonicalPod, buildMetricsRow(canonicalPod));
       }
-
-      return grouped.get(key);
+      return podMap.get(canonicalPod);
     };
 
-    if (outputMode === "pod") {
-      for (const row of scopedBeatRows) {
-        ensureRow(row.podLeadName, "").ideationCount += 1;
+    const getWriterRow = (podLeadName, writerName) => {
+      const canonicalPod = resolveFocusPodLabel(podLeadName);
+      const safeWriter = String(writerName || "").trim() || "Unassigned";
+      if (!canonicalPod) return null;
+      const key = `${canonicalPod}::${normalizePodFilterKey(safeWriter)}`;
+      if (!writerMap.has(key)) {
+        writerMap.set(key, buildMetricsRow(canonicalPod, safeWriter));
       }
-      for (const row of scopedApprovedMatchedRows) {
-        ensureRow(row.podLeadName, row.writerName).deliveredCount += 1;
-      }
-      for (const row of scopedWorkflowRows) {
-        const entry = ensureRow(row.podLeadName, row.writerName);
-        if (row.source === "editorial") entry.editorialCount += 1;
-        if (row.source === "ready_for_production") entry.readyForProductionCount += 1;
-        if (row.source === "production") entry.productionCount += 1;
-        if (row.source === "live") entry.liveCount += 1;
-      }
-    } else {
-      for (const row of scopedApprovedMatchedRows) {
-        const entry = ensureRow(row.podLeadName, row.writerName);
-        entry.ideationCount += 1;
-        entry.deliveredCount += 1;
-      }
-      for (const row of scopedWorkflowRows) {
-        const entry = ensureRow(row.podLeadName, row.writerName);
-        if (row.source === "editorial") entry.editorialCount += 1;
-        if (row.source === "ready_for_production") entry.readyForProductionCount += 1;
-        if (row.source === "production") entry.productionCount += 1;
-        if (row.source === "live") entry.liveCount += 1;
+      return writerMap.get(key);
+    };
+
+    for (const row of scopedBeatRows) {
+      const podEntry = getPodRow(row.podLeadName);
+      if (podEntry) podEntry.ideationCount += 1;
+    }
+
+    for (const row of scopedApprovedMatchedRows) {
+      const podEntry = getPodRow(row.podLeadName);
+      const writerEntry = getWriterRow(row.podLeadName, row.writerName);
+      if (podEntry) podEntry.deliveredCount += 1;
+      if (writerEntry) {
+        writerEntry.deliveredCount += 1;
+        writerEntry.ideationCount += 1;
       }
     }
 
-    return Array.from(grouped.values()).sort((a, b) => {
+    for (const row of scopedWorkflowRows) {
+      const podEntry = getPodRow(row.podLeadName);
+      const writerEntry = getWriterRow(row.podLeadName, row.writerName);
+
+      const applySourceCount = (entry) => {
+        if (!entry) return;
+        if (row.source === "editorial") entry.editorialCount += 1;
+        if (row.source === "ready_for_production") entry.readyForProductionCount += 1;
+        if (row.source === "production") entry.productionCount += 1;
+        if (row.source === "live") entry.liveCount += 1;
+      };
+
+      applySourceCount(podEntry);
+      applySourceCount(writerEntry);
+    }
+
+    const sortByReadiness = (a, b) => {
+      const readinessA = Number(a.readyForProductionCount || 0) + Number(a.productionCount || 0);
+      const readinessB = Number(b.readyForProductionCount || 0) + Number(b.productionCount || 0);
+      if (readinessA !== readinessB) return readinessB - readinessA;
       const totalA =
         a.ideationCount + a.editorialCount + a.readyForProductionCount + a.productionCount + a.liveCount + a.deliveredCount;
       const totalB =
         b.ideationCount + b.editorialCount + b.readyForProductionCount + b.productionCount + b.liveCount + b.deliveredCount;
       if (totalA !== totalB) return totalB - totalA;
-      if (a.podLeadName !== b.podLeadName) return a.podLeadName.localeCompare(b.podLeadName);
-      return a.writerName.localeCompare(b.writerName);
-    });
-  };
+      return String(a.writerName || a.podLeadName).localeCompare(String(b.writerName || b.podLeadName));
+    };
 
-  const outputRows = buildOutputRows();
+    const podRows = Array.from(podMap.values()).sort(sortByReadiness);
+    const writerRowsByPod = Object.fromEntries(
+      podRows.map((podRow) => {
+        const rows = Array.from(writerMap.values())
+          .filter((writerRow) => writerRow.podLeadName === podRow.podLeadName)
+          .sort(sortByReadiness);
+        return [podRow.podLeadName, rows];
+      })
+    );
+
+    return { podRows, writerRowsByPod };
+  })();
+  const allPodsExpanded =
+    outputData.podRows.length > 0 &&
+    outputData.podRows.every((row) => Boolean(expandedPods[row.podLeadName]));
 
   const throughputByAcd = Array.from(
     scopedWorkflowRows
@@ -178,35 +214,26 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
     }))
     .sort((a, b) => b.attempts - a.attempts || a.showName.localeCompare(b.showName) || a.beatName.localeCompare(b.beatName));
 
-  const renderLinkMetricCard = ({ label, value, delta, onClick }) => (
-    <button type="button" className="metric-card hero-card overview-link-card" onClick={onClick} title="Click to open">
-      <div className="metric-label">{label}</div>
-      <div className="metric-value">{value}</div>
-      <div className="metric-hint overview-card-delta" style={{ color: delta.color }}>
-        {delta.text}
-      </div>
-    </button>
-  );
+  const beatsMetricCards = [
+    { label: "Approved Beats", value: overviewLoading ? "..." : formatMetricValue(approvedBeats) },
+    { label: "Review Pending", value: overviewLoading ? "..." : formatMetricValue(reviewPendingBeats) },
+    { label: "Iterate", value: overviewLoading ? "..." : formatMetricValue(iterateBeats) },
+    { label: "Abandoned", value: overviewLoading ? "..." : formatMetricValue(abandonedBeats) },
+  ];
 
   return (
     <div className="section-stack overview-flow-shell">
       {overviewError ? <div className="warning-note">{overviewError}</div> : null}
 
-      <div className="overview-hero">
-        <div className="overview-hero-copy">
-          <div className="overview-hero-kicker">PRD-aligned leadership view</div>
-          <div className="overview-hero-title">One place to track beats, output, production movement, and Gen AI readiness.</div>
-          <div className="overview-hero-subtitle">
-            The flow follows the PRD directly: beats first, then POD and writer output, then production throughput, Full Gen AI, and a mid-week progress view.
+      {(selectedRangeLabel || overviewData?.confidenceNote) ? (
+        <>
+          <div className="overview-hero-actions" style={{ marginTop: 2 }}>
+            {selectedRangeLabel ? <div className="overview-range-pill">{selectedRangeLabel}</div> : null}
+            {overviewData?.confidenceNote ? <div className="overview-confidence-note">{overviewData.confidenceNote}</div> : null}
           </div>
-        </div>
-        <div className="overview-hero-actions">
-          <div className="overview-range-pill">{selectedRangeLabel || "Select a date range"}</div>
-          {overviewData?.confidenceNote ? <div className="overview-confidence-note">{overviewData.confidenceNote}</div> : null}
-        </div>
-      </div>
-
-      <hr className="section-divider" />
+          <hr className="section-divider" />
+        </>
+      ) : null}
 
       <section className="overview-flow-section">
         <div className="overview-section-head">
@@ -214,13 +241,19 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
             <div className="overview-section-kicker">Section 1</div>
             <div className="overview-section-title">Beats</div>
           </div>
-          <div className="overview-section-note">Readiness view: focus on approval and blockers for the selected range.</div>
+          <div className="overview-section-actions">
+            <button type="button" className="ghost-button overview-section-link" onClick={() => onNavigate?.("beats-performance")}>
+              Open expanded beat view
+            </button>
+          </div>
         </div>
-        <div className="metric-grid four-col">
-          {renderLinkMetricCard({ label: "Approved Beats", value: overviewLoading ? "..." : formatMetricValue(approvedBeats), delta: approvedBeatsDelta, onClick: () => onNavigate?.("beats-performance") })}
-          {renderLinkMetricCard({ label: "Review Pending", value: overviewLoading ? "..." : formatMetricValue(reviewPendingBeats), delta: reviewPendingDelta, onClick: () => onNavigate?.("beats-performance") })}
-          {renderLinkMetricCard({ label: "Iterate", value: overviewLoading ? "..." : formatMetricValue(iterateBeats), delta: iterateDelta, onClick: () => onNavigate?.("beats-performance") })}
-          {renderLinkMetricCard({ label: "Abandoned", value: overviewLoading ? "..." : formatMetricValue(abandonedBeats), delta: abandonedDelta, onClick: () => onNavigate?.("beats-performance") })}
+        <div className="pod-summary-grid">
+          {beatsMetricCards.map((card) => (
+            <div key={card.label} className="metric-card">
+              <div className="metric-label">{card.label}</div>
+              <div className="metric-value">{card.value}</div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -233,52 +266,95 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
             <div className="overview-section-title">Writer and POD output</div>
           </div>
           <div className="overview-section-actions">
-            <div className="week-toggle-group">
-              {[
-                ["pod", "POD"],
-                ["writer", "Writer"],
-              ].map(([id, label]) => (
-                <button key={id} type="button" className={outputMode === id ? "is-active" : ""} onClick={() => setOutputMode(id)}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="ghost-button overview-section-link" onClick={() => onNavigate?.("pod-wise")}>
-              Open POD Wise
+            <div className="overview-section-note">Click a POD row to expand writer-level details inline.</div>
+            <button
+              type="button"
+              className="ghost-button overview-section-link"
+              onClick={() =>
+                setExpandedPods(
+                  allPodsExpanded
+                    ? {}
+                    : Object.fromEntries(outputData.podRows.map((row) => [row.podLeadName, true]))
+                )
+              }
+            >
+              {allPodsExpanded ? "Collapse all pods" : "Open POD Wise"}
             </button>
           </div>
         </div>
         <div className="table-wrap">
-          <table className="ops-table overview-table">
+          <table className="ops-table overview-table overview-output-table">
+            <colgroup>
+              <col style={{ width: "28%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "15%" }} />
+              <col style={{ width: "15%" }} />
+            </colgroup>
             <thead>
               <tr>
-                <th>{outputMode === "pod" ? "POD" : "POD"}</th>
-                {outputMode === "writer" ? <th>Writer</th> : null}
+                <th>POD / Writer</th>
                 <th>Ideation</th>
                 <th>Editorial</th>
                 <th>Ready for Production</th>
                 <th>Production</th>
                 <th>Live</th>
-                <th>Delivered</th>
               </tr>
             </thead>
             <tbody>
-              {outputRows.length > 0 ? (
-                outputRows.map((row) => (
-                  <tr key={`${row.podLeadName}-${row.writerName}`}>
-                    <td>{row.podLeadName || "-"}</td>
-                    {outputMode === "writer" ? <td>{row.writerName || "-"}</td> : null}
-                    <td>{formatMetricValue(row.ideationCount)}</td>
-                    <td>{formatMetricValue(row.editorialCount)}</td>
-                    <td>{formatMetricValue(row.readyForProductionCount)}</td>
-                    <td>{formatMetricValue(row.productionCount)}</td>
-                    <td>{formatMetricValue(row.liveCount)}</td>
-                    <td>{formatMetricValue(row.deliveredCount)}</td>
-                  </tr>
-                ))
+              {outputData.podRows.length > 0 ? (
+                outputData.podRows.flatMap((podRow) => {
+                  const isExpanded = Boolean(expandedPods[podRow.podLeadName]);
+                  const writerRows = outputData.writerRowsByPod[podRow.podLeadName] || [];
+                  const podTr = (
+                    <tr key={`pod-${podRow.podLeadName}`} style={{ fontWeight: 700 }}>
+                      <td>
+                        <button
+                          type="button"
+                          className="as-link"
+                          onClick={() =>
+                            setExpandedPods((current) => ({
+                              ...current,
+                              [podRow.podLeadName]: !current[podRow.podLeadName],
+                            }))
+                          }
+                          style={{
+                            padding: 0,
+                            border: "none",
+                            background: "transparent",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {isExpanded ? "▾" : "▸"} {podRow.podLeadName || "-"}
+                        </button>
+                      </td>
+                      <td>{formatMetricValue(podRow.ideationCount)}</td>
+                      <td>{formatMetricValue(podRow.editorialCount)}</td>
+                      <td>{formatMetricValue(podRow.readyForProductionCount)}</td>
+                      <td>{formatMetricValue(podRow.productionCount)}</td>
+                      <td>{formatMetricValue(podRow.liveCount)}</td>
+                    </tr>
+                  );
+
+                  const writerTrs = isExpanded
+                    ? writerRows.map((writerRow) => (
+                        <tr key={`writer-${podRow.podLeadName}-${writerRow.writerName}`}>
+                          <td style={{ paddingLeft: 34, color: "var(--subtle)" }}>• {writerRow.writerName || "-"}</td>
+                          <td>{formatMetricValue(writerRow.ideationCount)}</td>
+                          <td>{formatMetricValue(writerRow.editorialCount)}</td>
+                          <td>{formatMetricValue(writerRow.readyForProductionCount)}</td>
+                          <td>{formatMetricValue(writerRow.productionCount)}</td>
+                          <td>{formatMetricValue(writerRow.liveCount)}</td>
+                        </tr>
+                      ))
+                    : [];
+
+                  return [podTr, ...writerTrs];
+                })
               ) : (
                 <tr>
-                  <td colSpan={outputMode === "writer" ? "8" : "7"}>No output rows available for this filter yet.</td>
+                  <td colSpan="6">No output rows available for this filter yet.</td>
                 </tr>
               )}
             </tbody>
