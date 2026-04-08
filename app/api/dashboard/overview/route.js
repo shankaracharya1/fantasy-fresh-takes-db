@@ -175,6 +175,15 @@ function buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows) {
   });
 
   const podMap = new Map();
+  const resolveReadinessStage = ({ wipCount = 0, reviewWithClCount = 0, onTrackCount = 0 } = {}) => {
+    const pairs = [
+      ["WIP", Number(wipCount || 0)],
+      ["Review with CL", Number(reviewWithClCount || 0)],
+      ["On Track", Number(onTrackCount || 0)],
+    ].sort((a, b) => b[1] - a[1]);
+    if ((pairs[0]?.[1] || 0) <= 0) return "No stage yet";
+    return pairs[0][0];
+  };
   const ensurePod = (podLeadName) => {
     const podName = normalizeText(podLeadName) || "Unknown POD";
     if (!podMap.has(podName)) {
@@ -185,6 +194,7 @@ function buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows) {
         wipCount: 0,
         reviewWithClCount: 0,
         onTrackCount: 0,
+        readinessStage: "No stage yet",
         thuStatusMessage: "Needs Thursday update",
         writerRows: [],
       });
@@ -206,6 +216,7 @@ function buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows) {
         wipCount: 0,
         reviewWithClCount: 0,
         onTrackCount: 0,
+        readinessStage: "No stage yet",
       });
     }
     return writerMap.get(key);
@@ -281,12 +292,17 @@ function buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows) {
   }
 
   for (const pod of podMap.values()) {
+    pod.readinessStage = resolveReadinessStage(pod);
     pod.writerRows.sort(
       (a, b) =>
         b.lwProductionCount - a.lwProductionCount ||
         b.onTrackCount - a.onTrackCount ||
         a.writerName.localeCompare(b.writerName)
     );
+    pod.writerRows = pod.writerRows.map((writer) => ({
+      ...writer,
+      readinessStage: resolveReadinessStage(writer),
+    }));
   }
 
   return Array.from(podMap.values()).sort(

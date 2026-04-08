@@ -85,6 +85,7 @@ function EditorialPodThroughputTable({ rows = [] }) {
               <th>WIP</th>
               <th>Review with CL</th>
               <th>On track for next week</th>
+              <th>NW readiness stage</th>
               <th>Thu status</th>
             </tr>
           </thead>
@@ -114,6 +115,7 @@ function EditorialPodThroughputTable({ rows = [] }) {
                     <td>{formatMetricValue(row.wipCount)}</td>
                     <td>{formatMetricValue(row.reviewWithClCount)}</td>
                     <td>{formatMetricValue(row.onTrackCount)}</td>
+                    <td>{row.readinessStage || "-"}</td>
                     <td>{row.thuStatusMessage || "-"}</td>
                   </tr>
                 );
@@ -127,6 +129,7 @@ function EditorialPodThroughputTable({ rows = [] }) {
                         <td>{formatMetricValue(writer.wipCount)}</td>
                         <td>{formatMetricValue(writer.reviewWithClCount)}</td>
                         <td>{formatMetricValue(writer.onTrackCount)}</td>
+                        <td>{writer.readinessStage || "-"}</td>
                         <td>-</td>
                       </tr>
                     ))
@@ -136,7 +139,7 @@ function EditorialPodThroughputTable({ rows = [] }) {
               })
             ) : (
               <tr>
-                <td colSpan="7">No POD throughput rows available yet.</td>
+                <td colSpan="8">No POD throughput rows available yet.</td>
               </tr>
             )}
           </tbody>
