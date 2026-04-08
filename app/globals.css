@@ -38,15 +38,15 @@
 
   --green: #ff4d00;
   --green-bg: rgba(255, 77, 0, 0.11);
-  --amber: #ff8a00;
-  --amber-bg: rgba(255, 138, 0, 0.12);
+  --amber: #e53935;
+  --amber-bg: rgba(229, 57, 53, 0.12);
   --red: #d93636;
   --red-bg: rgba(217, 54, 54, 0.12);
-  --gold: #ff8a00;
+  --gold: #e53935;
 
   --indigo: #1f1f1f;
   --indigo-glow: rgba(31, 31, 31, 0.08);
-  --gold-glow: rgba(255, 138, 0, 0.12);
+  --gold-glow: rgba(229, 57, 53, 0.12);
   --red-glow: rgba(217, 54, 54, 0.1);
 
   --gray-bg: #f4f0ea;
@@ -96,15 +96,15 @@
 
   --green: #ff7a42;
   --green-bg: rgba(255, 122, 66, 0.16);
-  --amber: #ffb347;
-  --amber-bg: rgba(255, 179, 71, 0.16);
+  --amber: #ff4d4f;
+  --amber-bg: rgba(255, 77, 79, 0.16);
   --red: #ff6b6b;
   --red-bg: rgba(255, 107, 107, 0.16);
-  --gold: #ffb347;
+  --gold: #ff4d4f;
 
   --indigo: #f4f4f6;
   --indigo-glow: rgba(244, 244, 246, 0.2);
-  --gold-glow: rgba(255, 179, 71, 0.2);
+  --gold-glow: rgba(255, 77, 79, 0.2);
   --red-glow: rgba(255, 107, 107, 0.2);
 
   --gray-bg: #1a1512;
