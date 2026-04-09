@@ -420,6 +420,7 @@ function buildCurrentWeekPayload(plannerState, { liveRows = [], ideationRows = [
     plannerState.weekSelection.weekStart,
     plannerState.weekSelection.weekEnd
   );
+  const editorialPodRows = buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows);
 
   return {
     ok: true,
@@ -454,6 +455,7 @@ function buildCurrentWeekPayload(plannerState, { liveRows = [], ideationRows = [
     writingEmptyMessage: timing.writingEmptyMessage,
     clReviewEmptyMessage: timing.clReviewEmptyMessage,
     podThroughputRows,
+    editorialPodRows,
     ideationSourceError,
   };
 }

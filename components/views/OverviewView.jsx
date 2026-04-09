@@ -62,6 +62,64 @@ function getHitRateColor(rate) {
   return "#9f2e2e";
 }
 
+function StagePill({ count, label, color, bg }) {
+  if (!count) return null;
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      fontSize: 11, fontWeight: 600, borderRadius: 5,
+      padding: "2px 7px", background: bg, color, marginRight: 5,
+    }}>
+      {count} <span style={{ fontWeight: 400, opacity: 0.8 }}>{label}</span>
+    </span>
+  );
+}
+
+function PodEditorialStatusTable({ rows = [], loading = false }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>POD production status</div>
+      <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
+        LW production · FT · GA/GI · approved beats only &nbsp;·&nbsp; This week stage from planner
+      </div>
+      <div className="table-wrap">
+        <table className="ops-table overview-table">
+          <thead>
+            <tr>
+              <th>POD</th>
+              <th style={{ textAlign: "center" }}>LW Prod</th>
+              <th>This week stage breakdown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="3" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+            ) : safeRows.length === 0 ? (
+              <tr><td colSpan="3" style={{ color: "var(--subtle)" }}>No data yet for this period.</td></tr>
+            ) : safeRows.map((pod) => (
+              <tr key={pod.podLeadName}>
+                <td style={{ fontWeight: 600 }}>{pod.podLeadName}</td>
+                <td style={{ textAlign: "center", fontWeight: 700, color: "#2d5a3d", fontSize: 15 }}>
+                  {pod.lwProductionCount || 0}
+                </td>
+                <td>
+                  <StagePill count={pod.onTrackCount} label="On Track" color="#2d5a3d" bg="#e8f4ea" />
+                  <StagePill count={pod.reviewWithClCount} label="Review w/ CL" color="#7c6bbf" bg="#f0edfb" />
+                  <StagePill count={pod.wipCount} label="WIP" color="#9f6b15" bg="#fdf5e4" />
+                  {!pod.onTrackCount && !pod.reviewWithClCount && !pod.wipCount && (
+                    <span style={{ color: "var(--subtle)", fontSize: 11 }}>No beats assigned</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function ScriptTypeBadges({ ftCount = 0, rwLargeCount = 0, rwSmallCount = 0, rwOtherCount = 0, compact = false }) {
   const rwTotal = rwLargeCount + rwSmallCount + rwOtherCount;
   const parts = [];
@@ -516,6 +574,7 @@ export default function OverviewContent({
   const weekLabel = overviewData?.weekLabel || "";
   const selectionMode = String(overviewData?.selectionMode || "");
   const podThroughputRows = Array.isArray(overviewData?.podThroughputRows) ? overviewData.podThroughputRows : [];
+  const editorialPodRows = Array.isArray(overviewData?.editorialPodRows) ? overviewData.editorialPodRows : [];
 
   return (
     <ShareablePanel
@@ -541,7 +600,13 @@ export default function OverviewContent({
         {(() => {
           const throughputTable = <PodThroughputRankingTable rows={podThroughputRows} loading={overviewLoading} />;
           if (selectionMode === "editorial_funnel") {
-            return <OverviewCurrentWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} middleSlot={throughputTable} />;
+            const middleSlot = (
+              <>
+                <PodEditorialStatusTable rows={editorialPodRows} loading={overviewLoading} />
+                {throughputTable}
+              </>
+            );
+            return <OverviewCurrentWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} middleSlot={middleSlot} />;
           }
           if (selectionMode === "planned") {
             return <OverviewNextWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} middleSlot={throughputTable} />;
