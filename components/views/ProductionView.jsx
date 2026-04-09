@@ -436,6 +436,7 @@ export default function ProductionContent({
   );
   const filteredCdsAffected = new Set(filteredAdherenceIssueRows.map((row) => row.cdName || "")).size;
   const pipelineRows = Array.isArray(acdMetricsData?.pipelineRows) ? acdMetricsData.pipelineRows : [];
+  const pipelineSummary = acdMetricsData?.pipelineSummary || null;
 
   return (
     <div className="section-stack">
@@ -447,33 +448,89 @@ export default function ProductionContent({
         </div>
       ))}
 
-      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid var(--border)", marginBottom: 4 }} data-share-ignore="true">
-        {[["pipeline", "Production Pipeline"], ["throughput", "Production Throughput"]].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setProductionSubView(id)}
-            style={{
-              padding: "10px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-              background: "transparent", border: "none",
-              borderBottom: productionSubView === id ? "2px solid var(--accent)" : "2px solid transparent",
-              color: productionSubView === id ? "var(--accent)" : "var(--subtle)",
-              marginBottom: -2,
-            }}
-          >
-            {label}
-          </button>
-        ))}
+      <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }} data-share-ignore="true">
+        <div style={{
+          display: "inline-flex", borderRadius: 999, padding: 4,
+          background: "var(--bg-deep)", border: "1px solid var(--border)",
+        }}>
+          {[["pipeline", "Production Pipeline"], ["throughput", "Production Throughput"]].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setProductionSubView(id)}
+              style={{
+                padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                borderRadius: 999, border: "none",
+                background: productionSubView === id ? "var(--panel)" : "transparent",
+                color: productionSubView === id ? "var(--ink)" : "var(--subtle)",
+                boxShadow: productionSubView === id ? "0 1px 4px rgba(0,0,0,0.10)" : "none",
+                transition: "all 150ms ease",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {productionSubView === "pipeline" && (
         <ShareablePanel shareLabel="Production Pipeline" onShare={onShare} isSharing={copyingSection === "Production Pipeline"}>
-          <div className="panel-head panel-head-tight">
-            <div>
-              <div className="panel-title">Production Pipeline</div>
-              <div className="panel-statline">Scripts currently in the Production tracker sheet, grouped by POD</div>
+          <div style={{ background: "#2d5a3d", padding: "18px 24px", borderRadius: "10px 10px 0 0", marginBottom: 0 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>
+              Production Pipeline Dashboard
             </div>
           </div>
+
+          {pipelineSummary && (
+            <div style={{ padding: "20px 24px 8px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--subtle)", marginBottom: 12 }}>
+                Pipeline Overview
+              </div>
+              <table style={{ borderCollapse: "collapse", width: "auto" }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: "6px 24px 6px 0", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#3b6bdb", textAlign: "center", borderRight: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>Editorial</th>
+                    <th style={{ padding: "6px 24px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6741d9", textAlign: "center", borderRight: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>Ready for Prod</th>
+                    <th style={{ padding: "6px 24px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#c2601e", textAlign: "center", borderRight: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>In Production</th>
+                    <th style={{ padding: "6px 0 6px 24px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#2d5a3d", textAlign: "center", borderBottom: "1px solid var(--border)" }}>Live</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={{ padding: "10px 24px 10px 0", textAlign: "center", borderRight: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: 32, fontWeight: 800, color: "#3b6bdb", lineHeight: 1 }}>{pipelineSummary.editorial.total}</div>
+                      {(pipelineSummary.editorial.ft > 0 || pipelineSummary.editorial.rw > 0) && (
+                        <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>
+                          {pipelineSummary.editorial.ft} FT · {pipelineSummary.editorial.rw} RW
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px 24px", textAlign: "center", borderRight: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: 32, fontWeight: 800, color: "#6741d9", lineHeight: 1 }}>{pipelineSummary.readyForProd.total}</div>
+                      {(pipelineSummary.readyForProd.ft > 0 || pipelineSummary.readyForProd.rw > 0) && (
+                        <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>
+                          {pipelineSummary.readyForProd.ft} FT · {pipelineSummary.readyForProd.rw} RW
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px 24px", textAlign: "center", borderRight: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: 32, fontWeight: 800, color: "#c2601e", lineHeight: 1 }}>{pipelineSummary.inProduction.total}</div>
+                      {(pipelineSummary.inProduction.ft > 0 || pipelineSummary.inProduction.rw > 0) && (
+                        <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>
+                          {pipelineSummary.inProduction.ft} FT · {pipelineSummary.inProduction.rw} RW
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px 0 10px 24px", textAlign: "center" }}>
+                      <div style={{ fontSize: 32, fontWeight: 800, color: "#2d5a3d", lineHeight: 1 }}>{formatNumber(pipelineSummary.live)}</div>
+                      <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>assets</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <ProductionPipelineTable rows={pipelineRows} loading={acdMetricsLoading} />
         </ShareablePanel>
       )}

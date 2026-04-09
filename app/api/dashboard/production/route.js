@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { NextResponse } from "next/server";
-import { buildProductionMetricsFromLiveTab, buildProductionMetricsFromLiveTabRange, fetchLiveTabRows, fetchProductionWorkflowRows, normalizePodLeadName } from "../../../../lib/live-tab.js";
+import { buildProductionMetricsFromLiveTab, buildProductionMetricsFromLiveTabRange, fetchEditorialWorkflowRows, fetchLiveTabRows, fetchProductionWorkflowRows, fetchReadyForProductionWorkflowRows, normalizePodLeadName } from "../../../../lib/live-tab.js";
 import { buildDateRangeSelection, formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
 
 const require = createRequire(import.meta.url);
@@ -265,6 +265,24 @@ function classifyFtRw(reworkType) {
   return "rw";
 }
 
+function buildPipelineSummary(editorialRows, rfpRows, productionRows, liveAssetCount) {
+  const tally = (rows) => {
+    let ft = 0, rw = 0;
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const type = classifyFtRw(row?.reworkType);
+      if (type === "ft") ft++;
+      else if (type === "rw") rw++;
+    }
+    return { total: (Array.isArray(rows) ? rows : []).length, ft, rw };
+  };
+  return {
+    editorial: tally(editorialRows),
+    readyForProd: tally(rfpRows),
+    inProduction: tally(productionRows),
+    live: Number(liveAssetCount || 0),
+  };
+}
+
 function buildProductionPipelineRows(workflowRows) {
   const podMap = new Map();
 
@@ -349,11 +367,13 @@ export async function GET(request) {
       });
     }
 
-    const [liveTabResult, acdRowsResult, acdSyncRowsResult, workflowResult] = await Promise.allSettled([
+    const [liveTabResult, acdRowsResult, acdSyncRowsResult, workflowResult, editorialResult, rfpResult] = await Promise.allSettled([
       fetchLiveTabRows(),
       fetchAcdProductivityRows(),
       fetchAcdLiveSyncRows(),
       fetchProductionWorkflowRows(),
+      fetchEditorialWorkflowRows(),
+      fetchReadyForProductionWorkflowRows(),
     ]);
 
     let sourceFilterWarning = "";
@@ -412,9 +432,16 @@ export async function GET(request) {
       throw new Error("Unable to load Production dashboard data.");
     }
 
-    const pipelineRows = workflowResult.status === "fulfilled"
-      ? buildProductionPipelineRows(workflowResult.value?.rows || [])
-      : [];
+    const prodWorkflowRows = workflowResult.status === "fulfilled" ? (workflowResult.value?.rows || []) : [];
+    const editorialWorkflowRows = editorialResult.status === "fulfilled" ? (editorialResult.value?.rows || []) : [];
+    const rfpWorkflowRows = rfpResult.status === "fulfilled" ? (rfpResult.value?.rows || []) : [];
+    const pipelineRows = buildProductionPipelineRows(prodWorkflowRows);
+    const pipelineSummary = buildPipelineSummary(
+      editorialWorkflowRows,
+      rfpWorkflowRows,
+      prodWorkflowRows,
+      productionMetrics.productionTeamOutput?.liveAssetCount
+    );
 
     return NextResponse.json({
       ok: true,
@@ -432,6 +459,7 @@ export async function GET(request) {
       acdChartRows,
       acdPairRows,
       pipelineRows,
+      pipelineSummary,
       productionTeamOutput: productionMetrics.productionTeamOutput,
       tatSummary: productionMetrics.tatSummary,
       tatRows: productionMetrics.tatRows,
