@@ -582,7 +582,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange, includeNewShowsPod, overviewData]);
+  }, [activeView, dashboardDateRange, includeNewShowsPod]);
 
   useEffect(() => {
     if (activeView !== "leadership-overview") {
@@ -639,7 +639,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange, leadershipOverviewData]);
+  }, [activeView, dashboardDateRange]);
 
   useEffect(() => {
     if (activeView !== "pod-wise" || podWiseView !== "performance") {
@@ -696,7 +696,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, podWiseView, dashboardDateRange, competitionData, podPerformanceRangeMode, podPerformanceScope]);
+  }, [activeView, podWiseView, dashboardDateRange, podPerformanceRangeMode, podPerformanceScope]);
 
   useEffect(() => {
     if (activeView !== "pod-wise" || podWiseView !== "tasks") {
@@ -884,7 +884,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange, planner2Data]);
+  }, [activeView, dashboardDateRange]);
 
   useEffect(() => {
     if (activeView !== "analytics") {
@@ -941,7 +941,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange, analyticsData]);
+  }, [activeView, dashboardDateRange]);
 
   async function requestAcdMetrics(cancelState = null) {
     if (!cancelState?.cancelled) {
