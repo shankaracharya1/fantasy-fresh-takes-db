@@ -265,20 +265,33 @@ function classifyFtRw(reworkType) {
   return "rw";
 }
 
-function buildPipelineSummary(editorialRows, rfpRows, productionRows, liveAssetCount) {
-  const tally = (rows) => {
+function buildPipelineSummary(editorialRows, rfpRows, productionRows, liveAssetCount, { startDate, endDate } = {}) {
+  const inRange = (date) => {
+    if (!date) return false;
+    const d = String(date).slice(0, 10);
+    if (startDate && d < startDate) return false;
+    if (endDate && d > endDate) return false;
+    return true;
+  };
+
+  const tally = (rows, dateField) => {
+    const filtered = (Array.isArray(rows) ? rows : []).filter((row) => {
+      if (!startDate) return true;
+      return inRange(row?.[dateField]);
+    });
     let ft = 0, rw = 0;
-    for (const row of Array.isArray(rows) ? rows : []) {
+    for (const row of filtered) {
       const type = classifyFtRw(row?.reworkType);
       if (type === "ft") ft++;
       else if (type === "rw") rw++;
     }
-    return { total: (Array.isArray(rows) ? rows : []).length, ft, rw };
+    return { total: filtered.length, ft, rw };
   };
+
   return {
-    editorial: tally(editorialRows),
-    readyForProd: tally(rfpRows),
-    inProduction: tally(productionRows),
+    editorial: tally(editorialRows, "dateAssigned"),
+    readyForProd: tally(rfpRows, "etaToStartProd"),
+    inProduction: tally(productionRows, "etaToStartProd"),
     live: Number(liveAssetCount || 0),
   };
 }
@@ -440,7 +453,8 @@ export async function GET(request) {
       editorialWorkflowRows,
       rfpWorkflowRows,
       prodWorkflowRows,
-      productionMetrics.productionTeamOutput?.liveAssetCount
+      productionMetrics.productionTeamOutput?.liveAssetCount,
+      { startDate: useExplicitRange ? rangeSelection.startDate : weekSelection.weekStart, endDate: useExplicitRange ? rangeSelection.endDate : weekSelection.weekEnd }
     );
 
     return NextResponse.json({

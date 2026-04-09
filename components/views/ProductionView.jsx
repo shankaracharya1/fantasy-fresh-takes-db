@@ -378,10 +378,47 @@ function classifyFtRw(reworkType) {
 
 // ─── View ─────────────────────────────────────────────────────────────────────
 
+function PipelineStageCard({ label, total, ft, rw, loading, accentColor, bgColor }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        flex: 1, minWidth: 140,
+        background: "var(--panel)",
+        border: `1.5px solid ${accentColor}33`,
+        borderRadius: 12,
+        padding: "18px 20px",
+        textAlign: "center",
+        cursor: "default",
+        transform: hovered ? "scale(1.045) translateY(-2px)" : "scale(1) translateY(0)",
+        boxShadow: hovered ? `0 8px 24px ${accentColor}22` : "0 1px 4px rgba(0,0,0,0.06)",
+        transition: "transform 180ms ease, box-shadow 180ms ease",
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: accentColor, marginBottom: 8 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 36, fontWeight: 800, color: accentColor, lineHeight: 1 }}>
+        {loading ? "—" : (total ?? 0)}
+      </div>
+      {!loading && (ft > 0 || rw > 0) && (
+        <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 6, display: "flex", justifyContent: "center", gap: 8 }}>
+          <span style={{ background: "#e8f4ea", color: "#2d5a3d", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>FT:{ft}</span>
+          <span style={{ background: "#fdf0e6", color: "#c2601e", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>RW:{rw}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ProductionContent({
   acdMetricsData,
   acdMetricsLoading,
   acdMetricsError,
+  productionPipelineData,
+  productionPipelineLoading,
   acdTimeView,
   onTimeViewChange,
   acdViewType,
@@ -435,8 +472,8 @@ export default function ProductionContent({
     0
   );
   const filteredCdsAffected = new Set(filteredAdherenceIssueRows.map((row) => row.cdName || "")).size;
-  const pipelineRows = Array.isArray(acdMetricsData?.pipelineRows) ? acdMetricsData.pipelineRows : [];
-  const pipelineSummary = acdMetricsData?.pipelineSummary || null;
+  const pipelineRows = Array.isArray(productionPipelineData?.pipelineRows) ? productionPipelineData.pipelineRows : [];
+  const pipelineSummary = productionPipelineData?.pipelineSummary || null;
 
   return (
     <div className="section-stack">
@@ -481,57 +518,47 @@ export default function ProductionContent({
             </div>
           </div>
 
-          {pipelineSummary && (
-            <div style={{ padding: "20px 24px 8px", borderBottom: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--subtle)", marginBottom: 12 }}>
-                Pipeline Overview
-              </div>
-              <table style={{ borderCollapse: "collapse", width: "auto" }}>
-                <thead>
-                  <tr>
-                    <th style={{ padding: "6px 24px 6px 0", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#3b6bdb", textAlign: "center", borderRight: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>Editorial</th>
-                    <th style={{ padding: "6px 24px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6741d9", textAlign: "center", borderRight: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>Ready for Prod</th>
-                    <th style={{ padding: "6px 24px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#c2601e", textAlign: "center", borderRight: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>In Production</th>
-                    <th style={{ padding: "6px 0 6px 24px", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#2d5a3d", textAlign: "center", borderBottom: "1px solid var(--border)" }}>Live</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td style={{ padding: "10px 24px 10px 0", textAlign: "center", borderRight: "1px solid var(--border)" }}>
-                      <div style={{ fontSize: 32, fontWeight: 800, color: "#3b6bdb", lineHeight: 1 }}>{pipelineSummary.editorial.total}</div>
-                      {(pipelineSummary.editorial.ft > 0 || pipelineSummary.editorial.rw > 0) && (
-                        <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>
-                          {pipelineSummary.editorial.ft} FT · {pipelineSummary.editorial.rw} RW
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: "10px 24px", textAlign: "center", borderRight: "1px solid var(--border)" }}>
-                      <div style={{ fontSize: 32, fontWeight: 800, color: "#6741d9", lineHeight: 1 }}>{pipelineSummary.readyForProd.total}</div>
-                      {(pipelineSummary.readyForProd.ft > 0 || pipelineSummary.readyForProd.rw > 0) && (
-                        <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>
-                          {pipelineSummary.readyForProd.ft} FT · {pipelineSummary.readyForProd.rw} RW
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: "10px 24px", textAlign: "center", borderRight: "1px solid var(--border)" }}>
-                      <div style={{ fontSize: 32, fontWeight: 800, color: "#c2601e", lineHeight: 1 }}>{pipelineSummary.inProduction.total}</div>
-                      {(pipelineSummary.inProduction.ft > 0 || pipelineSummary.inProduction.rw > 0) && (
-                        <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>
-                          {pipelineSummary.inProduction.ft} FT · {pipelineSummary.inProduction.rw} RW
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: "10px 0 10px 24px", textAlign: "center" }}>
-                      <div style={{ fontSize: 32, fontWeight: 800, color: "#2d5a3d", lineHeight: 1 }}>{formatNumber(pipelineSummary.live)}</div>
-                      <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>assets</div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+          <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--subtle)", marginBottom: 14 }}>
+              Pipeline Overview
             </div>
-          )}
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+              <PipelineStageCard
+                label="Editorial"
+                total={pipelineSummary?.editorial.total}
+                ft={pipelineSummary?.editorial.ft}
+                rw={pipelineSummary?.editorial.rw}
+                loading={productionPipelineLoading}
+                accentColor="#3b6bdb"
+              />
+              <PipelineStageCard
+                label="Ready for Prod"
+                total={pipelineSummary?.readyForProd.total}
+                ft={pipelineSummary?.readyForProd.ft}
+                rw={pipelineSummary?.readyForProd.rw}
+                loading={productionPipelineLoading}
+                accentColor="#6741d9"
+              />
+              <PipelineStageCard
+                label="In Production"
+                total={pipelineSummary?.inProduction.total}
+                ft={pipelineSummary?.inProduction.ft}
+                rw={pipelineSummary?.inProduction.rw}
+                loading={productionPipelineLoading}
+                accentColor="#c2601e"
+              />
+              <PipelineStageCard
+                label="Live"
+                total={pipelineSummary?.live}
+                ft={0}
+                rw={0}
+                loading={productionPipelineLoading}
+                accentColor="#2d5a3d"
+              />
+            </div>
+          </div>
 
-          <ProductionPipelineTable rows={pipelineRows} loading={acdMetricsLoading} />
+          <ProductionPipelineTable rows={pipelineRows} loading={productionPipelineLoading} />
         </ShareablePanel>
       )}
 
