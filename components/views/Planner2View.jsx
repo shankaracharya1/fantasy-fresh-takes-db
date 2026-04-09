@@ -150,6 +150,8 @@ function StageBar({ stageId, isStart, isEnd }) {
   );
 }
 
+const PLANNER2_STAGE_LEGEND = ["writing", "cl_review", "production", "live_on_meta", "beats_ideation"];
+
 export default function Planner2Content({
   planner2Data,
   planner2Loading,
@@ -333,14 +335,31 @@ export default function Planner2Content({
           ))}
         </div>
 
+        <div className="planner2-clean-layer">
+          <div className="planner2-clean-label">Stage key</div>
+          <div className="planner2-clean-legends">
+            {PLANNER2_STAGE_LEGEND.map((stageId) => {
+              const stage = STAGE_MAP[stageId];
+              if (!stage) return null;
+              return (
+                <span key={stageId} className="planner2-clean-chip" style={{ background: stage.color }}>
+                  {stage.label}
+                </span>
+              );
+            })}
+            <span className="planner2-clean-chip planner2-clean-chip-live">Live this week</span>
+            <span className="planner2-clean-chip planner2-clean-chip-not-live">Not live yet</span>
+          </div>
+        </div>
+
         <div className="table-wrap">
           {ganttRows.length > 0 ? (
-            <table className="ops-table overview-table" style={{ minWidth: 940 }}>
+            <table className="ops-table overview-table planner2-table" style={{ minWidth: 940 }}>
               <thead>
                 <tr>
-                  <th style={{ width: 90 }}>Pod</th>
-                  <th style={{ width: 190 }}>Writer</th>
-                  <th style={{ width: 300 }}>Beats</th>
+                  <th style={{ width: 90 }} className="planner2-col-pod">Pod</th>
+                  <th style={{ width: 190 }} className="planner2-col-writer">Writer</th>
+                  <th style={{ width: 300 }} className="planner2-col-beat">Beats</th>
                   {weekDates.map((date, index) => (
                     <th key={date} style={{ minWidth: 90, textAlign: "center" }}>
                       <div>{DAYS[index] || "-"}</div>
@@ -366,6 +385,7 @@ export default function Planner2Content({
                       {rowIndexInPod === 0 ? (
                         <td
                           rowSpan={group.rows.length}
+                          className="planner2-col-pod"
                           style={{
                             background: POD_COLOR_MAP[group.pod] || POD_COLOR_MAP.Unmapped,
                             color: "#fff",
@@ -380,7 +400,7 @@ export default function Planner2Content({
                         </td>
                       ) : null}
                       {isFirstWriterRow ? (
-                        <td style={{ background: "#faf7f3", verticalAlign: "top" }} rowSpan={writerRowCount}>
+                        <td style={{ background: "#faf7f3", verticalAlign: "top" }} className="planner2-col-writer" rowSpan={writerRowCount}>
                           <div style={{ fontWeight: 700, fontSize: 18 }}>{row.ownerName || "-"}</div>
                           <div style={{ color: "var(--subtle)", fontSize: 12 }}>{row.writerRole}</div>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
@@ -419,7 +439,7 @@ export default function Planner2Content({
                           </div>
                         </td>
                       ) : null}
-                      <td style={{ background: "#faf7f3", verticalAlign: "top" }}>
+                      <td style={{ background: "#faf7f3", verticalAlign: "top" }} className="planner2-col-beat">
                         <div style={{ fontWeight: 700, fontSize: 14 }}>{row.beatDisplay.title || "-"}</div>
                         {row.beatDisplay.subtitle ? (
                           <div style={{ color: "var(--subtle)", fontSize: 12 }}>{row.beatDisplay.subtitle}</div>

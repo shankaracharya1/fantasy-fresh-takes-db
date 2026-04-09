@@ -1391,6 +1391,75 @@ select {
   background: color-mix(in srgb, var(--surface) 88%, black 12%);
 }
 
+.planner2-clean-layer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--card-alt) 70%, var(--surface) 30%);
+}
+
+.planner2-clean-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.planner2-clean-legends {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.planner2-clean-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.planner2-clean-chip-live {
+  color: #166534;
+  background: rgba(22, 101, 52, 0.12) !important;
+  border-color: rgba(22, 101, 52, 0.22);
+}
+
+.planner2-clean-chip-not-live {
+  color: #9a3412;
+  background: rgba(154, 52, 18, 0.12) !important;
+  border-color: rgba(154, 52, 18, 0.2);
+}
+
+.planner2-table tbody tr:nth-child(even) td:not(.planner2-col-pod) {
+  background: color-mix(in srgb, var(--card-alt) 64%, var(--surface) 36%);
+}
+
+.planner2-table .planner2-col-pod {
+  width: 90px;
+}
+
+.planner2-table .planner2-col-writer {
+  width: 190px;
+  min-width: 190px;
+}
+
+.planner2-table .planner2-col-beat {
+  width: 300px;
+  min-width: 300px;
+}
+
 .overview-flow-shell {
   gap: 22px;
 }
