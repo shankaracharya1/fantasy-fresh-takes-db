@@ -63,6 +63,43 @@ function inferPodLeadLabel(header) {
   return "Unmapped";
 }
 
+function normalizePodLeadLabel(value) {
+  return inferPodLeadLabel(value) === "Unmapped" ? "" : inferPodLeadLabel(value);
+}
+
+function buildPodLabelsByColumn(matrix, columnCount) {
+  const size = Math.max(0, columnCount);
+  const candidateIndexes = [3, 0, 1, 2];
+  const candidates = candidateIndexes
+    .map((rowIndex) => (Array.isArray(matrix?.[rowIndex]) ? matrix[rowIndex] : []))
+    .filter((row) => row.length > 0);
+
+  let bestRow = [];
+  let bestScore = -1;
+  for (const row of candidates) {
+    const explicitMappedCount = Array.from({ length: size }, (_, columnIndex) =>
+      normalizePodLeadLabel(normalizeText(row[columnIndex]))
+    ).filter(Boolean).length;
+    if (explicitMappedCount > bestScore) {
+      bestScore = explicitMappedCount;
+      bestRow = row;
+    }
+  }
+
+  const labels = new Array(size).fill("");
+  let currentLabel = "";
+  for (let columnIndex = 0; columnIndex < size; columnIndex += 1) {
+    const raw = normalizeText(bestRow[columnIndex]);
+    const explicit = normalizePodLeadLabel(raw);
+    if (explicit) {
+      currentLabel = explicit;
+    }
+    labels[columnIndex] = currentLabel;
+  }
+
+  return labels;
+}
+
 function enumerateDateRange(startDate, endDate) {
   const start = parseLiveDate(startDate);
   const end = parseLiveDate(endDate);
@@ -117,12 +154,13 @@ export async function GET(request) {
     }
 
     const headers = matrix[0] || [];
+    const podLabelsByColumn = buildPodLabelsByColumn(matrix, headers.length);
     const ownerColumns = headers
       .map((header, idx) => ({
         columnIndex: idx,
         rawHeader: normalizeText(header),
         ownerName: inferOwnerLabel(header),
-        podLeadName: inferPodLeadLabel(header),
+        podLeadName: podLabelsByColumn[idx] || inferPodLeadLabel(header),
       }))
       .filter((item) => item.columnIndex > 0 && item.ownerName);
 
