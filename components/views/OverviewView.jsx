@@ -218,9 +218,10 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     );
 
     if (isExpanded) {
-      for (const beat of beats) {
+      for (let bi = 0; bi < beats.length; bi++) {
+        const beat = beats[bi];
         tableRows.push(
-          <tr key={`beat-${pod.podLeadName}-${beat.beatName}`} className="throughput-beat-row">
+          <tr key={`beat-${pod.podLeadName}-${bi}-${beat.beatName}`} className="throughput-beat-row">
             <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>
               {beat.showName ? `${beat.showName} — ` : ""}{beat.beatName}
             </td>

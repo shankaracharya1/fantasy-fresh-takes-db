@@ -136,21 +136,34 @@ function makeBeatKey(showName, beatName) {
   return show && beat ? `${show}|${beat}` : "";
 }
 
-// Fuzzy beat matching: strips leading articles, trailing version suffixes, and punctuation
+// Fuzzy beat name: strips leading articles, trailing version suffixes, punctuation
 // "The Thor" ≈ "Thor", "Phoenix v2" ≈ "Phoenix", "Spider-Man" ≈ "Spider Man"
 function fuzzyBeatNormalize(name) {
   return String(name || "")
     .trim()
     .toLowerCase()
-    .replace(/^(the|a|an)\s+/i, "")         // strip leading articles
-    .replace(/\s+v\d+(\.\d+)?$/i, "")       // strip trailing version suffix (v2, v1.2, etc.)
-    .replace(/[^a-z0-9\s]/g, "")            // strip punctuation / hyphens
+    .replace(/^(the|a|an)\s+/i, "")
+    .replace(/\s+v\d+(\.\d+)?$/i, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Fuzzy show name: strips subtitles after ":" or "–" so
+// "My Vampire System: A Dragon's Revenge" ≈ "My Vampire System"
+function fuzzyShowNormalize(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s*[:\u2013\u2014]\s*.*$/, "")  // strip subtitle after : – —
+    .replace(/^(the|a|an)\s+/i, "")
+    .replace(/[^a-z0-9\s]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function makeFuzzyBeatKey(showName, beatName) {
-  const show = fuzzyBeatNormalize(showName);
+  const show = fuzzyShowNormalize(showName);
   const beat = fuzzyBeatNormalize(beatName);
   return beat ? `${show}|${beat}` : "";
 }
