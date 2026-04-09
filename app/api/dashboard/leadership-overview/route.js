@@ -276,6 +276,36 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
   return rows.filter((row) => row.podLeadName && row.showName && row.beatName);
 }
 
+function buildFallbackWorkflowFromLiveRows(liveRows) {
+  const safeRows = Array.isArray(liveRows) ? liveRows : [];
+
+  const editorialRows = safeRows
+    .filter((row) => normalizeText(row?.dateSubmittedByLead || row?.dateAssigned))
+    .map((row) => ({
+      ...row,
+      source: "editorial",
+      stageDate: normalizeText(row?.dateSubmittedByLead || row?.dateAssigned),
+    }));
+
+  const readyRows = safeRows
+    .filter((row) => normalizeText(row?.etaToStartProd || row?.dateSubmittedByLead))
+    .map((row) => ({
+      ...row,
+      source: "ready_for_production",
+      stageDate: normalizeText(row?.etaToStartProd || row?.dateSubmittedByLead),
+    }));
+
+  const productionRows = safeRows
+    .filter((row) => normalizeText(row?.etaPromoCompletion || row?.etaToStartProd))
+    .map((row) => ({
+      ...row,
+      source: "production",
+      stageDate: normalizeText(row?.etaPromoCompletion || row?.etaToStartProd),
+    }));
+
+  return { editorialRows, readyRows, productionRows };
+}
+
 function findWorkflowMatches(ideationRow, workflowRows) {
   const beatCode = normalizeKey(ideationRow?.beatCode);
   const showKey = normalizeKey(ideationRow?.showName);
@@ -484,20 +514,42 @@ export async function GET(request) {
           error:
             error?.message || "The Ideation tracker tab is not accessible. Check the sheet sharing settings.",
         })),
-      fetchEditorialWorkflowRows(),
-      fetchReadyForProductionWorkflowRows().catch(() => ({ rows: [] })),
-      fetchProductionWorkflowRows().catch(() => ({ rows: [] })),
-      fetchLiveWorkflowRows().catch(() => ({ rows: [] })),
+      fetchEditorialWorkflowRows()
+        .then((value) => ({ rows: value?.rows || [], error: "" }))
+        .catch((error) => ({ rows: [], error: error?.message || "Editorial source unavailable." })),
+      fetchReadyForProductionWorkflowRows()
+        .then((value) => ({ rows: value?.rows || [], error: "" }))
+        .catch((error) => ({ rows: [], error: error?.message || "Ready for Production source unavailable." })),
+      fetchProductionWorkflowRows()
+        .then((value) => ({ rows: value?.rows || [], error: "" }))
+        .catch((error) => ({ rows: [], error: error?.message || "Production source unavailable." })),
+      fetchLiveWorkflowRows()
+        .then((value) => ({ rows: value?.rows || [], error: "" }))
+        .catch((error) => ({ rows: [], error: error?.message || "Live source unavailable." })),
       fetchAnalyticsLiveTabRows()
         .then((value) => ({ rows: value?.rows || [], error: "" }))
         .catch((error) => ({ rows: [], error: error?.message || "Analytics source unavailable for Full Gen AI." })),
     ]);
 
+    const fallbackFromLive = buildFallbackWorkflowFromLiveRows(liveResult?.rows || []);
+    const workflowEditorialRows =
+      Array.isArray(editorialResult?.rows) && editorialResult.rows.length > 0
+        ? editorialResult.rows
+        : fallbackFromLive.editorialRows;
+    const workflowReadyRows =
+      Array.isArray(readyResult?.rows) && readyResult.rows.length > 0
+        ? readyResult.rows
+        : fallbackFromLive.readyRows;
+    const workflowProductionRows =
+      Array.isArray(productionResult?.rows) && productionResult.rows.length > 0
+        ? productionResult.rows
+        : fallbackFromLive.productionRows;
+
     const beatRows = buildBeatRows(ideationResult?.rows || []);
     const workflowRows = buildWorkflowRows({
-      editorialRows: editorialResult?.rows || [],
-      readyRows: readyResult?.rows || [],
-      productionRows: productionResult?.rows || [],
+      editorialRows: workflowEditorialRows,
+      readyRows: workflowReadyRows,
+      productionRows: workflowProductionRows,
       liveRows: liveResult?.rows || [],
     });
     const scopedBeatRows = beatRows.filter((row) => isDateWithinWeek(row.primaryDate, weekSelection));
@@ -523,6 +575,10 @@ export async function GET(request) {
       fullGenAiRows,
       fullGenAiSourceError: analyticsResult?.error || "",
       ideationSourceError: ideationResult?.error || "",
+      editorialSourceError: editorialResult?.error || "",
+      readyForProductionSourceError: readyResult?.error || "",
+      productionSourceError: productionResult?.error || "",
+      liveSourceError: liveResult?.error || "",
       currentWeekUpdateRows,
     });
   } catch (error) {
