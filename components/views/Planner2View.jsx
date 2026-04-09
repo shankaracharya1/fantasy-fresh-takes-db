@@ -9,6 +9,17 @@ function toneClassFromLag(laggingCount) {
   return "tone-positive";
 }
 
+function formatPlanner2DayLabel(dateValue) {
+  const date = new Date(`${dateValue}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dateValue;
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export default function Planner2Content({
   planner2Data,
   planner2Loading,
@@ -21,6 +32,12 @@ export default function Planner2Content({
   const plannerRows = Array.isArray(planner2Data?.plannerRows) ? planner2Data.plannerRows : [];
   const dateColumns = Array.isArray(planner2Data?.dateColumns) ? planner2Data.dateColumns : [];
   const dayRows = Array.isArray(planner2Data?.dayRows) ? planner2Data.dayRows : [];
+  const maxCommittedInAnyCell = Math.max(
+    1,
+    ...plannerRows.flatMap((row) =>
+      dateColumns.map((date) => Number(row?.dayMap?.[date]?.committedTaskCount || 0))
+    )
+  );
 
   if (planner2Loading && !planner2Data) {
     return <EmptyState text="Loading Planner2..." />;
@@ -71,38 +88,66 @@ export default function Planner2Content({
         </div>
 
         <div className="table-wrap">
-          <table className="ops-table overview-table">
-            <thead>
-              <tr>
-                <th style={{ minWidth: 220 }}>POD / Owner</th>
-                {dateColumns.map((date) => (
-                  <th key={date} style={{ minWidth: 120 }}>
-                    {formatDateLabel(date)}
-                  </th>
-                ))}
-                <th>Committed</th>
-                <th>Completed</th>
-                <th>Lagging</th>
-              </tr>
-            </thead>
-            <tbody>
-              {plannerRows.length > 0 ? (
-                plannerRows.map((row) => (
+          {plannerRows.length > 0 ? (
+            <table className="ops-table overview-table">
+              <thead>
+                <tr>
+                  <th style={{ minWidth: 220, position: "sticky", left: 0, background: "var(--surface)" }}>POD / Owner</th>
+                  {dateColumns.map((date) => (
+                    <th key={date} style={{ minWidth: 148 }}>
+                      {formatPlanner2DayLabel(date)}
+                    </th>
+                  ))}
+                  <th>Committed</th>
+                  <th>Completed</th>
+                  <th>Lagging</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plannerRows.map((row) => (
                   <tr key={`${row.podLeadName}-${row.ownerName}`} className={Number(row.laggingTaskCount || 0) > 0 ? "is-below-target" : ""}>
-                    <td>
+                    <td style={{ position: "sticky", left: 0, background: "var(--bg)" }}>
                       <div style={{ fontWeight: 700 }}>{row.ownerName || "-"}</div>
                       <div style={{ fontSize: 12, color: "var(--subtle)" }}>{row.podLeadName || "-"}</div>
                     </td>
                     {dateColumns.map((date) => {
                       const cell = row.dayMap?.[date] || {};
                       const committed = Number(cell.committedTaskCount || 0);
-                      const completed = Number(cell.completedTaskCount || 0);
-                      const lagging = Number(cell.laggingTaskCount || 0);
+                      const completed = Math.min(committed, Number(cell.completedTaskCount || 0));
+                      const lagging = Math.min(Math.max(committed - completed, 0), Number(cell.laggingTaskCount || 0));
+                      const pending = Math.max(committed - completed - lagging, 0);
+                      const donePct = committed > 0 ? (completed / committed) * 100 : 0;
+                      const pendingPct = committed > 0 ? (pending / committed) * 100 : 0;
+                      const laggingPct = committed > 0 ? (lagging / committed) * 100 : 0;
+                      const alpha = committed > 0 ? Math.min(1, 0.35 + committed / maxCommittedInAnyCell) : 0.18;
+
                       return (
                         <td key={`${row.ownerName}-${date}`}>
-                          <div style={{ fontWeight: 700 }}>{formatNumber(committed)}</div>
-                          <div style={{ fontSize: 11, color: "var(--subtle)" }}>
-                            C:{formatNumber(completed)} | L:{formatNumber(lagging)}
+                          <div style={{ display: "grid", gap: 6 }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                width: "100%",
+                                height: 12,
+                                borderRadius: 999,
+                                overflow: "hidden",
+                                background: "rgba(0,0,0,0.08)",
+                              }}
+                              title={
+                                committed > 0
+                                  ? `Committed ${committed} | Completed ${completed} | Pending ${pending} | Lagging ${lagging}`
+                                  : "No tasks planned"
+                              }
+                            >
+                              {donePct > 0 ? <span style={{ width: `${donePct}%`, background: `rgba(46, 125, 50, ${alpha})` }} /> : null}
+                              {pendingPct > 0 ? <span style={{ width: `${pendingPct}%`, background: `rgba(194, 112, 62, ${alpha})` }} /> : null}
+                              {laggingPct > 0 ? <span style={{ width: `${laggingPct}%`, background: `rgba(159, 46, 46, ${alpha})` }} /> : null}
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--subtle)" }}>
+                              {committed > 0
+                                ? `T:${formatNumber(committed)} C:${formatNumber(completed)} L:${formatNumber(lagging)}`
+                                : "T:0"}
+                            </div>
                           </div>
                         </td>
                       );
@@ -111,16 +156,12 @@ export default function Planner2Content({
                     <td>{formatNumber(row.completedTaskCount || 0)}</td>
                     <td>{formatNumber(row.laggingTaskCount || 0)}</td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={Math.max(4, dateColumns.length + 4)} className="empty-cell">
-                    No planning rows found for this date range.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyState text="No planning rows found for this date range." />
+          )}
         </div>
 
         <div className="table-wrap">
