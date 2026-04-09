@@ -1,6 +1,6 @@
 "use client";
 
-import { EmptyState, ShareablePanel, formatDateTimeLabel, formatNumber } from "./shared.jsx";
+import { EmptyState, ShareablePanel, formatDateLabel, formatDateTimeLabel, formatNumber } from "./shared.jsx";
 
 function toneClassFromLag(laggingCount) {
   const value = Number(laggingCount || 0);
@@ -18,6 +18,8 @@ export default function Planner2Content({
 }) {
   const totals = planner2Data?.totals || {};
   const ownerRows = Array.isArray(planner2Data?.ownerRows) ? planner2Data.ownerRows : [];
+  const plannerRows = Array.isArray(planner2Data?.plannerRows) ? planner2Data.plannerRows : [];
+  const dateColumns = Array.isArray(planner2Data?.dateColumns) ? planner2Data.dateColumns : [];
   const dayRows = Array.isArray(planner2Data?.dayRows) ? planner2Data.dayRows : [];
 
   if (planner2Loading && !planner2Data) {
@@ -43,7 +45,7 @@ export default function Planner2Content({
       >
         <div className="panel-head">
           <div>
-            <div className="panel-title">Planner2 · Upcoming Week Plan</div>
+            <div className="panel-title">Planner2 · Planning Board</div>
             <div className="panel-statline">
               <span>{planner2Data?.weekLabel || "-"}</span>
               {planner2Data?.lastUpdatedAt ? (
@@ -66,6 +68,59 @@ export default function Planner2Content({
             <div className="metric-label">Lagging</div>
             <div className="metric-value">{formatNumber(totals.laggingTaskCount || 0)}</div>
           </div>
+        </div>
+
+        <div className="table-wrap">
+          <table className="ops-table overview-table">
+            <thead>
+              <tr>
+                <th style={{ minWidth: 220 }}>POD / Owner</th>
+                {dateColumns.map((date) => (
+                  <th key={date} style={{ minWidth: 120 }}>
+                    {formatDateLabel(date)}
+                  </th>
+                ))}
+                <th>Committed</th>
+                <th>Completed</th>
+                <th>Lagging</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plannerRows.length > 0 ? (
+                plannerRows.map((row) => (
+                  <tr key={`${row.podLeadName}-${row.ownerName}`} className={Number(row.laggingTaskCount || 0) > 0 ? "is-below-target" : ""}>
+                    <td>
+                      <div style={{ fontWeight: 700 }}>{row.ownerName || "-"}</div>
+                      <div style={{ fontSize: 12, color: "var(--subtle)" }}>{row.podLeadName || "-"}</div>
+                    </td>
+                    {dateColumns.map((date) => {
+                      const cell = row.dayMap?.[date] || {};
+                      const committed = Number(cell.committedTaskCount || 0);
+                      const completed = Number(cell.completedTaskCount || 0);
+                      const lagging = Number(cell.laggingTaskCount || 0);
+                      return (
+                        <td key={`${row.ownerName}-${date}`}>
+                          <div style={{ fontWeight: 700 }}>{formatNumber(committed)}</div>
+                          <div style={{ fontSize: 11, color: "var(--subtle)" }}>
+                            C:{formatNumber(completed)} | L:{formatNumber(lagging)}
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td>{formatNumber(row.committedTaskCount || 0)}</td>
+                    <td>{formatNumber(row.completedTaskCount || 0)}</td>
+                    <td>{formatNumber(row.laggingTaskCount || 0)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={Math.max(4, dateColumns.length + 4)} className="empty-cell">
+                    No planning rows found for this date range.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
 
         <div className="table-wrap">

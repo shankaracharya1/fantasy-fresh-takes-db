@@ -63,6 +63,24 @@ function inferPodLeadLabel(header) {
   return "Unmapped";
 }
 
+function enumerateDateRange(startDate, endDate) {
+  const start = parseLiveDate(startDate);
+  const end = parseLiveDate(endDate);
+  if (!start || !end || end < start) return [];
+
+  const rows = [];
+  let cursor = new Date(`${start}T00:00:00Z`);
+  const maxDate = new Date(`${end}T00:00:00Z`);
+  while (cursor <= maxDate) {
+    const y = cursor.getUTCFullYear();
+    const m = String(cursor.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(cursor.getUTCDate()).padStart(2, "0");
+    rows.push(`${y}-${m}-${d}`);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return rows;
+}
+
 async function fetchPlanner2Rows() {
   const spreadsheetId = parseGoogleSheetId(PLANNER2_SHEET_URL);
   if (!spreadsheetId) {
@@ -170,6 +188,39 @@ export async function GET(request) {
     const totalCommitted = ownerRows.reduce((sum, row) => sum + Number(row.committedTaskCount || 0), 0);
     const totalCompleted = ownerRows.reduce((sum, row) => sum + Number(row.completedTaskCount || 0), 0);
     const totalLagging = ownerRows.reduce((sum, row) => sum + Number(row.laggingTaskCount || 0), 0);
+    const dateColumns = enumerateDateRange(rangeSelection.startDate, rangeSelection.endDate);
+
+    const plannerRows = ownerRows.map((ownerRow) => {
+      const dayMap = Object.fromEntries(
+        dateColumns.map((day) => [
+          day,
+          {
+            committedTaskCount: 0,
+            completedTaskCount: 0,
+            laggingTaskCount: 0,
+            notes: [],
+          },
+        ])
+      );
+
+      for (const day of dayRows) {
+        const item = (Array.isArray(day.items) ? day.items : []).find(
+          (entry) => normalizeKey(entry?.ownerName) === normalizeKey(ownerRow.ownerName)
+        );
+        if (!item || !dayMap[day.date]) continue;
+        dayMap[day.date] = {
+          committedTaskCount: Number(item.committedTaskCount || 0),
+          completedTaskCount: Number(item.completedTaskCount || 0),
+          laggingTaskCount: Number(item.laggingTaskCount || 0),
+          notes: Array.isArray(item.notes) ? item.notes : [],
+        };
+      }
+
+      return {
+        ...ownerRow,
+        dayMap,
+      };
+    });
 
     return NextResponse.json({
       ok: true,
@@ -184,7 +235,9 @@ export async function GET(request) {
         completedTaskCount: totalCompleted,
         laggingTaskCount: totalLagging,
       },
+      dateColumns,
       ownerRows,
+      plannerRows,
       dayRows,
     });
   } catch (error) {
