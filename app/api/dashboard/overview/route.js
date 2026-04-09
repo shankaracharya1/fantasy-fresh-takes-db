@@ -136,13 +136,15 @@ function makeBeatKey(showName, beatName) {
   return show && beat ? `${show}|${beat}` : "";
 }
 
-// Strip leading articles + punctuation for fuzzy beat matching ("The Thor" ≈ "Thor")
+// Fuzzy beat matching: strips leading articles, trailing version suffixes, and punctuation
+// "The Thor" ≈ "Thor", "Phoenix v2" ≈ "Phoenix", "Spider-Man" ≈ "Spider Man"
 function fuzzyBeatNormalize(name) {
   return String(name || "")
     .trim()
     .toLowerCase()
-    .replace(/^(the|a|an)\s+/i, "")
-    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/^(the|a|an)\s+/i, "")         // strip leading articles
+    .replace(/\s+v\d+(\.\d+)?$/i, "")       // strip trailing version suffix (v2, v1.2, etc.)
+    .replace(/[^a-z0-9\s]/g, "")            // strip punctuation / hyphens
     .replace(/\s+/g, " ")
     .trim();
 }
