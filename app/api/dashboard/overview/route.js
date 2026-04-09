@@ -322,12 +322,11 @@ function buildPodThroughputForRange(liveRows, ideationRows, startDate, endDate) 
     if (beatOnly) ideationBeatOnlyKeys.add(beatOnly);
   }
 
-  // Filter live rows: date range + GA/GI only (Fresh Takes AND Reworks)
+  // Filter live rows: date range + GA only (Q1 manual + thumbnail)
   const filtered = (Array.isArray(liveRows) ? liveRows : []).filter((row) => {
     const liveDate = String(row?.liveDate || "").slice(0, 10);
     if (!liveDate || liveDate < startDate || liveDate > endDate) return false;
-    const type = getAssetTypeFromAssetCode(row?.assetCode);
-    return type === "GA" || type === "GI";
+    return getAssetTypeFromAssetCode(row?.assetCode) === "GA";
   });
 
   // Group by pod → beat, tracking FT/RW type counts
@@ -397,8 +396,7 @@ function buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows) {
 
   const lwRows = buildReleasedFreshTakeAttemptsForPeriod(liveRows, "last").filter((row) => {
     if (!isFreshTakesLabel(row?.reworkType) && normalizeKey(row?.reworkType) !== "new q1") return false;
-    const type = getAssetTypeFromAssetCode(row?.assetCode);
-    if (!(type === "GA" || type === "GI")) return false;
+    if (getAssetTypeFromAssetCode(row?.assetCode) !== "GA") return false;
     const beatKey = makeBeatKey(row?.showName, row?.beatName);
     return beatKey && approvedBeatKeys.has(beatKey);
   });

@@ -151,7 +151,7 @@ function PodEditorialStatusTable({ rows = [], loading = false }) {
     <div style={{ marginTop: 20 }}>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>POD production status</div>
       <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
-        LW production · FT · GA/GI · approved beats only &nbsp;·&nbsp; This week stage from planner · click POD to expand writers
+        LW production · GA (Q1 manual + thumbnail) · approved beats only &nbsp;·&nbsp; This week stage from planner · click POD to expand writers
       </div>
       <div className="table-wrap">
         <table className="ops-table overview-table">
@@ -360,7 +360,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     <div style={{ marginTop: 20 }}>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>POD throughput ranking</div>
       <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
-        GA/GI assets · date-filtered · FT = Fresh Take · RW = Rework (L=large, S=small) · beat checked against Ideation tab
+        GA assets (Q1 manual + thumbnail) · date-filtered · FT = Fresh Take · RW = Rework (L=large, S=small) · beat checked against Ideation tab
       </div>
       <div className="table-wrap">
         <table className="ops-table overview-table">
