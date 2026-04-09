@@ -36,10 +36,21 @@ function stageIdForPlannerCell(cell) {
   const committed = Number(cell?.committedTaskCount || 0);
   const completed = Number(cell?.completedTaskCount || 0);
   const lagging = Number(cell?.laggingTaskCount || 0);
+  const noteText = Array.isArray(cell?.notes)
+    ? cell.notes.join(" ").toLowerCase()
+    : String(cell?.notes || "").toLowerCase();
   if (committed <= 0) return null;
-  if (lagging > 0) return "cl_review";
+
+  // Prefer explicit signal from task text if available.
+  if (/(live|published|approved|final pass|uploaded)/.test(noteText)) return "live_on_meta";
+  if (/(production|promo|canvas|render)/.test(noteText)) return "production";
+  if (/(review|cl review|feedback)/.test(noteText)) return "cl_review";
+  if (/(write|writing|script|draft|ideation|beat)/.test(noteText)) return "writing";
+
+  // Fallback to progress-based inference.
   if (completed >= committed) return "live_on_meta";
   if (completed > 0) return "production";
+  if (lagging > 0) return "writing";
   return "writing";
 }
 
