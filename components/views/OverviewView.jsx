@@ -232,7 +232,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
 
 // ─── Sub-views ────────────────────────────────────────────────────────────────
 
-export function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError }) {
+export function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError, middleSlot }) {
   const unavailableMetricValue = overviewError ? "-" : null;
   const tatSummary = overviewData?.tatSummary || {};
   const tatDays = tatSummary?.averageTatDays;
@@ -282,11 +282,12 @@ export function OverviewCurrentWeek({ overviewData, overviewLoading, overviewErr
           tone={getClReviewDaysTone(overviewData?.averageClReviewDays)}
         />
       </div>
+      {middleSlot}
     </div>
   );
 }
 
-export function OverviewLastWeek({ overviewData, overviewLoading, overviewError }) {
+export function OverviewLastWeek({ overviewData, overviewLoading, overviewError, middleSlot }) {
   const unavailableMetricValue = overviewError ? "-" : null;
   const tatSummary = overviewData?.tatSummary || {};
   const tatDays = tatSummary?.averageTatDays;
@@ -325,6 +326,8 @@ export function OverviewLastWeek({ overviewData, overviewLoading, overviewError 
           }
         />
       </div>
+
+      {middleSlot}
 
       {Array.isArray(overviewData?.beatsFunnel) && overviewData.beatsFunnel.length > 0 && (
         <>
@@ -394,7 +397,7 @@ export function OverviewLastWeek({ overviewData, overviewLoading, overviewError 
   );
 }
 
-export function OverviewNextWeek({ overviewData, overviewLoading, overviewError }) {
+export function OverviewNextWeek({ overviewData, overviewLoading, overviewError, middleSlot }) {
   const unavailableMetricValue = overviewError ? "-" : null;
   const tatSummary = overviewData?.tatSummary || {};
   const tatDays = tatSummary?.averageTatDays;
@@ -467,6 +470,8 @@ export function OverviewNextWeek({ overviewData, overviewLoading, overviewError 
           tone={getClReviewDaysTone(overviewData?.averageClReviewDays)}
         />
       </div>
+
+      {middleSlot}
 
       <hr className="section-divider" />
 
@@ -541,17 +546,16 @@ export default function OverviewContent({
           <div key={note} className="warning-note">{note}</div>
         ))}
 
-        {selectionMode === "editorial_funnel" && (
-          <OverviewCurrentWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} />
-        )}
-        {selectionMode !== "editorial_funnel" && selectionMode !== "planned" && (
-          <OverviewLastWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} />
-        )}
-        {selectionMode === "planned" && (
-          <OverviewNextWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} />
-        )}
-
-        <PodThroughputRankingTable rows={podThroughputRows} loading={overviewLoading} />
+        {(() => {
+          const throughputTable = <PodThroughputRankingTable rows={podThroughputRows} loading={overviewLoading} />;
+          if (selectionMode === "editorial_funnel") {
+            return <OverviewCurrentWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} middleSlot={throughputTable} />;
+          }
+          if (selectionMode === "planned") {
+            return <OverviewNextWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} middleSlot={throughputTable} />;
+          }
+          return <OverviewLastWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} middleSlot={throughputTable} />;
+        })()}
       </div>
     </ShareablePanel>
   );
