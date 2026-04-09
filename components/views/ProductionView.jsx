@@ -244,6 +244,138 @@ function AcdAdherenceTable({ rows }) {
   );
 }
 
+// ─── Production Pipeline table ────────────────────────────────────────────────
+
+function ProductionPipelineTable({ rows = [], loading = false }) {
+  const [expandedPods, setExpandedPods] = useState(new Set());
+  const safeRows = Array.isArray(rows) ? rows : [];
+
+  const togglePod = (podName) => {
+    setExpandedPods((prev) => {
+      const next = new Set(prev);
+      if (next.has(podName)) next.delete(podName);
+      else next.add(podName);
+      return next;
+    });
+  };
+
+  const totalScripts = safeRows.reduce((s, r) => s + (r.total || 0), 0);
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
+        Current scripts in the Production tracker · {totalScripts} total · FT = Fresh Take · RW = Rework
+      </div>
+      <div className="table-wrap">
+        <table className="ops-table">
+          <thead>
+            <tr>
+              <th>POD / Script</th>
+              <th style={{ textAlign: "center" }}>Total</th>
+              <th>Type breakdown</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="4" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+            ) : safeRows.length === 0 ? (
+              <tr><td colSpan="4" style={{ color: "var(--subtle)" }}>No scripts currently in Production tracker.</td></tr>
+            ) : safeRows.flatMap((pod) => {
+              const isExpanded = expandedPods.has(pod.podLeadName);
+              const scripts = Array.isArray(pod.scripts) ? pod.scripts : [];
+              const rows = [
+                <tr
+                  key={`pod-${pod.podLeadName}`}
+                  className="throughput-pod-summary-row"
+                  style={{ cursor: "pointer", userSelect: "none" }}
+                  onClick={() => togglePod(pod.podLeadName)}
+                >
+                  <td style={{ fontWeight: 700 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{
+                        fontSize: 10, width: 16, height: 16, display: "inline-flex",
+                        alignItems: "center", justifyContent: "center",
+                        background: "var(--subtle-bg, #f0ece4)", borderRadius: 3,
+                        color: "var(--subtle)", flexShrink: 0,
+                      }}>
+                        {isExpanded ? "▾" : "▸"}
+                      </span>
+                      {pod.podLeadName}
+                    </span>
+                  </td>
+                  <td style={{ fontWeight: 700, textAlign: "center" }}>{pod.total}</td>
+                  <td>
+                    {pod.ft > 0 && (
+                      <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, background: "#e8f4ea", color: "#2d5a3d", borderRadius: 4, padding: "1px 6px", marginRight: 4 }}>
+                        FT:{pod.ft}
+                      </span>
+                    )}
+                    {pod.rw > 0 && (
+                      <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, background: "#fdf0e6", color: "#c2601e", borderRadius: 4, padding: "1px 6px", marginRight: 4 }}>
+                        RW:{pod.rw}
+                      </span>
+                    )}
+                    {pod.unknown > 0 && (
+                      <span style={{ display: "inline-block", fontSize: 11, fontWeight: 600, background: "#f0ece4", color: "#666", borderRadius: 4, padding: "1px 6px" }}>
+                        ?:{pod.unknown}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ color: "var(--subtle)", fontSize: 11 }}>
+                    {scripts.length} script{scripts.length !== 1 ? "s" : ""}
+                  </td>
+                </tr>,
+              ];
+
+              if (isExpanded) {
+                for (const script of scripts) {
+                  rows.push(
+                    <tr key={`${pod.podLeadName}-${script.assetCode || script.beatName}`} className="throughput-beat-row">
+                      <td style={{ paddingLeft: 28, fontSize: 12 }}>
+                        <span style={{ color: "var(--subtle)" }}>{script.showName ? `${script.showName} — ` : ""}</span>
+                        {script.beatName || "—"}
+                        {script.writerName ? <span style={{ color: "var(--subtle)", marginLeft: 6 }}>· {script.writerName}</span> : null}
+                      </td>
+                      <td style={{ textAlign: "center", color: "var(--subtle)", fontSize: 12 }}>
+                        {script.assetCode || "—"}
+                      </td>
+                      <td style={{ fontSize: 11 }}>
+                        {script.reworkType ? (
+                          <span style={{
+                            background: classifyFtRw(script.reworkType) === "ft" ? "#e8f4ea" : "#fdf0e6",
+                            color: classifyFtRw(script.reworkType) === "ft" ? "#2d5a3d" : "#c2601e",
+                            borderRadius: 4, padding: "1px 6px", fontWeight: 600,
+                          }}>
+                            {script.reworkType}
+                          </span>
+                        ) : "—"}
+                      </td>
+                      <td style={{ fontSize: 11, color: "var(--subtle)" }}>
+                        {script.status || "—"}
+                        {script.etaToStartProd ? <span style={{ marginLeft: 6 }}>· ETA {script.etaToStartProd}</span> : null}
+                      </td>
+                    </tr>
+                  );
+                }
+              }
+
+              return rows;
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function classifyFtRw(reworkType) {
+  const rt = String(reworkType || "").trim().toLowerCase();
+  if (!rt) return null;
+  if (rt === "fresh take" || rt === "fresh takes" || rt.startsWith("new q1") || rt.startsWith("ft")) return "ft";
+  return "rw";
+}
+
 // ─── View ─────────────────────────────────────────────────────────────────────
 
 export default function ProductionContent({
@@ -260,6 +392,7 @@ export default function ProductionContent({
   copyingSection,
 }) {
   const [selectedAssetTypes, setSelectedAssetTypes] = useState(ASSET_TYPE_OPTIONS);
+  const [productionSubView, setProductionSubView] = useState("pipeline");
   const safeAcdMetricsData =
     acdMetricsData ||
     {
@@ -302,6 +435,7 @@ export default function ProductionContent({
     0
   );
   const filteredCdsAffected = new Set(filteredAdherenceIssueRows.map((row) => row.cdName || "")).size;
+  const pipelineRows = Array.isArray(acdMetricsData?.pipelineRows) ? acdMetricsData.pipelineRows : [];
 
   return (
     <div className="section-stack">
@@ -313,7 +447,38 @@ export default function ProductionContent({
         </div>
       ))}
 
-      <ShareablePanel
+      <div style={{ display: "flex", gap: 0, borderBottom: "2px solid var(--border)", marginBottom: 4 }} data-share-ignore="true">
+        {[["pipeline", "Production Pipeline"], ["throughput", "Production Throughput"]].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setProductionSubView(id)}
+            style={{
+              padding: "10px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+              background: "transparent", border: "none",
+              borderBottom: productionSubView === id ? "2px solid var(--accent)" : "2px solid transparent",
+              color: productionSubView === id ? "var(--accent)" : "var(--subtle)",
+              marginBottom: -2,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {productionSubView === "pipeline" && (
+        <ShareablePanel shareLabel="Production Pipeline" onShare={onShare} isSharing={copyingSection === "Production Pipeline"}>
+          <div className="panel-head panel-head-tight">
+            <div>
+              <div className="panel-title">Production Pipeline</div>
+              <div className="panel-statline">Scripts currently in the Production tracker sheet, grouped by POD</div>
+            </div>
+          </div>
+          <ProductionPipelineTable rows={pipelineRows} loading={acdMetricsLoading} />
+        </ShareablePanel>
+      )}
+
+      {productionSubView === "throughput" && <ShareablePanel
         shareLabel="Production ACD sync"
         onShare={onShare}
         isSharing={copyingSection === "Production ACD sync"}
@@ -455,7 +620,7 @@ export default function ProductionContent({
           <div className="panel-title">Image Sheet Adherence Issues</div>
           <AcdAdherenceTable rows={filteredAdherenceIssueRows} />
         </div>
-      </ShareablePanel>
+      </ShareablePanel>}
     </div>
   );
 }

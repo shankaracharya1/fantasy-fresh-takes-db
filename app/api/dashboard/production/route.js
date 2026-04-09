@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { NextResponse } from "next/server";
-import { buildProductionMetricsFromLiveTab, buildProductionMetricsFromLiveTabRange, fetchLiveTabRows } from "../../../../lib/live-tab.js";
+import { buildProductionMetricsFromLiveTab, buildProductionMetricsFromLiveTabRange, fetchLiveTabRows, fetchProductionWorkflowRows, normalizePodLeadName } from "../../../../lib/live-tab.js";
 import { buildDateRangeSelection, formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
 
 const require = createRequire(import.meta.url);
@@ -258,6 +258,55 @@ function buildAcdFallbackMetrics(acdRows, weekSelection) {
   };
 }
 
+function classifyFtRw(reworkType) {
+  const rt = String(reworkType || "").trim().toLowerCase();
+  if (!rt) return null;
+  if (rt === "fresh take" || rt === "fresh takes" || rt.startsWith("new q1") || rt.startsWith("ft")) return "ft";
+  return "rw";
+}
+
+function buildProductionPipelineRows(workflowRows) {
+  const podMap = new Map();
+
+  for (const row of Array.isArray(workflowRows) ? workflowRows : []) {
+    const pod = normalizePodLeadName(row?.podLeadName || row?.podLeadRaw) || String(row?.podLeadName || "").trim();
+    if (!pod) continue;
+
+    if (!podMap.has(pod)) {
+      podMap.set(pod, { podLeadName: pod, total: 0, ft: 0, rw: 0, unknown: 0, scripts: [] });
+    }
+    const entry = podMap.get(pod);
+    entry.total += 1;
+
+    const type = classifyFtRw(row?.reworkType);
+    if (type === "ft") entry.ft += 1;
+    else if (type === "rw") entry.rw += 1;
+    else entry.unknown += 1;
+
+    entry.scripts.push({
+      showName: String(row?.showName || "").trim(),
+      beatName: String(row?.beatName || "").trim(),
+      writerName: String(row?.writerName || "").trim(),
+      reworkType: String(row?.reworkType || "").trim(),
+      status: String(row?.status || "").trim(),
+      etaToStartProd: row?.etaToStartProd || "",
+      assetCode: String(row?.assetCode || "").trim(),
+    });
+  }
+
+  const POD_ORDER = ["Dan", "Josh", "Nishant", "Paul"];
+  return [...podMap.values()]
+    .sort((a, b) => {
+      const ai = POD_ORDER.indexOf(a.podLeadName);
+      const bi = POD_ORDER.indexOf(b.podLeadName);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      return a.podLeadName.localeCompare(b.podLeadName);
+    })
+    .map((pod) => ({ ...pod, scripts: pod.scripts }));
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -286,6 +335,7 @@ export async function GET(request) {
         emptyStateMessage: "Next week production release metrics will populate from the Live tab after assets are released.",
         acdChartRows: [],
         acdPairRows: [],
+        pipelineRows: [],
         productionTeamOutput: { liveAssetCount: null },
         tatSummary: {
           averageTatDays: null,
@@ -299,10 +349,11 @@ export async function GET(request) {
       });
     }
 
-    const [liveTabResult, acdRowsResult, acdSyncRowsResult] = await Promise.allSettled([
+    const [liveTabResult, acdRowsResult, acdSyncRowsResult, workflowResult] = await Promise.allSettled([
       fetchLiveTabRows(),
       fetchAcdProductivityRows(),
       fetchAcdLiveSyncRows(),
+      fetchProductionWorkflowRows(),
     ]);
 
     let sourceFilterWarning = "";
@@ -361,6 +412,10 @@ export async function GET(request) {
       throw new Error("Unable to load Production dashboard data.");
     }
 
+    const pipelineRows = workflowResult.status === "fulfilled"
+      ? buildProductionPipelineRows(workflowResult.value?.rows || [])
+      : [];
+
     return NextResponse.json({
       ok: true,
       period: useExplicitRange ? "range" : period,
@@ -376,6 +431,7 @@ export async function GET(request) {
       emptyStateMessage: productionMetrics.emptyStateMessage,
       acdChartRows,
       acdPairRows,
+      pipelineRows,
       productionTeamOutput: productionMetrics.productionTeamOutput,
       tatSummary: productionMetrics.tatSummary,
       tatRows: productionMetrics.tatRows,
@@ -397,6 +453,7 @@ export async function GET(request) {
       emptyStateMessage: "Production data is temporarily unavailable. Please verify sheet and backend access.",
       acdChartRows: [],
       acdPairRows: [],
+      pipelineRows: [],
       productionTeamOutput: { liveAssetCount: null },
       tatSummary: {
         averageTatDays: null,
