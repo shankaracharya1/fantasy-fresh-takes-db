@@ -478,7 +478,9 @@ export default function ProductionContent({
         </ShareablePanel>
       )}
 
-      {productionSubView === "throughput" && <ShareablePanel
+      {productionSubView === "throughput" && (
+        <>
+        <ShareablePanel
         shareLabel="Production ACD sync"
         onShare={onShare}
         isSharing={copyingSection === "Production ACD sync"}
@@ -620,7 +622,9 @@ export default function ProductionContent({
           <div className="panel-title">Image Sheet Adherence Issues</div>
           <AcdAdherenceTable rows={filteredAdherenceIssueRows} />
         </div>
-      </ShareablePanel>}
+      </ShareablePanel>
+        </>
+      )}
     </div>
   );
 }
