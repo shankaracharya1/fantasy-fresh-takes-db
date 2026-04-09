@@ -157,10 +157,8 @@ export default function Planner2Content({
   onShare,
   copyingSection,
 }) {
-  const ownerRows = Array.isArray(planner2Data?.ownerRows) ? planner2Data.ownerRows : [];
   const plannerRows = Array.isArray(planner2Data?.plannerRows) ? planner2Data.plannerRows : [];
   const dateColumns = Array.isArray(planner2Data?.dateColumns) ? planner2Data.dateColumns : [];
-  const dayRows = Array.isArray(planner2Data?.dayRows) ? planner2Data.dayRows : [];
   const weekDates = dateColumns.slice(0, 7);
   const summaryMetrics = useMemo(() => {
     const beatSet = new Set();
@@ -357,6 +355,12 @@ export default function Planner2Content({
                     const writerRowCount = group.rows.filter((item) => item.ownerName === row.ownerName).length;
                     const writerFirstIndex = group.rows.findIndex((item) => item.ownerName === row.ownerName);
                     const isFirstWriterRow = writerFirstIndex === rowIndexInPod;
+                    const writerRows = group.rows.filter((item) => item.ownerName === row.ownerName);
+                    const ideationDays = writerRows.reduce(
+                      (sum, item) => sum + item.days.filter((stage) => stage === "beats_ideation").length,
+                      0
+                    );
+                    const hasLive = writerRows.some((item) => item.days.some((stage) => stage === "live_on_meta"));
                     return (
                     <tr key={`${group.pod}-${row.ownerName}`}>
                       {rowIndexInPod === 0 ? (
@@ -379,6 +383,40 @@ export default function Planner2Content({
                         <td style={{ background: "#faf7f3", verticalAlign: "top" }} rowSpan={writerRowCount}>
                           <div style={{ fontWeight: 700, fontSize: 18 }}>{row.ownerName || "-"}</div>
                           <div style={{ color: "var(--subtle)", fontSize: 12 }}>{row.writerRole}</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                            {ideationDays > 0 ? (
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  padding: "2px 8px",
+                                  borderRadius: 999,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: "#b4233c",
+                                  border: "1px solid rgba(180, 35, 60, 0.28)",
+                                  background: "rgba(180, 35, 60, 0.06)",
+                                }}
+                              >
+                                {`${ideationDays} day${ideationDays === 1 ? "" : "s"} in beats ideation`}
+                              </span>
+                            ) : null}
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "2px 8px",
+                                borderRadius: 999,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: hasLive ? "#166534" : "#9a3412",
+                                border: `1px solid ${hasLive ? "rgba(22, 101, 52, 0.28)" : "rgba(154, 52, 18, 0.28)"}`,
+                                background: hasLive ? "rgba(22, 101, 52, 0.08)" : "rgba(154, 52, 18, 0.08)",
+                              }}
+                            >
+                              {hasLive ? "Live this week" : "Not live yet"}
+                            </span>
+                          </div>
                         </td>
                       ) : null}
                       <td style={{ background: "#faf7f3", verticalAlign: "top" }}>
@@ -417,93 +455,6 @@ export default function Planner2Content({
           ) : (
             <EmptyState text="No planning rows found for this date range." />
           )}
-        </div>
-
-        <div className="table-wrap">
-          <table className="ops-table overview-table">
-            <thead>
-              <tr>
-                <th>Owner</th>
-                <th>POD lead</th>
-                <th>Committed</th>
-                <th>Completed</th>
-                <th>Lagging</th>
-                <th>Active days</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ownerRows.length > 0 ? (
-                ownerRows.map((row) => (
-                  <tr key={`${row.podLeadName}-${row.ownerName}`} className={Number(row.laggingTaskCount || 0) > 0 ? "is-below-target" : ""}>
-                    <td>{row.ownerName || "-"}</td>
-                    <td>{row.podLeadName || "-"}</td>
-                    <td>{formatNumber(row.committedTaskCount || 0)}</td>
-                    <td>{formatNumber(row.completedTaskCount || 0)}</td>
-                    <td>{formatNumber(row.laggingTaskCount || 0)}</td>
-                    <td>{formatNumber(row.activeDays || 0)}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="6" className="empty-cell">
-                    No planning rows found for this date range.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </ShareablePanel>
-
-      <ShareablePanel
-        shareLabel="Planner2 daily plan"
-        onShare={onShare}
-        isSharing={copyingSection === "Planner2 daily plan"}
-      >
-        <div className="panel-title">Daily plan grid (from committed planner sheet)</div>
-        <div className="panel-statline">Use this to share in leads channel and track daily execution.</div>
-        <div className="table-wrap">
-          <table className="ops-table overview-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Owners with planned items</th>
-                <th>Total committed</th>
-                <th>Total completed markers</th>
-                <th>Total lagging</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dayRows.length > 0 ? (
-                dayRows.map((row) => {
-                  const totalsForDay = (Array.isArray(row.items) ? row.items : []).reduce(
-                    (acc, item) => {
-                      acc.committed += Number(item.committedTaskCount || 0);
-                      acc.completed += Number(item.completedTaskCount || 0);
-                      acc.lagging += Number(item.laggingTaskCount || 0);
-                      return acc;
-                    },
-                    { committed: 0, completed: 0, lagging: 0 }
-                  );
-                  return (
-                    <tr key={row.date} className={totalsForDay.lagging > 0 ? "is-below-target" : ""}>
-                      <td>{row.date || "-"}</td>
-                      <td>{formatNumber((row.items || []).length)}</td>
-                      <td>{formatNumber(totalsForDay.committed)}</td>
-                      <td>{formatNumber(totalsForDay.completed)}</td>
-                      <td>{formatNumber(totalsForDay.lagging)}</td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan="5" className="empty-cell">
-                    No daily plan rows found for this date range.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </div>
       </ShareablePanel>
     </div>
