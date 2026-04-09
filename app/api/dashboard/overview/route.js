@@ -187,12 +187,17 @@ function getLatestAssetStage(asset) {
 }
 
 function buildPodThroughputForRange(liveRows, ideationRows, startDate, endDate) {
-  // Build fuzzy ideation keys (strips leading articles + punctuation for "The Thor" ≈ "Thor")
-  const ideationFuzzyKeys = new Set(
-    (Array.isArray(ideationRows) ? ideationRows : [])
-      .map((row) => makeFuzzyBeatKey(row?.showName, row?.beatName))
-      .filter(Boolean)
-  );
+  // Two-tier ideation lookup:
+  // 1. Full key (show|beat) — most precise
+  // 2. Beat-only key — fallback when show names differ across sheets (e.g. "MVS" vs "My Vampire System: A Dragon's Revenge")
+  const ideationFullKeys = new Set();
+  const ideationBeatOnlyKeys = new Set();
+  for (const row of Array.isArray(ideationRows) ? ideationRows : []) {
+    const fullKey = makeFuzzyBeatKey(row?.showName, row?.beatName);
+    const beatOnly = fuzzyBeatNormalize(row?.beatName || "");
+    if (fullKey) ideationFullKeys.add(fullKey);
+    if (beatOnly) ideationBeatOnlyKeys.add(beatOnly);
+  }
 
   // Filter live rows: date range + GA/GI only (Fresh Takes AND Reworks)
   const filtered = (Array.isArray(liveRows) ? liveRows : []).filter((row) => {
@@ -223,7 +228,11 @@ function buildPodThroughputForRange(liveRows, ideationRows, startDate, endDate) 
     const beatName = normalizeText(row?.beatName) || "Unknown Beat";
     const showName = normalizeText(row?.showName) || "";
     const fuzzyKey = makeFuzzyBeatKey(showName, beatName);
-    const inIdeation = Boolean(fuzzyKey && ideationFuzzyKeys.has(fuzzyKey));
+    const beatOnlyKey = fuzzyBeatNormalize(beatName);
+    const inIdeation = Boolean(
+      (fuzzyKey && ideationFullKeys.has(fuzzyKey)) ||
+      (beatOnlyKey && ideationBeatOnlyKeys.has(beatOnlyKey))
+    );
 
     const beatMapKey = fuzzyKey || normalizeKey(beatName);
     if (!pod.beats.has(beatMapKey)) {
