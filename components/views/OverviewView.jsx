@@ -191,10 +191,7 @@ function FtRwCell({ ft, rw }) {
 }
 
 function PodBreakdownTable({ rows = [], loading = false }) {
-  const [prodMode, setProdMode] = useState("throughput");
   const safeRows = Array.isArray(rows) ? rows : [];
-
-  const prodKey = prodMode === "pipeline" ? "productionPipeline" : "production";
 
   return (
     <div style={{ marginTop: 20 }}>
@@ -209,37 +206,7 @@ function PodBreakdownTable({ rows = [], loading = false }) {
               <th>POD</th>
               <th style={{ textAlign: "center" }}>Editorial</th>
               <th style={{ textAlign: "center" }}>Ready for Prod</th>
-              <th style={{ textAlign: "center" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  Production
-                  <span style={{ display: "inline-flex", borderRadius: 4, overflow: "hidden", border: "1px solid var(--border-strong)" }}>
-                    <button
-                      type="button"
-                      onClick={() => setProdMode("throughput")}
-                      style={{
-                        padding: "1px 6px", fontSize: 10, fontWeight: 600, cursor: "pointer", letterSpacing: "0.04em",
-                        background: prodMode === "throughput" ? "var(--accent)" : "transparent",
-                        color: prodMode === "throughput" ? "#fff" : "var(--muted)",
-                        border: "none", textTransform: "uppercase",
-                      }}
-                    >
-                      Throughput
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setProdMode("pipeline")}
-                      style={{
-                        padding: "1px 6px", fontSize: 10, fontWeight: 600, cursor: "pointer", letterSpacing: "0.04em",
-                        background: prodMode === "pipeline" ? "var(--accent)" : "transparent",
-                        color: prodMode === "pipeline" ? "#fff" : "var(--muted)",
-                        border: "none", textTransform: "uppercase",
-                      }}
-                    >
-                      Pipeline
-                    </button>
-                  </span>
-                </span>
-              </th>
+              <th style={{ textAlign: "center" }}>Production</th>
             </tr>
           </thead>
           <tbody>
@@ -252,7 +219,7 @@ function PodBreakdownTable({ rows = [], loading = false }) {
                 <td style={{ fontWeight: 700 }}>{pod.podLeadName}</td>
                 <FtRwCell ft={pod.editorial?.ft ?? 0} rw={pod.editorial?.rw ?? 0} />
                 <FtRwCell ft={pod.readyForProd?.ft ?? 0} rw={pod.readyForProd?.rw ?? 0} />
-                <FtRwCell ft={pod[prodKey]?.ft ?? 0} rw={pod[prodKey]?.rw ?? 0} />
+                <FtRwCell ft={pod.production?.ft ?? 0} rw={pod.production?.rw ?? 0} />
               </tr>
             ))}
           </tbody>
