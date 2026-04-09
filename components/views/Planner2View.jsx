@@ -72,6 +72,45 @@ function extractWriterAngles(dayMap, weekDates) {
   return angles;
 }
 
+function isMeaningfulBeatLine(value) {
+  const text = normalizeAngleLabel(value).toLowerCase();
+  if (!text) return false;
+  const blocked = [
+    "due eod",
+    "ooo",
+    "training",
+    "reading",
+    "out of office",
+    "contingent",
+    "wip",
+  ];
+  if (blocked.some((term) => text === term || text.includes(term))) return false;
+  if (text.length < 3) return false;
+  return true;
+}
+
+function normalizeBeatKey(value) {
+  return normalizeAngleLabel(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function parseBeatDisplay(value) {
+  const text = normalizeAngleLabel(value);
+  if (!text) return { title: "-", subtitle: "" };
+  const separators = [" - ", " — ", ":", "|"];
+  for (const sep of separators) {
+    if (text.includes(sep)) {
+      const [head, ...rest] = text.split(sep);
+      return { title: normalizeAngleLabel(head), subtitle: normalizeAngleLabel(rest.join(sep)) };
+    }
+  }
+  if (text.includes("(") && text.includes(")")) {
+    const head = normalizeAngleLabel(text.replace(/\(.*?\)/g, ""));
+    const paren = text.match(/\((.*?)\)/)?.[1] || "";
+    return { title: head || text, subtitle: normalizeAngleLabel(paren) };
+  }
+  return { title: text, subtitle: "" };
+}
+
 function StageBar({ stageId, isStart, isEnd }) {
   if (!stageId || !STAGE_MAP[stageId]) return null;
   const stage = STAGE_MAP[stageId];
@@ -123,23 +162,47 @@ export default function Planner2Content({
   const dateColumns = Array.isArray(planner2Data?.dateColumns) ? planner2Data.dateColumns : [];
   const dayRows = Array.isArray(planner2Data?.dayRows) ? planner2Data.dayRows : [];
   const weekDates = dateColumns.slice(0, 7);
-  const ganttRows = useMemo(
-    () =>
-      plannerRows.map((row) => ({
-        podLeadName: String(row?.podLeadName || "Unmapped").trim() || "Unmapped",
-        ownerName: String(row?.ownerName || "").trim(),
-        committedTaskCount: Number(row?.committedTaskCount || 0),
-        completedTaskCount: Number(row?.completedTaskCount || 0),
-        laggingTaskCount: Number(row?.laggingTaskCount || 0),
-        days: weekDates.map((date) => stageIdForPlannerCell(row?.dayMap?.[date])),
-        writerRole:
-          String(row?.ownerName || "").trim().toLowerCase() === String(row?.podLeadName || "").trim().toLowerCase()
-            ? "Pod Lead"
-            : "Writer",
-        angleLabels: extractWriterAngles(row?.dayMap, weekDates),
-      })),
-    [plannerRows, weekDates]
-  );
+  const ganttRows = useMemo(() => {
+    return plannerRows.flatMap((row) => {
+      const podLeadName = String(row?.podLeadName || "Unmapped").trim() || "Unmapped";
+      const ownerName = String(row?.ownerName || "").trim();
+      const writerRole =
+        ownerName.toLowerCase() === String(row?.podLeadName || "").trim().toLowerCase() ? "Pod Lead" : "Writer";
+      const dayMap = row?.dayMap || {};
+
+      const beatCandidates = extractWriterAngles(dayMap, weekDates).filter(isMeaningfulBeatLine);
+      const beats = beatCandidates.length > 0 ? beatCandidates.slice(0, 3) : ["General planning"];
+      const beatRows = beats.map((beatLabel, index) => {
+        const beatKey = normalizeBeatKey(beatLabel);
+        const days = weekDates.map((date) => {
+          const cell = dayMap?.[date] || {};
+          const notes = Array.isArray(cell.notes) ? cell.notes : [];
+          const matched = notes.some((note) => {
+            const noteKey = normalizeBeatKey(note);
+            return noteKey && beatKey && (noteKey.includes(beatKey) || beatKey.includes(noteKey));
+          });
+          return matched ? stageIdForPlannerCell(cell) : null;
+        });
+
+        return {
+          podLeadName,
+          ownerName,
+          writerRole,
+          beatLabel,
+          beatDisplay: parseBeatDisplay(beatLabel),
+          days,
+          isFirstBeat: index === 0,
+        };
+      });
+
+      const hasAnyStage = beatRows.some((entry) => entry.days.some(Boolean));
+      if (!hasAnyStage && beatRows.length > 0) {
+        beatRows[0].days = weekDates.map((date) => stageIdForPlannerCell(dayMap?.[date]));
+      }
+
+      return beatRows;
+    });
+  }, [plannerRows, weekDates]);
   const groupedGanttRows = useMemo(() => {
     const podMap = new Map();
     for (const row of ganttRows) {
@@ -158,7 +221,7 @@ export default function Planner2Content({
       })
       .map(([pod, rows]) => ({
         pod,
-        rows: [...rows].sort((x, y) => x.ownerName.localeCompare(y.ownerName)),
+        rows: [...rows].sort((x, y) => x.ownerName.localeCompare(y.ownerName) || String(x.beatLabel).localeCompare(String(y.beatLabel))),
       }));
   }, [ganttRows]);
 
@@ -202,6 +265,7 @@ export default function Planner2Content({
                 <tr>
                   <th style={{ width: 90 }}>Pod</th>
                   <th style={{ width: 190 }}>Writer</th>
+                  <th style={{ width: 300 }}>Beats</th>
                   {weekDates.map((date, index) => (
                     <th key={date} style={{ minWidth: 90, textAlign: "center" }}>
                       <div>{DAYS[index] || "-"}</div>
@@ -212,7 +276,11 @@ export default function Planner2Content({
               </thead>
               <tbody>
                 {groupedGanttRows.map((group) =>
-                  group.rows.map((row, rowIndexInPod) => (
+                  group.rows.map((row, rowIndexInPod) => {
+                    const writerRowCount = group.rows.filter((item) => item.ownerName === row.ownerName).length;
+                    const writerFirstIndex = group.rows.findIndex((item) => item.ownerName === row.ownerName);
+                    const isFirstWriterRow = writerFirstIndex === rowIndexInPod;
+                    return (
                     <tr key={`${group.pod}-${row.ownerName}`}>
                       {rowIndexInPod === 0 ? (
                         <td
@@ -230,13 +298,16 @@ export default function Planner2Content({
                           {group.pod}
                         </td>
                       ) : null}
-                      <td style={{ background: "#faf7f3" }}>
-                        <div style={{ fontWeight: 700, fontSize: 18 }}>{row.ownerName || "-"}</div>
-                        <div style={{ color: "var(--subtle)", fontSize: 12 }}>{row.writerRole}</div>
-                        {row.angleLabels.length > 0 ? (
-                          <div style={{ color: "var(--ink-secondary)", fontSize: 12, marginTop: 4 }}>
-                            {row.angleLabels.slice(0, 2).join(" • ")}
-                          </div>
+                      {isFirstWriterRow ? (
+                        <td style={{ background: "#faf7f3", verticalAlign: "top" }} rowSpan={writerRowCount}>
+                          <div style={{ fontWeight: 700, fontSize: 18 }}>{row.ownerName || "-"}</div>
+                          <div style={{ color: "var(--subtle)", fontSize: 12 }}>{row.writerRole}</div>
+                        </td>
+                      ) : null}
+                      <td style={{ background: "#faf7f3", verticalAlign: "top" }}>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>{row.beatDisplay.title || "-"}</div>
+                        {row.beatDisplay.subtitle ? (
+                          <div style={{ color: "var(--subtle)", fontSize: 12 }}>{row.beatDisplay.subtitle}</div>
                         ) : null}
                       </td>
                       {DAYS.map((_, dayIndex) => {
@@ -261,7 +332,8 @@ export default function Planner2Content({
                         );
                       })}
                     </tr>
-                  ))
+                  );
+                  })
                 )}
               </tbody>
             </table>
