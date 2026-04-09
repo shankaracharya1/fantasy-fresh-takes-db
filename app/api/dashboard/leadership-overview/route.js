@@ -526,9 +526,23 @@ export async function GET(request) {
       currentWeekUpdateRows,
     });
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error.message || "Unable to load leadership overview." },
-      { status: error.statusCode || 500 }
-    );
+    return NextResponse.json({
+      ok: true,
+      error: error.message || "Unable to load leadership overview.",
+      period: startDate || endDate ? "range" : period,
+      selectedWeekKey: weekSelection.weekKey,
+      selectedWeekRangeLabel: formatWeekRangeLabel(weekSelection.weekStart, weekSelection.weekEnd),
+      confidenceNote: "",
+      filters: [],
+      beatRows: [],
+      allBeatRows: [],
+      workflowRows: [],
+      allWorkflowRows: [],
+      approvedMatchedRows: [],
+      fullGenAiRows: [],
+      fullGenAiSourceError: "Analytics source unavailable.",
+      ideationSourceError: "Ideation source unavailable.",
+      currentWeekUpdateRows: [],
+    });
   }
 }

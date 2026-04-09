@@ -407,9 +407,14 @@ export async function GET(request) {
 
     return NextResponse.json({ ok: true, podRows, selectionMode: "lifetime", scope });
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error.message || "Unable to load competition data." },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      ok: true,
+      error: error.message || "Unable to load competition data.",
+      podRows: [],
+      selectionMode: "lifetime",
+      weekKey: "",
+      weekLabel: "",
+      scope,
+    });
   }
 }

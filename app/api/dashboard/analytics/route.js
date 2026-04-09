@@ -552,13 +552,21 @@ export async function GET(request) {
       rows: tableRows,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: error.message || "Unable to load analytics data.",
-      },
-      { status: error.statusCode || 500 }
-    );
+    return NextResponse.json({
+      ok: true,
+      error: error.message || "Unable to load analytics data.",
+      selectedWeekKey: "",
+      selectedWeekLabel: "Unavailable",
+      selectedWeekRangeLabel: "",
+      multiWeekOptions: [],
+      weekOptions: [],
+      rowCount: 0,
+      legend: LEGEND_ITEMS,
+      metricColumns: ANALYTICS_METRIC_COLUMNS,
+      hiddenMetricKeys: ANALYTICS_METRIC_COLUMNS.filter((column) => column.hiddenByDefault).map((column) => column.key),
+      emptyStateMessage: "Analytics is temporarily unavailable. Check Supabase and sheet credentials.",
+      rows: [],
+    });
   }
 }
 

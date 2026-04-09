@@ -15,11 +15,30 @@ export async function GET() {
   } catch (error) {
     return NextResponse.json(
       {
-        ok: false,
+        ok: true,
         error: error.message || "Unable to load beats performance dashboard.",
+        warnings: ["Ideation tracker data is unavailable right now."],
+        benchmark: {
+          beatsPerPodPerWeek: 2,
+          freshTakesPerPodPerWeek: 1,
+        },
+        filters: { months: [], pods: [] },
+        rows: [],
+        freshTakeRows: [],
+        productionTimeline: {
+          editorial: [],
+          readyForProduction: [],
+          production: [],
+          live: [],
+        },
+        workflowTables: {
+          editorial: [],
+          readyForProduction: [],
+          production: [],
+          live: [],
+        },
       },
       {
-        status: error.statusCode || 500,
         headers: {
           "Cache-Control": "no-store",
         },

@@ -58,9 +58,21 @@ export async function GET(request) {
       pods,
     });
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error.message || "Unable to load POD tasks." },
-      { status: error.statusCode || 500 }
-    );
+    const selectedWeek = getWeekSelection(period);
+    return NextResponse.json({
+      ok: true,
+      error: error.message || "Unable to load POD tasks.",
+      period,
+      weekKey: selectedWeek.weekKey,
+      weekStart: selectedWeek.weekStart,
+      weekEnd: selectedWeek.weekEnd,
+      weekLabel: formatWeekRangeLabel(selectedWeek.weekStart, selectedWeek.weekEnd),
+      pods: POD_LEAD_ORDER.map((podLeadName) => ({
+        podLeadName,
+        pendingBeats: 0,
+        approvedBeats: 0,
+        scriptsToReview: 0,
+      })),
+    });
   }
 }

@@ -381,9 +381,32 @@ export async function GET(request) {
       tatRows: productionMetrics.tatRows,
     });
   } catch (error) {
-    return NextResponse.json(
-      { ok: false, error: error.message || "Unable to load Production dashboard." },
-      { status: error.statusCode || 500 }
-    );
+    return NextResponse.json({
+      ok: true,
+      error: error.message || "Unable to load Production dashboard.",
+      period: useExplicitRange ? "range" : period,
+      selectionMode: useExplicitRange ? "date-range" : "week",
+      weekStart: weekSelection.weekStart,
+      weekEnd: weekSelection.weekEnd,
+      weekLabel: formatWeekRangeLabel(weekSelection.weekStart, weekSelection.weekEnd),
+      sourceFilterWarning: "",
+      acdError: "ACD source unavailable.",
+      liveTabError: "Live-tab source unavailable.",
+      hasLiveData: false,
+      hasWeekData: false,
+      emptyStateMessage: "Production data is temporarily unavailable. Please verify sheet and backend access.",
+      acdChartRows: [],
+      acdPairRows: [],
+      productionTeamOutput: { liveAssetCount: null },
+      tatSummary: {
+        averageTatDays: null,
+        medianTatDays: null,
+        eligibleAssetCount: 0,
+        skippedMissingTatDates: 0,
+        skippedInvalidTatRows: 0,
+        targetTatDays: 1,
+      },
+      tatRows: [],
+    });
   }
 }
