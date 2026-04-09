@@ -47,6 +47,31 @@ function stageIdForPlannerCell(cell) {
   return "writing";
 }
 
+function normalizeAngleLabel(value) {
+  return String(value || "")
+    .replace(/^[\-\u2022\s]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractWriterAngles(dayMap, weekDates) {
+  const seen = new Set();
+  const angles = [];
+  for (const date of weekDates) {
+    const notes = Array.isArray(dayMap?.[date]?.notes) ? dayMap[date].notes : [];
+    for (const note of notes) {
+      const clean = normalizeAngleLabel(note);
+      if (!clean) continue;
+      const key = clean.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      angles.push(clean);
+      if (angles.length >= 3) return angles;
+    }
+  }
+  return angles;
+}
+
 function StageBar({ stageId, isStart, isEnd }) {
   if (!stageId || !STAGE_MAP[stageId]) return null;
   const stage = STAGE_MAP[stageId];
@@ -111,6 +136,7 @@ export default function Planner2Content({
           String(row?.ownerName || "").trim().toLowerCase() === String(row?.podLeadName || "").trim().toLowerCase()
             ? "Pod Lead"
             : "Writer",
+        angleLabels: extractWriterAngles(row?.dayMap, weekDates),
       })),
     [plannerRows, weekDates]
   );
@@ -207,6 +233,11 @@ export default function Planner2Content({
                       <td style={{ background: "#faf7f3" }}>
                         <div style={{ fontWeight: 700, fontSize: 18 }}>{row.ownerName || "-"}</div>
                         <div style={{ color: "var(--subtle)", fontSize: 12 }}>{row.writerRole}</div>
+                        {row.angleLabels.length > 0 ? (
+                          <div style={{ color: "var(--ink-secondary)", fontSize: 12, marginTop: 4 }}>
+                            {row.angleLabels.slice(0, 2).join(" • ")}
+                          </div>
+                        ) : null}
                       </td>
                       {DAYS.map((_, dayIndex) => {
                         const stageId = row.days[dayIndex] || null;
