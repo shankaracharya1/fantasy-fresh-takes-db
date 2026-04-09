@@ -249,7 +249,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
   }
 
   for (const row of liveRows) {
-    const stageDate = normalizeText(row?.finalUploadDate || row?.etaPromoCompletion || row?.etaToStartProd);
+    const stageDate = normalizeText(row?.finalUploadDate);
     const acdNames = [
       ...String(row?.acd1WorkedOnWorldSettings || "").split(/[,/]/).map(normalizeText).filter(Boolean),
       ...String(row?.acdMultipleSelections || "").split(/[,/]/).map(normalizeText).filter(Boolean),

@@ -2,18 +2,12 @@
 
 import { useMemo, useState } from "react";
 import {
-  AcdLeaderboardChart,
+  AcdCollapsibleTable,
   MetricCard,
-  ToggleGroup,
-  ACD_TIME_OPTIONS,
-  ACD_VIEW_OPTIONS,
   formatNumber,
   formatMetricValue,
   formatPercent,
-  formatDateLabel,
   normalizePodFilterKey,
-  getAcdViewLabel,
-  getAcdLeaderboardDataset,
 } from "./shared.jsx";
 import { getWeekSelection } from "../../lib/week-view.js";
 
@@ -91,7 +85,7 @@ function sanitizeAllowedOwnerName(value) {
   return SECTION3_ALLOWED_NAMES.has(cleaned) ? cleaned : "";
 }
 
-export default function LeadershipOverviewContent({ leadershipOverviewData, leadershipOverviewLoading, leadershipOverviewError, onNavigate, acdMetricsData, acdMetricsLoading, acdTimeView, onTimeViewChange, acdViewType, onViewTypeChange }) {
+export default function LeadershipOverviewContent({ leadershipOverviewData, leadershipOverviewLoading, leadershipOverviewError, onNavigate, acdMetricsData, acdMetricsLoading }) {
   const overviewData = leadershipOverviewData || null;
   const overviewLoading = Boolean(leadershipOverviewLoading);
   const overviewError = leadershipOverviewError || "";
@@ -575,36 +569,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
           </div>
         </div>
         <div className="panel-card overview-panel-card">
-          <div className="panel-head" style={{ marginBottom: 8 }}>
-            <div>
-              {(() => {
-                const dataset = getAcdLeaderboardDataset(acdMetricsData, acdTimeView, acdViewType);
-                const viewLabel = getAcdViewLabel(dataset.viewType);
-                const latestWorkDateLabel = acdMetricsData?.latestWorkDate ? formatDateLabel(acdMetricsData.latestWorkDate) : "";
-                return (
-                  <>
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
-                      <div>
-                        <div className="panel-title">{viewLabel} productivity chart</div>
-                        <div className="panel-statline">
-                          {dataset.meta}{latestWorkDateLabel ? `  Latest synced work date: ${latestWorkDateLabel}` : ""}
-                        </div>
-                      </div>
-                      <div className="production-toggle-wrap">
-                        <ToggleGroup label="Time View" options={ACD_TIME_OPTIONS} value={acdTimeView} onChange={onTimeViewChange} />
-                        <ToggleGroup label="View Type" options={ACD_VIEW_OPTIONS} value={acdViewType} onChange={onViewTypeChange} />
-                      </div>
-                    </div>
-                    {acdMetricsLoading ? (
-                      <div style={{ fontSize: 12, color: "var(--subtle)" }}>Loading production data…</div>
-                    ) : (
-                      <AcdLeaderboardChart rows={dataset.rows} viewLabel={viewLabel} />
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
+          <AcdCollapsibleTable acdMetricsData={acdMetricsData} acdMetricsLoading={acdMetricsLoading} />
         </div>
       </section>
 

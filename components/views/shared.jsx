@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, useRef } from "react";
+import { Component, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { MIN_DASHBOARD_DATE, WEEK_VIEW_OPTIONS } from "../../lib/week-view.js";
 
@@ -512,6 +512,103 @@ export class PlannerErrorBoundary extends Component {
 
     return this.props.children;
   }
+}
+
+// ─── Shared ACD Collapsible Table ─────────────────────────────────────────────
+
+function buildCdAcdRows(acdMetricsData) {
+  const trackedTeams = Array.isArray(acdMetricsData?.trackedTeams) ? acdMetricsData.trackedTeams : [];
+  const cdRowsRaw = Array.isArray(acdMetricsData?.rolling7CdRows) ? acdMetricsData.rolling7CdRows : [];
+  const acdRowsRaw = Array.isArray(acdMetricsData?.rolling7Rows) ? acdMetricsData.rolling7Rows : [];
+  const cdMap = Object.fromEntries(cdRowsRaw.map((r) => [r.cdName, { totalMinutes: Number(r.totalMinutes || 0), totalImages: Number(r.totalImages || 0) }]));
+  const acdMap = Object.fromEntries(acdRowsRaw.map((r) => [r.acdName, { totalMinutes: Number(r.totalMinutes || 0), totalImages: Number(r.totalImages || 0) }]));
+  return trackedTeams
+    .map((team) => {
+      const cdMetrics = cdMap[team.cdName] || { totalMinutes: 0, totalImages: 0 };
+      const acds = (Array.isArray(team.acdNames) ? team.acdNames : [])
+        .map((acdName) => ({ acdName, ...(acdMap[acdName] || { totalMinutes: 0, totalImages: 0 }) }))
+        .filter((r) => r.totalMinutes > 0 || r.totalImages > 0);
+      return { cdName: team.cdName, ...cdMetrics, acds };
+    })
+    .filter((r) => r.totalMinutes > 0 || r.acds.length > 0)
+    .sort((a, b) => b.totalMinutes - a.totalMinutes);
+}
+
+export function AcdCollapsibleTable({ acdMetricsData, acdMetricsLoading }) {
+  const [expandedCds, setExpandedCds] = useState({});
+  const latestWorkDateLabel = acdMetricsData?.latestWorkDate ? formatDateLabel(acdMetricsData.latestWorkDate) : "";
+  const rows = buildCdAcdRows(acdMetricsData);
+  const allExpanded = rows.length > 0 && rows.every((r) => Boolean(expandedCds[r.cdName]));
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>CD productivity</div>
+          <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 2 }}>
+            Rolling 7D by total minutes{latestWorkDateLabel ? ` · Latest synced: ${latestWorkDateLabel}` : ""}
+          </div>
+        </div>
+        {rows.length > 0 && (
+          <button
+            type="button"
+            className="ghost-button overview-section-link"
+            onClick={() => setExpandedCds(allExpanded ? {} : Object.fromEntries(rows.map((r) => [r.cdName, true])))}
+          >
+            {allExpanded ? "Collapse all" : "Expand all ACDs"}
+          </button>
+        )}
+      </div>
+      {acdMetricsLoading ? (
+        <div style={{ fontSize: 12, color: "var(--subtle)" }}>Loading production data…</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="ops-table overview-table">
+            <thead>
+              <tr>
+                <th>CD / ACD</th>
+                <th style={{ textAlign: "right" }}>Total (min)</th>
+                <th style={{ textAlign: "right" }}>Images</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length > 0 ? rows.flatMap((cd) => {
+                const isExpanded = Boolean(expandedCds[cd.cdName]);
+                const cdTr = (
+                  <tr key={`cd-${cd.cdName}`} style={{ fontWeight: 700 }}>
+                    <td>
+                      <button
+                        type="button"
+                        className="as-link"
+                        onClick={() => setExpandedCds((cur) => ({ ...cur, [cd.cdName]: !cur[cd.cdName] }))}
+                        style={{ padding: 0, border: "none", background: "transparent", fontWeight: 700 }}
+                      >
+                        {isExpanded ? "▾" : "▸"} {cd.cdName}
+                      </button>
+                    </td>
+                    <td style={{ textAlign: "right" }}>{formatNumber(cd.totalMinutes)}</td>
+                    <td style={{ textAlign: "right" }}>{formatNumber(cd.totalImages)}</td>
+                  </tr>
+                );
+                const acdTrs = isExpanded
+                  ? cd.acds.map((acd) => (
+                      <tr key={`acd-${cd.cdName}-${acd.acdName}`}>
+                        <td style={{ paddingLeft: 28, color: "var(--subtle)" }}>• {acd.acdName}</td>
+                        <td style={{ textAlign: "right" }}>{formatNumber(acd.totalMinutes)}</td>
+                        <td style={{ textAlign: "right" }}>{formatNumber(acd.totalImages)}</td>
+                      </tr>
+                    ))
+                  : [];
+                return [cdTr, ...acdTrs];
+              }) : (
+                <tr><td colSpan="3" style={{ color: "var(--subtle)" }}>No production data available yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Shared ACD Chart ─────────────────────────────────────────────────────────

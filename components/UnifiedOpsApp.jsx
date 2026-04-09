@@ -1400,10 +1400,6 @@ export default function UnifiedOpsApp() {
                   onNavigate={setActiveView}
                   acdMetricsData={acdMetricsData}
                   acdMetricsLoading={acdMetricsLoading}
-                  acdTimeView={acdTimeView}
-                  onTimeViewChange={setAcdTimeView}
-                  acdViewType={acdViewType}
-                  onViewTypeChange={setAcdViewType}
                 />
               </div>
             ) : null}
@@ -1416,10 +1412,6 @@ export default function UnifiedOpsApp() {
                   overviewError={overviewError}
                   acdMetricsData={acdMetricsData}
                   acdMetricsLoading={acdMetricsLoading}
-                  acdTimeView={acdTimeView}
-                  onTimeViewChange={setAcdTimeView}
-                  acdViewType={acdViewType}
-                  onViewTypeChange={setAcdViewType}
                   onShare={copySection}
                   copyingSection={copyingSection}
                   includeNewShowsPod={includeNewShowsPod}
