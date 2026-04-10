@@ -459,6 +459,10 @@ function buildFullGenAiRows(rows) {
         showName: normalizeText(row?.showName),
         beatName: normalizeText(row?.beatName),
         success: isFunnelSuccess(row),
+        cpiUsd: toFiniteNumber(row?.cpiUsd),
+        absoluteCompletionPct: toFiniteNumber(row?.absoluteCompletionPct),
+        ctrPct: toFiniteNumber(row?.ctrPct),
+        clickToInstall: toFiniteNumber(row?.clickToInstall),
         ...timeParts,
       };
     })
