@@ -273,7 +273,13 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
     });
   }
 
-  return rows.filter((row) => row.podLeadName && row.showName && row.beatName);
+  return rows.filter((row) => {
+    if (!row.podLeadName || !row.showName || !row.beatName) return false;
+    // Exclude GU (GenAI-Cinematic-Still / Full GenAI) assets
+    const code = String(row.assetCode || "").trim().toUpperCase();
+    if (code.startsWith("GU")) return false;
+    return true;
+  });
 }
 
 function buildFallbackWorkflowFromLiveRows(liveRows) {
