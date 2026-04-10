@@ -457,9 +457,6 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
                   const isExpanded = Boolean(expandedPods[podRow.podLeadName]);
                   const writerRows = outputData.writerRowsByPod[podRow.podLeadName] || [];
                   const podLabel = podRow.podLeadName || "-";
-                  const toggleLabel = isExpanded
-                    ? `Hide writer names for ${podLabel}`
-                    : `Show writer names for ${podLabel}`;
                   const podTr = (
                     <tr key={`pod-${podRow.podLeadName}`} style={{ fontWeight: 700 }}>
                       <td>
@@ -480,7 +477,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
                             fontWeight: 700,
                           }}
                         >
-                          {toggleLabel}
+                          {podLabel}
                         </button>
                       </td>
                       {section2Columns.map((column) => (
