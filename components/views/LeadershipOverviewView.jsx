@@ -182,7 +182,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
       const canonicalPod = resolveFocusPodLabel(podLeadName);
       const safeWriter = String(writerName || "").trim() || "Unassigned";
       if (!canonicalPod) return null;
-      const key = `${canonicalPod}::${normalizePodFilterKey(safeWriter)}`;
+      const key = `${canonicalPod}::${safeWriter}`;
       if (!writerMap.has(key)) {
         writerMap.set(key, buildMetricsRow(canonicalPod, safeWriter));
       }
