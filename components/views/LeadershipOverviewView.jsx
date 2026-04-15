@@ -10,7 +10,6 @@ import {
   formatPercent,
   normalizePodFilterKey,
 } from "./shared.jsx";
-import { getWeekSelection } from "../../lib/week-view.js";
 
 const FOCUS_POD_LEADS = [
   { key: "berman", label: "Berman" },
@@ -36,7 +35,6 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   const overviewLoading = Boolean(leadershipOverviewLoading);
   const overviewError = leadershipOverviewError || "";
   const [expandedPods, setExpandedPods] = useState({});
-  const [section2Mode, setSection2Mode] = useState("custom");
   const [section3ViewType, setSection3ViewType] = useState("acd");
   const [expandedAngles, setExpandedAngles] = useState({});
   const beatRows = Array.isArray(overviewData?.beatRows) ? overviewData.beatRows : [];
@@ -48,45 +46,13 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   const scopedWorkflowRows = workflowRows;
   const scopedFullGenAiRows = fullGenAiRows;
   const selectedRangeLabel = overviewData?.selectedWeekRangeLabel || "";
-  const lastWeekSelection = getWeekSelection("last");
-  const currentWeekSelection = getWeekSelection("current");
-  const inRange = (dateValue, range) => {
-    const date = String(dateValue || "").trim();
-    return Boolean(date) && date >= range.weekStart && date <= range.weekEnd;
-  };
-  const section2BeatRows =
-    section2Mode === "last"
-      ? allBeatRows.filter((row) => inRange(row.primaryDate, lastWeekSelection))
-      : section2Mode === "current"
-        ? allBeatRows.filter((row) => inRange(row.primaryDate, currentWeekSelection))
-        : scopedBeatRows;
-  const section2WorkflowRows =
-    section2Mode === "last"
-      ? allWorkflowRows.filter((row) => inRange(row.stageDate, lastWeekSelection))
-      : section2Mode === "current"
-        ? allWorkflowRows.filter((row) => inRange(row.stageDate, currentWeekSelection))
-        : scopedWorkflowRows;
-  const section2Columns =
-    section2Mode === "last"
-      ? [
-          { key: "readyForProductionCount", label: "Ready for Production" },
-          { key: "productionCount", label: "Production" },
-          { key: "liveCount", label: "Live" },
-        ]
-      : section2Mode === "current"
-        ? [
-            { key: "ideationCount", label: "Beats", podOnly: true },
-            { key: "editorialCount", label: "Editorial" },
-            { key: "readyForProductionCount", label: "Ready for Production" },
-            { key: "productionCount", label: "Production" },
-          ]
-        : [
-            { key: "ideationCount", label: "Ideation", podOnly: true },
-            { key: "editorialCount", label: "Editorial" },
-            { key: "readyForProductionCount", label: "Ready for Production" },
-            { key: "productionCount", label: "Production" },
-            { key: "liveCount", label: "Live" },
-          ];
+  const section2Columns = [
+    { key: "ideationCount", label: "Beats", podOnly: true },
+    { key: "editorialCount", label: "Editorial" },
+    { key: "readyForProductionCount", label: "Ready for Production" },
+    { key: "productionCount", label: "Production" },
+    { key: "liveCount", label: "Live" },
+  ];
 
   const countByStatus = (rows, statusCategory) => rows.filter((row) => row.statusCategory === statusCategory).length;
   const approvedBeats = countByStatus(scopedBeatRows, "approved");
@@ -129,12 +95,12 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
       return writerMap.get(key);
     };
 
-    for (const row of section2BeatRows) {
+    for (const row of scopedBeatRows) {
       const podEntry = getPodRow(row.podLeadName);
       if (podEntry) podEntry.ideationCount += 1;
     }
 
-    for (const row of section2WorkflowRows) {
+    for (const row of scopedWorkflowRows) {
       const podEntry = getPodRow(row.podLeadName);
       const writerEntry = getWriterRow(row.podLeadName, row.writerName);
 
@@ -173,7 +139,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
     );
 
     return { podRows, writerRowsByPod };
-  }, [section2BeatRows, section2WorkflowRows]);
+  }, [scopedBeatRows, scopedWorkflowRows]);
   const allPodsExpanded =
     outputData.podRows.length > 0 &&
     outputData.podRows.every((row) => Boolean(expandedPods[row.podLeadName]));
@@ -245,7 +211,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   ];
 
   return (
-    <div className="section-stack overview-flow-shell">
+    <div className="section-stack overview-flow-shell" style={{ marginTop: 24 }}>
       {overviewError ? <div className="warning-note">{overviewError}</div> : null}
 
       {overviewData?.confidenceNote ? (
@@ -284,19 +250,9 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
         <div className="overview-section-head">
           <div>
             <div className="overview-section-title">Writer and POD output</div>
+            <div className="overview-section-subtitle">Selected range from the global filter</div>
           </div>
           <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end" }}>
-            <div className="week-toggle-group">
-              {[
-                ["custom", "Custom"],
-                ["last", "Last week"],
-                ["current", "Current week"],
-              ].map(([id, label]) => (
-                <button key={id} type="button" className={section2Mode === id ? "is-active" : ""} onClick={() => setSection2Mode(id)}>
-                  {label}
-                </button>
-              ))}
-            </div>
             <button
               type="button"
               className="ghost-button overview-section-link"
@@ -439,7 +395,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
           <div>
             <div className="overview-section-title">Full Gen AI</div>
             <div className="overview-section-subtitle" style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-              Q1 Manual + Q1 Auto AI only
+              Live sheet rows where Ad Code starts with GA or GI
             </div>
           </div>
           <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end" }}>
@@ -453,7 +409,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
           <MetricCard
             label="Successful ads (formula)"
             value={overviewLoading ? "..." : formatMetricValue(successfulAdsCount)}
-            hint="Ad counts only when all formula thresholds are met"
+            hint="Counts ads meeting Amount Spent, Q1, CTI, True Completion, and CPI thresholds"
           />
           <MetricCard
             label="Overall hit rate"
@@ -539,7 +495,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
         <div className="overview-guidelines-card">
           <div className="overview-guidelines-title">Success definition and guidelines</div>
           <div className="overview-guidelines-line">
-            Shows Q1 Manual + Q1 Auto AI ads that have been passed to Full Gen AI (spend ≥ $100, CPI &lt; $10, ≤ 2 metric misses).
+            Ads passed to Full Gen AI = Live sheet rows where Ad Code starts with GA or GI and the Final Upload Date falls in the selected global range.
           </div>
           <div className="overview-guidelines-line">
             A successful ad passes all formula thresholds: Amount Spent ≥ 100, Q1 Completion &gt; 10%, CTI ≥ 12%, True Completion ≥ 1.8%, CPI ≤ 12.

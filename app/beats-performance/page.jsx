@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 function formatNumber(value) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(Number(value || 0));
@@ -20,6 +21,7 @@ function getPerformanceTone(beatsPerWriter) {
 }
 
 export default function BeatsPerformancePage() {
+  const router = useRouter();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -106,12 +108,36 @@ export default function BeatsPerformancePage() {
     <main
       style={{
         minHeight: "100vh",
-        padding: "40px 20px 64px",
+        padding: "52px 20px 72px",
         background:
           "radial-gradient(circle at top left, rgba(194,112,62,0.14), transparent 28%), linear-gradient(180deg, #f7f2e8 0%, #efe6d8 100%)",
       }}
     >
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+        <div style={{ marginBottom: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => {
+              router.push("/");
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "12px 18px",
+              borderRadius: 999,
+              border: "1px solid rgba(28, 25, 23, 0.12)",
+              background: "rgba(255,255,255,0.86)",
+              color: "#1f1b16",
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: "0 10px 26px rgba(57, 47, 31, 0.08)",
+            }}
+          >
+            <span aria-hidden="true">←</span>
+Return to Overview
+          </button>
+        </div>
         <div
           style={{
             borderRadius: 28,

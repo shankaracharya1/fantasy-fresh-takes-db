@@ -252,19 +252,21 @@ function PodBreakdownTable({ rows = [], loading = false }) {
               <th style={{ textAlign: "center" }}>Editorial</th>
               <th style={{ textAlign: "center" }}>Ready for Prod</th>
               <th style={{ textAlign: "center" }}>Production</th>
+              <th style={{ textAlign: "center" }}>Live</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="4" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+              <tr><td colSpan="5" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
             ) : safeRows.length === 0 ? (
-              <tr><td colSpan="4" style={{ color: "var(--subtle)" }}>No data for the selected period.</td></tr>
+              <tr><td colSpan="5" style={{ color: "var(--subtle)" }}>No data for the selected period.</td></tr>
             ) : safeRows.map((pod) => (
               <tr key={pod.podLeadName}>
                 <td style={{ fontWeight: 700 }}>{pod.podLeadName}</td>
                 <FtRwCell ft={pod.editorial?.ft ?? 0} rw={pod.editorial?.rw ?? 0} />
                 <FtRwCell ft={pod.readyForProd?.ft ?? 0} rw={pod.readyForProd?.rw ?? 0} />
                 <FtRwCell ft={pod.production?.ft ?? 0} rw={pod.production?.rw ?? 0} />
+                <FtRwCell ft={pod.live?.ft ?? 0} rw={pod.live?.rw ?? 0} />
               </tr>
             ))}
           </tbody>
@@ -725,6 +727,7 @@ export default function OverviewContent({
   const podThroughputRows = Array.isArray(overviewData?.podThroughputRows) ? overviewData.podThroughputRows : [];
   const editorialPodRows = Array.isArray(overviewData?.editorialPodRows) ? overviewData.editorialPodRows : [];
   const podBreakdownRows = Array.isArray(overviewData?.podBreakdownRows) ? overviewData.podBreakdownRows : [];
+  const showRefreshingNote = Boolean(overviewLoading && overviewData);
 
   return (
     <ShareablePanel
@@ -746,6 +749,13 @@ export default function OverviewContent({
         {notes.map((note) => (
           <div key={note} className="warning-note">{note}</div>
         ))}
+
+        {showRefreshingNote ? (
+          <div className="overview-loading-note" role="status" aria-live="polite">
+            <span className="overview-loading-dot" aria-hidden="true" />
+            Refreshing selected dates…
+          </div>
+        ) : null}
 
         {(() => {
           const breakdownTable = <PodBreakdownTable rows={podBreakdownRows} loading={overviewLoading} />;

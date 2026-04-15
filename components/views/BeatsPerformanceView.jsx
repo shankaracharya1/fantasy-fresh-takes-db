@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect } from "react";
 import {
   EmptyState,
   ShareablePanel,
@@ -12,6 +12,8 @@ import {
   normalizeStageMatchKey,
 } from "./shared.jsx";
 import { matchAngleName } from "../../lib/fuzzy-match.js";
+
+const LIVE_MIN_FINAL_UPLOAD_DATE = "2026-03-01";
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
@@ -113,6 +115,19 @@ function getSelectedPeriodRange(selectedPeriodOption, beatRows) {
   return getMonthWeekDateRange(selectedPeriodOption.monthKey, selectedPeriodOption.weekInMonth);
 }
 
+function isDateWithinRange(value, range) {
+  if (!range?.startDate || !range?.endDate) return true;
+  const safeDate = String(value || "").slice(0, 10);
+  if (!safeDate) return false;
+  return safeDate >= range.startDate && safeDate <= range.endDate;
+}
+
+function rowHasDateInRange(rowDates, range) {
+  if (!range?.startDate || !range?.endDate) return true;
+  const dates = Array.isArray(rowDates) ? rowDates : [rowDates];
+  return dates.some((date) => isDateWithinRange(date, range));
+}
+
 function compareDetailedTableValues(leftValue, rightValue) {
   const leftNumber = Number(leftValue);
   const rightNumber = Number(rightValue);
@@ -177,12 +192,9 @@ export default function BeatsPerformanceContent({
   beatsPerformanceError,
   onShare,
   copyingSection,
+  onNavigate,
+  selectedDateRange,
 }) {
-  const [selectedPeriod, setSelectedPeriod] = useState("overall");
-  const [selectedPod, setSelectedPod] = useState("all");
-  const [drilldownPod, setDrilldownPod] = useState("all");
-  const [detailSort, setDetailSort] = useState({ key: "assignedDate", direction: "desc" });
-  const [detailPage, setDetailPage] = useState(0);
   const [workflowSorts, setWorkflowSorts] = useState({
     editorial: { key: "assetCode", direction: "asc" },
     readyForProduction: { key: "assetCode", direction: "asc" },
@@ -195,6 +207,9 @@ export default function BeatsPerformanceContent({
     production: 0,
     live: 0,
   });
+  const [expandedPods, setExpandedPods] = useState([]);
+  const [progressView, setProgressView] = useState("pod");
+  const [hoveredProgressKey, setHoveredProgressKey] = useState(null);
 
   const safeBeatsPerformanceData =
     beatsPerformanceData ||
@@ -209,107 +224,43 @@ export default function BeatsPerformanceContent({
         live: [],
       },
     };
-  const podOptions = Array.isArray(safeBeatsPerformanceData?.filters?.pods) ? safeBeatsPerformanceData.filters.pods : [];
+  const activeDateRange = selectedDateRange || null;
+  const activeDateRangeLabel =
+    activeDateRange?.startDate && activeDateRange?.endDate
+      ? `${formatDateLabel(activeDateRange.startDate)} - ${formatDateLabel(activeDateRange.endDate)}`
+      : "All available data";
   const beatRows = Array.isArray(safeBeatsPerformanceData?.rows) ? safeBeatsPerformanceData.rows : [];
   const freshTakeRows = Array.isArray(safeBeatsPerformanceData?.freshTakeRows) ? safeBeatsPerformanceData.freshTakeRows : [];
   const workflowTables = safeBeatsPerformanceData?.workflowTables || {};
-  const periodOptions = useMemo(() => {
-    const optionMap = new Map();
-
-    for (const row of beatRows) {
-      if (!row?.monthKey || !row?.weekInMonth) {
-        continue;
-      }
-
-      const id = `${row.monthKey}::${row.weekInMonth}`;
-      if (!optionMap.has(id)) {
-        optionMap.set(id, {
-          id,
-          monthKey: row.monthKey,
-          weekInMonth: Number(row.weekInMonth),
-          label: formatMonthWeekLabel(row.monthKey, row.weekInMonth),
-        });
-      }
+  const editorialWorkflowRows = Array.isArray(workflowTables?.editorial) ? workflowTables.editorial : [];
+  const readyForProductionWorkflowRows = Array.isArray(workflowTables?.readyForProduction) ? workflowTables.readyForProduction : [];
+  const productionWorkflowRows = Array.isArray(workflowTables?.production) ? workflowTables.production : [];
+  const liveWorkflowRows = (Array.isArray(workflowTables?.live) ? workflowTables.live : []).filter((row) => {
+    const finalUploadDate = String(row?.finalUploadDate || "").slice(0, 10);
+    if (!finalUploadDate || finalUploadDate < LIVE_MIN_FINAL_UPLOAD_DATE) {
+      return false;
     }
-
-    return [
-      { id: "overall", label: "Till now (overall data)", monthKey: "", weekInMonth: null },
-      ...Array.from(optionMap.values()).sort((left, right) => {
-        if (left.monthKey !== right.monthKey) {
-          return left.monthKey.localeCompare(right.monthKey);
-        }
-        return left.weekInMonth - right.weekInMonth;
-      }),
-    ];
-  }, [beatRows]);
+    return rowHasDateInRange(finalUploadDate, activeDateRange);
+  });
+  const effectiveWorkflowPod = "all";
+  const effectiveWorkflowPodKey = "all";
 
   useEffect(() => {
-    if (!selectedPeriod || !periodOptions.some((option) => option.id === selectedPeriod)) {
-      setSelectedPeriod(periodOptions[0]?.id || "overall");
-    }
-  }, [periodOptions, selectedPeriod]);
-
-  useEffect(() => {
-    if (selectedPod !== "all" && !podOptions.includes(selectedPod)) {
-      setSelectedPod("all");
-    }
-  }, [podOptions, selectedPod]);
-
-  useEffect(() => {
-    if (drilldownPod !== "all" && !podOptions.includes(drilldownPod)) {
-      setDrilldownPod("all");
-    }
-  }, [podOptions, drilldownPod]);
-
-  useEffect(() => {
-    setDetailPage(0);
-  }, [selectedPeriod, selectedPod, detailSort]);
-
-  useEffect(() => {
-    setDrilldownPod("all");
-  }, [selectedPeriod, selectedPod]);
+    setExpandedPods([]);
+  }, [activeDateRange?.startDate, activeDateRange?.endDate]);
 
   useEffect(() => {
     setWorkflowPages({
-      editorial: 0,
-      readyForProduction: 0,
       production: 0,
       live: 0,
     });
-  }, [selectedPeriod, selectedPod, workflowSorts]);
+  }, [workflowSorts]);
 
-  if (!selectedPeriod) {
-    return <EmptyState text="Beats performance data is not available right now." />;
-  }
-
-  const selectedPeriodOption = periodOptions.find((option) => option.id === selectedPeriod) || periodOptions[0];
-  const isOverallPeriod = selectedPeriod === "overall";
-  const selectedPeriodIndex = periodOptions.findIndex((option) => option.id === selectedPeriod);
-  const previousPeriodOption = !isOverallPeriod && selectedPeriodIndex > 1 ? periodOptions[selectedPeriodIndex - 1] : null;
-  const selectedPodKey =
-    selectedPod === "all"
-      ? "all"
-      : beatRows.find((row) => row.podLeadName === selectedPod)?.podMatchKey || normalizePodFilterKey(selectedPod);
-  const scopedRows = beatRows.filter(
-    (row) =>
-      (selectedPod === "all" || normalizePodFilterKey(row.podMatchKey || row.podLeadName) === selectedPodKey) &&
-      (isOverallPeriod ||
-        (row.monthKey === selectedPeriodOption.monthKey && Number(row.weekInMonth || 0) === Number(selectedPeriodOption.weekInMonth || 0)))
+  const scopedRows = beatRows.filter((row) =>
+    rowHasDateInRange(row?.assignedDate || row?.primaryDate || row?.completedDate || row?.rawBucketLabel, activeDateRange)
   );
-  const scopedFreshTakeRows = freshTakeRows.filter(
-    (row) =>
-      (selectedPod === "all" || normalizePodFilterKey(row.podMatchKey || row.podLeadName) === selectedPodKey) &&
-      (isOverallPeriod ||
-        (row.monthKey === selectedPeriodOption.monthKey && Number(row.weekInMonth || 0) === Number(selectedPeriodOption.weekInMonth || 0)))
-  );
-  const previousScopedRows = previousPeriodOption
-    ? beatRows.filter(
-        (row) =>
-          (selectedPod === "all" || normalizePodFilterKey(row.podMatchKey || row.podLeadName) === selectedPodKey) &&
-          row.monthKey === previousPeriodOption.monthKey &&
-          Number(row.weekInMonth || 0) === Number(previousPeriodOption.weekInMonth || 0)
-      )
-    : [];
+  const previousScopedRows = [];
+  const isOverallPeriod = true;
 
   const activePods = Array.from(
     new Set(scopedRows.map((row) => String(row?.podLeadName || "").trim()).filter(Boolean))
@@ -323,142 +274,38 @@ export default function BeatsPerformanceContent({
   const previousAbandonedCount = previousScopedRows.filter((row) => row.statusCategory === "abandoned").length;
   const previousReviewPendingCount = previousScopedRows.filter((row) => row.statusCategory === "review_pending").length;
   const previousIterateCount = previousScopedRows.filter((row) => row.statusCategory === "iterate").length;
+  const metricCards = [
+    { label: "Total Beats", value: formatMetricValue(totalBeats), delta: null },
+    { label: "Approved beats", value: formatMetricValue(approvedCount), delta: null },
+    { label: "Review pending", value: formatMetricValue(reviewPendingCount), delta: null },
+    { label: "Iterate", value: formatMetricValue(iterateCount), delta: null },
+    { label: "Abandoned", value: formatMetricValue(abandonedCount), delta: null },
+  ];
   const podStatusSummaryRows = activePods
     .map((podLeadName) => {
       const podRows = scopedRows.filter((row) => row.podLeadName === podLeadName);
+      const groups = {
+        approved: podRows.filter((row) => row.statusCategory === "approved"),
+        abandoned: podRows.filter((row) => row.statusCategory === "abandoned"),
+        reviewPending: podRows.filter((row) => row.statusCategory === "review_pending"),
+        iterate: podRows.filter((row) => row.statusCategory === "iterate"),
+        toBeIdeated: podRows.filter((row) => row.statusCategory === "to_be_ideated"),
+      };
+
       return {
         podLeadName,
-        approved: podRows.filter((row) => row.statusCategory === "approved").length,
-        abandoned: podRows.filter((row) => row.statusCategory === "abandoned").length,
-        reviewPending: podRows.filter((row) => row.statusCategory === "review_pending").length,
-        iterate: podRows.filter((row) => row.statusCategory === "iterate").length,
-        toBeIdeated: podRows.filter((row) => row.statusCategory === "to_be_ideated").length,
+        approved: groups.approved.length,
+        abandoned: groups.abandoned.length,
+        reviewPending: groups.reviewPending.length,
+        iterate: groups.iterate.length,
+        toBeIdeated: groups.toBeIdeated.length,
         total: podRows.length,
+        groups,
       };
     })
     .sort((left, right) => right.total - left.total || left.podLeadName.localeCompare(right.podLeadName));
-  const comparisonSuffix = previousPeriodOption ? `vs ${previousPeriodOption.label}` : "vs last week";
-  const metricCards = [
-    {
-      label: "Total Beats",
-      value: formatMetricValue(totalBeats),
-      delta: getDeltaMeta(totalBeats, previousScopedRows.length, comparisonSuffix),
-    },
-    {
-      label: "Approved beats",
-      value: formatMetricValue(approvedCount),
-      delta: getDeltaMeta(approvedCount, previousApprovedCount, comparisonSuffix),
-    },
-    {
-      label: "Review pending",
-      value: formatMetricValue(reviewPendingCount),
-      delta: getDeltaMeta(reviewPendingCount, previousReviewPendingCount, comparisonSuffix),
-    },
-    {
-      label: "Iterate",
-      value: formatMetricValue(iterateCount),
-      delta: getDeltaMeta(iterateCount, previousIterateCount, comparisonSuffix),
-    },
-    {
-      label: "Abandoned",
-      value: formatMetricValue(abandonedCount),
-      delta: getDeltaMeta(abandonedCount, previousAbandonedCount, comparisonSuffix),
-    },
-  ];
-  const detailedRows = [...scopedRows].sort((left, right) => {
-    const getSortValue = (row, key) => {
-      if (key === "name") return row.beatCode || "";
-      if (key === "podLeadName") return row.podLeadName || "";
-      if (key === "showName") return row.showName || "";
-      if (key === "beatName") return row.beatName || "";
-      if (key === "statusLabel") return row.statusLabel || "";
-      if (key === "assignedDate") return row.assignedDate || row.assignedDateRaw || "";
-      if (key === "completedDate") return row.completedDate || row.completedDateRaw || "";
-      if (key === "cycleDays") return row.cycleDays ?? "";
-      return "";
-    };
 
-    const comparison = compareDetailedTableValues(
-      getSortValue(left, detailSort.key),
-      getSortValue(right, detailSort.key)
-    );
-
-    if (comparison !== 0) {
-      return detailSort.direction === "asc" ? comparison : -comparison;
-    }
-
-    return String(left.id || "").localeCompare(String(right.id || ""));
-  });
-  const detailPageSize = 10;
-  const detailPageCount = Math.max(1, Math.ceil(detailedRows.length / detailPageSize));
-  const safeDetailPage = Math.min(detailPage, detailPageCount - 1);
-  const paginatedDetailedRows = detailedRows.slice(
-    safeDetailPage * detailPageSize,
-    safeDetailPage * detailPageSize + detailPageSize
-  );
-  const detailPageOptions = Array.from({ length: detailPageCount }, (_, index) => {
-    const start = index * detailPageSize + 1;
-    const end = Math.min((index + 1) * detailPageSize, detailedRows.length);
-    return { index, label: `${start}-${end}` };
-  });
-  const selectedPeriodRangeLabel = getSelectedPeriodRangeLabel(selectedPeriodOption, beatRows);
-  const selectedPeriodRange = getSelectedPeriodRange(selectedPeriodOption, beatRows);
-  const effectiveWorkflowPod = drilldownPod !== "all" ? drilldownPod : selectedPod;
-  const effectiveWorkflowPodKey =
-    effectiveWorkflowPod === "all"
-      ? "all"
-      : beatRows.find((row) => row.podLeadName === effectiveWorkflowPod)?.podMatchKey || normalizePodFilterKey(effectiveWorkflowPod);
   const workflowTableConfigs = [
-    {
-      id: "editorial",
-      title: "Editorial",
-      subtitle: "Filtered rows from the Editorial sheet",
-      columns: [
-        ["assetCode", "AD code"],
-        ["podLeadName", "POD"],
-        ["writerName", "Writer"],
-        ["showName", "Show"],
-        ["beatName", "Angle name"],
-        ["productionType", "Production Type"],
-        ["dateAssigned", "Date assigned"],
-        ["dateSubmittedByLead", "Date submitted by Lead"],
-      ],
-    },
-    {
-      id: "readyForProduction",
-      title: "Ready for Production",
-      subtitle: "Filtered rows from the Ready for Production sheet",
-      columns: [
-        ["assetCode", "AD code"],
-        ["podLeadName", "POD"],
-        ["writerName", "Writer"],
-        ["showName", "Show"],
-        ["beatName", "Angle name"],
-        ["productionType", "Production Type"],
-        ["dateSubmittedByLead", "Date submitted by Lead"],
-        ["etaToStartProd", "ETA to start prod"],
-      ],
-    },
-    {
-      id: "production",
-      title: "Production",
-      subtitle: "Filtered rows from the Production sheet",
-      columns: [
-        ["assetCode", "AD code"],
-        ["podLeadName", "POD"],
-        ["writerName", "Writer"],
-        ["showName", "Show"],
-        ["beatName", "Angle name"],
-        ["productionType", "Production Type"],
-        ["etaToStartProd", "ETA to start prod"],
-        ["etaPromoCompletion", "ETA for promo completion"],
-        ["cl", "CL"],
-        ["cd", "CD"],
-        ["acd1WorkedOnWorldSettings", "ACD 1 Worked on world settings"],
-        ["acdMultipleSelections", "ACD Multiple selections allowed."],
-        ["status", "Status"],
-      ],
-    },
     {
       id: "live",
       title: "Live",
@@ -482,13 +329,22 @@ export default function BeatsPerformanceContent({
       ],
     },
   ];
-  const workflowPodChips = [...podOptions].sort((left, right) => left.localeCompare(right));
   const preparedWorkflowTables = workflowTableConfigs.map((config) => {
     const filteredRows = filterWorkflowRows(
       workflowTables?.[config.id],
       effectiveWorkflowPod,
       effectiveWorkflowPodKey
-    );
+    ).filter((row) => {
+      if (config.id === "live") {
+        const finalUploadDate = String(row?.finalUploadDate || "").slice(0, 10);
+        if (!finalUploadDate || finalUploadDate < LIVE_MIN_FINAL_UPLOAD_DATE) {
+          return false;
+        }
+        return rowHasDateInRange(finalUploadDate, activeDateRange);
+      }
+
+      return rowHasDateInRange(row?.filterDates, activeDateRange);
+    });
     const sortedRows = sortWorkflowRows(filteredRows, workflowSorts[config.id] || { key: "assetCode", direction: "asc" });
     const pagination = paginateRows(sortedRows, workflowPages[config.id] || 0, 10);
     return {
@@ -533,66 +389,151 @@ export default function BeatsPerformanceContent({
       };
     }),
   }));
+  const editorialRows = editorialWorkflowRows.filter((row) => rowHasDateInRange(row?.filterDates, activeDateRange));
+  const readyForProductionRows = readyForProductionWorkflowRows.filter((row) => rowHasDateInRange(row?.filterDates, activeDateRange));
+  const productionRows = productionWorkflowRows.filter((row) => rowHasDateInRange(row?.filterDates, activeDateRange));
+  const progressMatchValue = (row) => String((progressView === "writer" ? row?.writerName : row?.podLeadName) || "").trim();
+
+  const progressRows = Array.from(
+    scopedRows.reduce((map, row) => {
+      const keySource = progressView === "writer" ? row?.writerName : row?.podLeadName;
+      const safeKey = String(keySource || "").trim();
+      if (!safeKey) {
+        return map;
+      }
+
+      if (!map.has(safeKey)) {
+        map.set(safeKey, {
+          label: safeKey,
+          approved: 0,
+          editorial: 0,
+          readyProduction: 0,
+          live: 0,
+        });
+      }
+
+      const current = map.get(safeKey);
+      current.approved += row?.statusCategory === "approved" ? 1 : 0;
+      return map;
+    }, new Map())
+  )
+    .map(([label, entry]) => ({ ...entry, label }))
+    .map((entry) => {
+      const editorialCount = editorialRows.filter((row) => {
+        const compareValue = progressView === "writer" ? row?.writerName : row?.podLeadName;
+        return String(compareValue || "").trim() === entry.label;
+      }).length;
+
+      const readyProductionCount =
+        readyForProductionRows.filter((row) => {
+          const compareValue = progressView === "writer" ? row?.writerName : row?.podLeadName;
+          return String(compareValue || "").trim() === entry.label;
+        }).length +
+        productionRows.filter((row) => {
+          const compareValue = progressView === "writer" ? row?.writerName : row?.podLeadName;
+          return String(compareValue || "").trim() === entry.label;
+        }).length;
+
+      const liveCount = liveWorkflowRows.filter((row) => {
+        const compareValue = progressView === "writer" ? row?.writerName : row?.podLeadName;
+        return String(compareValue || "").trim() === entry.label;
+      }).length;
+
+      return {
+        ...entry,
+        editorial: editorialCount,
+        readyProduction: readyProductionCount,
+        live: liveCount,
+        details: [
+          ...scopedRows
+            .filter((row) => progressMatchValue(row) === entry.label && row?.statusCategory === "approved")
+            .map((row) => ({
+              id: `ideation-${row.id}`,
+              beatName: row?.beatName || row?.beatCode || "-",
+              stageLabel: "Approved in Ideation",
+              etaLabel: "-",
+              tone: "approved",
+            })),
+          ...editorialRows
+            .filter((row) => progressMatchValue(row) === entry.label)
+            .map((row) => ({
+              id: `editorial-${row.id}`,
+              beatName: row?.beatName || row?.scriptCode || "-",
+              stageLabel: String(row?.status || "").trim(),
+              etaLabel: row?.etaPromoCompletion || row?.etaToStartProd || "-",
+              tone: "editorial",
+            })),
+          ...readyForProductionRows
+            .filter((row) => progressMatchValue(row) === entry.label)
+            .map((row) => ({
+              id: `ready-${row.id}`,
+              beatName: row?.beatName || row?.scriptCode || "-",
+              stageLabel: String(row?.status || "").trim(),
+              etaLabel: row?.etaPromoCompletion || row?.etaToStartProd || "-",
+              tone: "ready-production",
+            })),
+          ...productionRows
+            .filter((row) => progressMatchValue(row) === entry.label)
+            .map((row) => ({
+              id: `production-${row.id}`,
+              beatName: row?.beatName || row?.scriptCode || "-",
+              stageLabel: String(row?.status || "").trim(),
+              etaLabel: row?.etaPromoCompletion || row?.etaToStartProd || "-",
+              tone: "ready-production",
+            })),
+          ...liveWorkflowRows
+            .filter((row) => progressMatchValue(row) === entry.label)
+            .map((row) => ({
+              id: `live-${row.id}`,
+              beatName: row?.beatName || row?.scriptCode || "-",
+              stageLabel: String(row?.status || "").trim(),
+              etaLabel: row?.etaPromoCompletion || row?.finalUploadDate || "-",
+              tone: "live",
+            })),
+        ],
+        total: entry.approved + editorialCount + readyProductionCount + liveCount,
+      };
+    })
+    .filter((entry) => entry.total > 0)
+    .sort((left, right) => right.total - left.total || left.label.localeCompare(right.label));
 
   return (
-    <ShareablePanel shareLabel="Beats Performance" onShare={onShare} isSharing={copyingSection === "Beats Performance"}>
+    <div className="beats-performance-shell" style={{ marginTop: 24 }}>
+      <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-start" }}>
+        <button
+          type="button"
+          onClick={() => onNavigate?.("leadership-overview")}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 16px",
+            borderRadius: 999,
+            border: "1px solid rgba(28, 25, 23, 0.12)",
+            background: "rgba(255,255,255,0.86)",
+            color: "#1f1b16",
+            fontWeight: 700,
+            cursor: "pointer",
+            boxShadow: "0 10px 26px rgba(57, 47, 31, 0.08)",
+          }}
+        >
+          <span aria-hidden="true">←</span>
+          Back to Overview
+        </button>
+      </div>
+      <div style={{ marginBottom: 14, fontSize: 13, fontWeight: 700, color: "var(--subtle)" }}>
+        Showing {activeDateRangeLabel}
+      </div>
+      <ShareablePanel shareLabel="Beats Performance" onShare={onShare} isSharing={copyingSection === "Beats Performance"}>
       <div className="section-stack">
         {beatsPerformanceLoading ? <div className="warning-note">Loading data. Showing placeholder values.</div> : null}
         {beatsPerformanceError ? <div className="warning-note">{beatsPerformanceError}</div> : null}
-        <div className="section-toolbar">
-          <label className="toolbar-select">
-            <span>Filter</span>
-            <select value={selectedPeriod} onChange={(event) => setSelectedPeriod(event.target.value)}>
-              {periodOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="toolbar-select">
-            <span>POD</span>
-            <select value={selectedPod} onChange={(event) => setSelectedPod(event.target.value)}>
-              <option value="all">All PODs</option>
-              {podOptions.map((podLeadName) => (
-                <option key={podLeadName} value={podLeadName}>
-                  {podLeadName}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
 
-        <div
-          style={{
-            marginTop: -6,
-            fontSize: 13,
-            color: "var(--subtle)",
-            fontWeight: 600,
-          }}
-        >
-          {selectedPeriodOption?.label ? `${selectedPeriodOption.label}: ` : ""}
-          {selectedPeriodRangeLabel}
-        </div>
-
-        <div
-          style={{
-            marginTop: -6,
-            fontSize: 12,
-            color: "var(--subtle)",
-          }}
-        >
-          Live updates daily at 5:00 AM IST. Other sheets refresh every 4 hours.
-        </div>
-
-        <div className="pod-summary-grid">
+        <div className="pod-summary-grid beats-summary-grid">
           {metricCards.map((card) => (
-            <div key={card.label} className="metric-card">
+            <div key={card.label} className="metric-card beats-metric-card">
               <div className="metric-label">{card.label}</div>
               <div className="metric-value">{card.value}</div>
-              {!isOverallPeriod ? (
-                <div style={{ fontSize: 12, fontWeight: 700, marginTop: 8, color: card.delta.color }}>{card.delta.text}</div>
-              ) : null}
             </div>
           ))}
         </div>
@@ -601,11 +542,11 @@ export default function BeatsPerformanceContent({
 
         <div className="pod-section-header">
           <span className="pod-section-title">POD Status</span>
-          <span className="pod-section-subtitle">POD-wise status counts from Ideation tracker only</span>
+          <span className="pod-section-subtitle">Expand a POD to see Writer name - Beat name by status</span>
         </div>
 
         <div className="table-wrap">
-          <table className="ops-table">
+          <table className="ops-table beats-pod-table">
             <thead>
               <tr>
                 <th>POD</th>
@@ -619,17 +560,75 @@ export default function BeatsPerformanceContent({
             </thead>
             <tbody>
               {podStatusSummaryRows.length > 0 ? (
-                podStatusSummaryRows.map((row) => (
-                  <tr key={row.podLeadName}>
-                    <td>{row.podLeadName || "-"}</td>
-                    <td>{formatMetricValue(row.approved)}</td>
-                    <td>{formatMetricValue(row.abandoned)}</td>
-                    <td>{formatMetricValue(row.reviewPending)}</td>
-                    <td>{formatMetricValue(row.iterate)}</td>
-                    <td>{formatMetricValue(row.toBeIdeated)}</td>
-                    <td>{formatMetricValue(row.total)}</td>
-                  </tr>
-                ))
+                podStatusSummaryRows.map((row) => {
+                  const isExpanded = expandedPods.includes(row.podLeadName);
+                  const detailGroups = [
+                    ["approved", "Approved", row.groups.approved],
+                    ["abandoned", "Abandoned", row.groups.abandoned],
+                    ["reviewPending", "Review pending", row.groups.reviewPending],
+                    ["iterate", "Iterate", row.groups.iterate],
+                    ["toBeIdeated", "To be ideated", row.groups.toBeIdeated],
+                  ];
+
+                  return (
+                    <Fragment key={row.podLeadName}>
+                      <tr className={isExpanded ? "is-open" : undefined}>
+                        <td>
+                          <button
+                            type="button"
+                            className="pod-expand-button"
+                            onClick={() =>
+                              setExpandedPods((current) =>
+                                current.includes(row.podLeadName)
+                                  ? current.filter((pod) => pod !== row.podLeadName)
+                                  : [...current, row.podLeadName]
+                              )
+                            }
+                          >
+                            <span>{row.podLeadName || "-"}</span>
+                            <span className="pod-expand-chevron" aria-hidden="true">
+                              {isExpanded ? "▾" : "▸"}
+                            </span>
+                          </button>
+                        </td>
+                        <td>{formatMetricValue(row.approved)}</td>
+                        <td>{formatMetricValue(row.abandoned)}</td>
+                        <td>{formatMetricValue(row.reviewPending)}</td>
+                        <td>{formatMetricValue(row.iterate)}</td>
+                        <td>{formatMetricValue(row.toBeIdeated)}</td>
+                        <td>{formatMetricValue(row.total)}</td>
+                      </tr>
+                      {isExpanded ? (
+                        <tr className="beats-pod-detail-row">
+                          <td colSpan="7">
+                            <div className="beats-pod-detail-panel">
+                              <div className="beats-pod-detail-grid">
+                                {detailGroups.map(([statusKey, statusLabel, statusRows]) => (
+                                  <div key={`${row.podLeadName}-${statusKey}`} className="beats-pod-detail-column">
+                                    <div className="beats-pod-detail-label">{statusLabel}</div>
+                                    <div className="beats-pod-detail-list">
+                                      {statusRows.length > 0 ? (
+                                        statusRows.map((detailRow) => (
+                                          <div key={detailRow.id} className="beats-pod-detail-item">
+                                            <span className="beats-pod-detail-writer">{detailRow.writerName || "Beats owner"}</span>
+                                            <span className="beats-pod-detail-separator">-</span>
+                                            <span className="beats-pod-detail-beat">{detailRow.beatName || detailRow.beatCode || "Beat"}</span>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <div className="beats-pod-detail-empty">No rows</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan="7" className="empty-cell">
@@ -641,129 +640,137 @@ export default function BeatsPerformanceContent({
           </table>
         </div>
 
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }} />
+
         <div className="pod-section-header">
-          <span className="pod-section-title">Detailed Info</span>
-          <span className="pod-section-subtitle">Row-level detail from Ideation tracker</span>
+          <div style={{ display: "grid", gap: 4 }}>
+            <span className="pod-section-title">Progress by Stage</span>
+            <span className="pod-section-subtitle">
+              Compare approved Ideation beats against Editorial, Ready + Production, and Live counts
+            </span>
+          </div>
+          <div className="beats-progress-toggle" role="tablist" aria-label="Progress grouping">
+            <button
+              type="button"
+              className={progressView === "pod" ? "beats-progress-toggle-button is-active" : "beats-progress-toggle-button"}
+              onClick={() => setProgressView("pod")}
+            >
+              POD
+            </button>
+            <button
+              type="button"
+              className={progressView === "writer" ? "beats-progress-toggle-button is-active" : "beats-progress-toggle-button"}
+              onClick={() => setProgressView("writer")}
+            >
+              Writer
+            </button>
+          </div>
         </div>
 
-        <div className="table-wrap">
-          <table className="ops-table">
-            <thead>
-              <tr>
-                {[
-                  ["podLeadName", "POD"],
-                  ["name", "Writer name"],
-                  ["showName", "Show"],
-                  ["beatName", "Beat name"],
-                  ["statusLabel", "Beat status"],
-                  ["assignedDate", "Assign date"],
-                  ["completedDate", "Complete date"],
-                ].map(([key, label]) => {
-                  const isActive = detailSort.key === key;
-                  const arrow = isActive ? (detailSort.direction === "asc" ? " ↑" : " ↓") : " ↕";
-                  return (
-                    <th key={key}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDetailSort((current) => ({
-                            key,
-                            direction: current.key === key && current.direction === "asc" ? "desc" : "asc",
-                          }))
-                        }
-                        style={{
-                          background: "none",
-                          border: "none",
-                          padding: 0,
-                          font: "inherit",
-                          color: "inherit",
-                          cursor: "pointer",
-                        }}
-                      >
-                        {label}
-                        {arrow}
-                      </button>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedDetailedRows.length > 0 ? (
-                paginatedDetailedRows.map((row) => {
-                  const statusMeta = getBeatsStatusMeta(row.statusCategory);
-                  return (
-                    <tr key={row.id}>
-                      <td>{row.podLeadName || "-"}</td>
-                      <td>{row.beatCode || "-"}</td>
-                      <td>{row.showName || "-"}</td>
-                      <td>{row.beatName || "-"}</td>
-                      <td>
-                        <span
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            background: statusMeta.bg,
-                            color: statusMeta.color,
-                            fontWeight: 700,
-                            fontSize: 12,
-                          }}
-                        >
-                          {row.statusLabel || statusMeta.label}
-                        </span>
-                      </td>
-                      <td>{row.assignedDate ? formatDateLabel(row.assignedDate) : row.assignedDateRaw || row.rawBucketLabel || "-"}</td>
-                      <td>{row.completedDate ? formatDateLabel(row.completedDate) : row.completedDateRaw || "-"}</td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan="7" className="empty-cell">
-                    No detailed beats match the selected filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        <div className="beats-progress-card">
+        {progressRows.length > 0 ? (
+            <div className="beats-progress-list">
+              {progressRows.map((row) => {
+                const safeTotal = Math.max(row.total, 1);
+                const isHovered = hoveredProgressKey === `${progressView}-${row.label}`;
+                const segments = [
+                  { key: "approved", label: "Approved", value: row.approved, className: "is-approved" },
+                  { key: "editorial", label: "Editorial", value: row.editorial, className: "is-editorial" },
+                  {
+                    key: "ready-production",
+                    label: "Ready + Production",
+                    value: row.readyProduction,
+                    className: "is-ready-production",
+                  },
+                  { key: "live", label: "Live", value: row.live, className: "is-live" },
+                ];
+
+                return (
+                  <div
+                    key={`${progressView}-${row.label}`}
+                    className="beats-progress-entry"
+                    onMouseEnter={() => setHoveredProgressKey(`${progressView}-${row.label}`)}
+                    onMouseLeave={() => setHoveredProgressKey((current) => (current === `${progressView}-${row.label}` ? null : current))}
+                  >
+                    <div className="beats-progress-row">
+                      <div className="beats-progress-name">{row.label}</div>
+                      <div className="beats-progress-bar-wrap">
+                        <div className="beats-progress-bar">
+                          {segments.map((segment) => {
+                            if (segment.value <= 0) {
+                              return null;
+                            }
+
+                            const width = `${(segment.value / safeTotal) * 100}%`;
+                            return (
+                              <div
+                                key={`${row.label}-${segment.key}`}
+                                className={`beats-progress-segment ${segment.className}`}
+                                style={{ width }}
+                                title={`${segment.label}: ${segment.value}`}
+                              >
+                                <span>{segment.value}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="beats-progress-legend">
+                          <span className="beats-progress-legend-item">
+                            <span className="beats-progress-dot is-approved" />
+                            Approved {row.approved}
+                          </span>
+                          <span className="beats-progress-legend-item">
+                            <span className="beats-progress-dot is-editorial" />
+                            Editorial {row.editorial}
+                          </span>
+                          <span className="beats-progress-legend-item">
+                            <span className="beats-progress-dot is-ready-production" />
+                            Ready + Production {row.readyProduction}
+                          </span>
+                          <span className="beats-progress-legend-item">
+                            <span className="beats-progress-dot is-live" />
+                            Live {row.live}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="beats-progress-total">{row.total}</div>
+                    </div>
+                    {isHovered ? (
+                      <div className="beats-progress-hover-card">
+                        <div className="beats-progress-hover-head">
+                          <span>{row.label}</span>
+                          <span>{row.details.length} items</span>
+                        </div>
+                        <div className="beats-progress-hover-table">
+                          <div className="beats-progress-hover-header">Angle name</div>
+                          <div className="beats-progress-hover-header">Stage where it is</div>
+                          <div className="beats-progress-hover-header">ETA for promo completion</div>
+                          {row.details.length > 0 ? (
+                            row.details.map((detail) => (
+                              <Fragment key={detail.id}>
+                                <div className={`beats-progress-hover-cell is-${detail.tone || "approved"}`}>{detail.beatName}</div>
+                                <div className={`beats-progress-hover-cell is-${detail.tone || "approved"}`}>{detail.stageLabel || ""}</div>
+                                <div className={`beats-progress-hover-cell is-${detail.tone || "approved"}`}>{detail.etaLabel}</div>
+                              </Fragment>
+                            ))
+                          ) : (
+                            <div className="beats-progress-hover-empty" style={{ gridColumn: "1 / -1" }}>
+                              No detail rows available.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="beats-progress-empty">No progress rows match the selected date range.</div>
+          )}
         </div>
 
-        {detailPageOptions.length > 1 ? (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-            {detailPageOptions.map((option) => (
-              <button
-                key={option.label}
-                type="button"
-                className={safeDetailPage === option.index ? "toggle-chip is-active" : "toggle-chip"}
-                onClick={() => setDetailPage(option.index)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {workflowPodChips.length > 0 ? (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 13, color: "var(--subtle)", fontWeight: 700 }}>Filter below tables:</span>
-            {workflowPodChips.map((podName) => {
-              const isActive = drilldownPod === podName;
-              return (
-                <button
-                  key={`workflow-pod-${podName}`}
-                  type="button"
-                  className={isActive ? "toggle-chip is-active" : "toggle-chip"}
-                  onClick={() => setDrilldownPod(isActive ? "all" : podName)}
-                  title={isActive ? "Click to Remove" : "Click to Filter"}
-                >
-                  {podName}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }} />
 
         {workflowTablesWithAvailability.map((table) => (
           <div key={table.id} style={{ display: "grid", gap: 12 }}>
@@ -859,5 +866,6 @@ export default function BeatsPerformanceContent({
         ))}
       </div>
     </ShareablePanel>
+    </div>
   );
 }

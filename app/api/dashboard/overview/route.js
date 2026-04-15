@@ -145,7 +145,7 @@ function classifyFtRw(reworkType) {
   return "rw";
 }
 
-function buildPodBreakdownRows(editorialRows, rfpRows, productionRows, { startDate, endDate } = {}) {
+function buildPodBreakdownRows(editorialRows, rfpRows, productionRows, { startDate, endDate, liveRows = [] } = {}) {
   const podMap = new Map();
 
   const getOrCreate = (rawName) => {
@@ -158,6 +158,7 @@ function buildPodBreakdownRows(editorialRows, rfpRows, productionRows, { startDa
         readyForProd: { ft: 0, rw: 0 },
         production: { ft: 0, rw: 0 },
         productionPipeline: { ft: 0, rw: 0 },
+        live: { ft: 0, rw: 0 },
       });
     }
     return podMap.get(pod);
@@ -204,6 +205,7 @@ function buildPodBreakdownRows(editorialRows, rfpRows, productionRows, { startDa
         readyForProd: { ft: 0, rw: 0 },
         production: { ft: 0, rw: 0 },
         productionPipeline: { ft: 0, rw: 0 },
+        live: { ft: 0, rw: 0 },
       });
     }
     const entry = podMap.get(pod);
@@ -214,6 +216,17 @@ function buildPodBreakdownRows(editorialRows, rfpRows, productionRows, { startDa
     if (!startDate || inRange(row?.etaToStartProd)) {
       inc(entry.production, type);
     }
+  }
+
+  // Live: filter by liveDate (Final Upload Date) within the date range
+  for (const row of Array.isArray(liveRows) ? liveRows : []) {
+    const liveDateStr = String(row?.liveDate || row?.uploadDate || "").slice(0, 10);
+    if (!liveDateStr) continue;
+    if (startDate && liveDateStr < startDate) continue;
+    if (endDate && liveDateStr > endDate) continue;
+    const entry = getOrCreate(row?.podLeadName || row?.podLeadRaw);
+    if (!entry) continue;
+    inc(entry.live, classifyFtRw(row?.reworkType));
   }
 
   return [...podMap.values()].sort((a, b) => {
@@ -922,7 +935,7 @@ export async function GET(request) {
       return NextResponse.json({
         ...buildRangePayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, rangeSelection, { includeNewShowsPod }),
         analyticsSourceError: analyticsResult.error,
-        podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: rangeSelection.startDate, endDate: rangeSelection.endDate }),
+        podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: rangeSelection.startDate, endDate: rangeSelection.endDate, liveRows }),
       });
     }
 
@@ -943,7 +956,7 @@ export async function GET(request) {
       return NextResponse.json({
         ...buildLastWeekPayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, { includeNewShowsPod }),
         analyticsSourceError: analyticsResult.error,
-        podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: lastWeekSelection.weekStart, endDate: lastWeekSelection.weekEnd }),
+        podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: lastWeekSelection.weekStart, endDate: lastWeekSelection.weekEnd, liveRows }),
       });
     }
 
@@ -971,7 +984,7 @@ export async function GET(request) {
           productionRows: productionResult.rows,
           ideationSourceError: ideationResult.error,
         }),
-        podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: plannerState.weekSelection.weekStart, endDate: plannerState.weekSelection.weekEnd }),
+        podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: plannerState.weekSelection.weekStart, endDate: plannerState.weekSelection.weekEnd, liveRows }),
       });
     }
 
@@ -996,7 +1009,7 @@ export async function GET(request) {
           ideationSourceError: ideationResult.error,
           prevFreshTakeCount: lwFreshTakeRows.length,
         }),
-        podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: plannerState.weekSelection.weekStart, endDate: plannerState.weekSelection.weekEnd }),
+        podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: plannerState.weekSelection.weekStart, endDate: plannerState.weekSelection.weekEnd, liveRows: liveResult.rows }),
       });
     }
   } catch (error) {

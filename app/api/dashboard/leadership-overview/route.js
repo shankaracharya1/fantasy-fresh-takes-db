@@ -157,14 +157,8 @@ function buildFilterOptions(beatRows) {
 function buildBeatRows(rows) {
   return (Array.isArray(rows) ? rows : [])
     .map((row, index) => {
-      const parsedCompletedDate = parseLiveDate(row?.completedDate);
       const parsedAssignedDate = parseLiveDate(row?.assignedDate);
-      const parsedBeatsAssignedDate = parseLiveDate(row?.beatsAssignedDate);
-      const primaryDate =
-        parsedCompletedDate ||
-        parsedAssignedDate ||
-        parsedBeatsAssignedDate ||
-        normalizeText(row?.completedDate || row?.assignedDate || row?.beatsAssignedDate);
+      const primaryDate = parsedAssignedDate || "";
       const timeParts = getTimeParts(primaryDate);
       return {
         id: `beat-row-${index + 1}`,
@@ -174,6 +168,7 @@ function buildBeatRows(rows) {
         beatName: normalizeText(row?.beatName),
         statusLabel: normalizeText(row?.status || row?.beatsStatus),
         statusCategory: categorizeIdeationStatus(row?.status || row?.beatsStatus),
+        assignedDate: parsedAssignedDate,
         ...timeParts,
       };
     })
@@ -362,49 +357,9 @@ function buildApprovedMatchedRows(beatRows, workflowRows) {
     });
 }
 
-function buildMetricCell(rawValue, baselineCheck) {
-  const value = toFiniteNumber(rawValue);
-  return {
-    value,
-    meetsBenchmark: Number.isFinite(value) && typeof baselineCheck === "function" ? baselineCheck(value) : null,
-  };
-}
-
-function countBenchmarkMisses(metricMap, metricKeys) {
-  return metricKeys.reduce((count, key) => {
-    const cell = metricMap?.[key];
-    if (cell && cell.meetsBenchmark === false) return count + 1;
-    return count;
-  }, 0);
-}
-
-function classifyNextStep(row) {
-  const metrics = {
-    threeSecPlays: buildMetricCell(row?.threeSecPlayPct, BASELINE_THRESHOLD_CHECKS.threeSecPlays),
-    thruplaysTo3s: buildMetricCell(row?.thruPlayTo3sRatio, BASELINE_THRESHOLD_CHECKS.thruplaysTo3s),
-    q1Completion: buildMetricCell(row?.video0To25Pct, BASELINE_THRESHOLD_CHECKS.q1Completion),
-    cpi: buildMetricCell(row?.cpiUsd, BASELINE_THRESHOLD_CHECKS.cpi),
-    absoluteCompletion: buildMetricCell(row?.absoluteCompletionPct, BASELINE_THRESHOLD_CHECKS.absoluteCompletion),
-    cti: buildMetricCell(row?.clickToInstall, BASELINE_THRESHOLD_CHECKS.cti),
-    amountSpent: buildMetricCell(row?.amountSpentUsd, BASELINE_THRESHOLD_CHECKS.amountSpent),
-  };
-
-  const baselineMissCount = countBenchmarkMisses(metrics, [
-    "threeSecPlays",
-    "thruplaysTo3s",
-    "q1Completion",
-    "cpi",
-    "absoluteCompletion",
-    "cti",
-  ]);
-  const amountSpent = toFiniteNumber(row?.amountSpentUsd);
-  const cpiValue = toFiniteNumber(row?.cpiUsd);
-  const ctiValue = toFiniteNumber(row?.clickToInstall);
-
-  if (!Number.isFinite(amountSpent) || amountSpent < 100) return "Testing / Drop";
-  if (Number.isFinite(cpiValue) && cpiValue < 10 && baselineMissCount <= 2) return "Gen AI";
-  if (Number.isFinite(ctiValue) && ctiValue >= 12) return "P1 Rework";
-  return "P2 Rework";
+function isFullGenAiAssetCode(value) {
+  const code = normalizeText(value).toUpperCase();
+  return code.startsWith("GA") || code.startsWith("GI");
 }
 
 function isFunnelSuccess(row) {
@@ -423,34 +378,10 @@ function isFunnelSuccess(row) {
   );
 }
 
-function isBetterAttemptRow(nextRow, currentRow) {
-  const nextScore = Number(nextRow?.metricsCompletenessScore || 0);
-  const currentScore = Number(currentRow?.metricsCompletenessScore || 0);
-  if (nextScore !== currentScore) return nextScore > currentScore;
-
-  const nextSpend = Number(nextRow?.amountSpentUsd || 0);
-  const currentSpend = Number(currentRow?.amountSpentUsd || 0);
-  if (Number.isFinite(nextSpend) && Number.isFinite(currentSpend) && nextSpend !== currentSpend) {
-    return nextSpend > currentSpend;
-  }
-
-  return Number(nextRow?.rowIndex || 0) > Number(currentRow?.rowIndex || 0);
-}
-
 function buildFullGenAiRows(rows) {
-  const deduped = new Map();
-
-  for (const row of Array.isArray(rows) ? rows : []) {
-    if (!row?.liveDate) continue;
-    const assetCodeKey = normalizeKey(row?.assetCode);
-    if (!assetCodeKey) continue;
-    if (!deduped.has(assetCodeKey) || isBetterAttemptRow(row, deduped.get(assetCodeKey))) {
-      deduped.set(assetCodeKey, row);
-    }
-  }
-
-  return Array.from(deduped.values())
-    .filter((row) => isAnalyticsEligibleProductionType(row?.productionType) && classifyNextStep(row) === "Gen AI")
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => row?.liveDate)
+    .filter((row) => isFullGenAiAssetCode(row?.assetCode))
     .map((row, index) => {
       const timeParts = getTimeParts(normalizeText(row?.liveDate));
       return {
@@ -460,6 +391,8 @@ function buildFullGenAiRows(rows) {
         beatName: normalizeText(row?.beatName),
         productionType: normalizeText(row?.productionType),
         success: isFunnelSuccess(row),
+        amountSpentUsd: toFiniteNumber(row?.amountSpentUsd),
+        q1CompletionPct: toFiniteNumber(row?.video0To25Pct),
         cpiUsd: toFiniteNumber(row?.cpiUsd),
         absoluteCompletionPct: toFiniteNumber(row?.absoluteCompletionPct),
         ctrPct: toFiniteNumber(row?.ctrPct),

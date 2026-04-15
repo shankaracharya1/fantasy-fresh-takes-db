@@ -10,7 +10,7 @@ import {
   isVisiblePlannerPodLeadName,
   shiftWeekKey,
 } from "../lib/tracker-data.js";
-import { buildDateRangeSelection, MIN_DASHBOARD_DATE, WEEK_VIEW_OPTIONS, formatWeekRangeLabel, getWeekSelection, getWeekViewLabel, normalizeWeekView } from "../lib/week-view.js";
+import { buildDateRangeSelection, MIN_DASHBOARD_DATE, WEEK_VIEW_OPTIONS, buildMonthWeekFilterOptions, formatWeekRangeLabel, getMonthWeekSelectionByDate, getWeekSelection, getWeekViewLabel, normalizeWeekView } from "../lib/week-view.js";
 
 // ─── View imports ─────────────────────────────────────────────────────────────
 import DetailsContent from "./views/DetailsView.jsx";
@@ -422,10 +422,14 @@ export default function UnifiedOpsApp() {
   const [beatsPerformanceData, setBeatsPerformanceData] = useState(null);
   const [beatsPerformanceLoading, setBeatsPerformanceLoading] = useState(false);
   const [beatsPerformanceError, setBeatsPerformanceError] = useState("");
+  const [dashboardLoadingMessage, setDashboardLoadingMessage] = useState("");
   const [planner2Data, setPlanner2Data] = useState(null);
   const [planner2Loading, setPlanner2Loading] = useState(false);
   const [planner2Error, setPlanner2Error] = useState("");
   const [lastNonQuickRange, setLastNonQuickRange] = useState(DEFAULT_DASHBOARD_RANGE);
+  const [weekFilterSelection, setWeekFilterSelection] = useState(
+    getMonthWeekSelectionByDate(DEFAULT_DASHBOARD_RANGE.startDate).id
+  );
   const [dateFilterMode, setDateFilterMode] = useState("custom");
   const normalizedHeaderRange = useMemo(
     () => buildDateRangeSelection({ ...dashboardDateRange, minDate: MIN_DASHBOARD_DATE }),
@@ -437,6 +441,7 @@ export default function UnifiedOpsApp() {
     activeView === "pod-wise" ||
     activeView === "analytics" ||
     activeView === "production" ||
+    activeView === "beats-performance" ||
     activeView === "planner2";
   const headerDateRangeDisabled =
     (activeView === "overview" && overviewLoading) ||
@@ -444,7 +449,36 @@ export default function UnifiedOpsApp() {
     (activeView === "pod-wise" && competitionLoading) ||
     (activeView === "analytics" && analyticsLoading && !analyticsData) ||
     (activeView === "production" && acdMetricsLoading && !acdMetricsData) ||
+    (activeView === "beats-performance" && beatsPerformanceLoading && !beatsPerformanceData) ||
     (activeView === "planner2" && planner2Loading && !planner2Data);
+  const weekFilterSourceRows = leadershipOverviewData?.allBeatRows || overviewData?.allBeatRows || beatsPerformanceData?.rows || [];
+  const monthWeekOptions = useMemo(() => buildMonthWeekFilterOptions(weekFilterSourceRows), [weekFilterSourceRows]);
+  const selectedMonthWeekOption = useMemo(
+    () => monthWeekOptions.find((option) => option.id === weekFilterSelection) || monthWeekOptions[0] || null,
+    [monthWeekOptions, weekFilterSelection]
+  );
+  const selectedWeekMatchesRange =
+    Boolean(selectedMonthWeekOption) &&
+    selectedMonthWeekOption.weekStart === normalizedHeaderRange.startDate &&
+    selectedMonthWeekOption.weekEnd === normalizedHeaderRange.endDate;
+  const headerDateRangeUsesWeekPreset = headerSupportsDateRange && activeView !== "planner2" && selectedWeekMatchesRange;
+  const headerDateRangeUsesManualDates = headerSupportsDateRange && activeView !== "planner2" && !selectedWeekMatchesRange;
+
+  useEffect(() => {
+    if (monthWeekOptions.length === 0) {
+      return;
+    }
+
+    const dateBasedSelection = getMonthWeekSelectionByDate(normalizedHeaderRange.startDate);
+    const matchedOption =
+      monthWeekOptions.find((option) => option.id === weekFilterSelection) ||
+      monthWeekOptions.find((option) => option.id === dateBasedSelection.id) ||
+      monthWeekOptions[0];
+
+    if (matchedOption && matchedOption.id !== weekFilterSelection) {
+      setWeekFilterSelection(matchedOption.id);
+    }
+  }, [monthWeekOptions, weekFilterSelection, normalizedHeaderRange.startDate]);
   const lastWeekQuickRange = useMemo(
     () =>
       buildDateRangeSelection({
@@ -476,44 +510,6 @@ export default function UnifiedOpsApp() {
   const isCurrentWeekSelected = dateFilterMode === "current-week";
   const isNextWeekSelected = dateFilterMode === "next-week";
   const isCustomRangeSelected = dateFilterMode === "custom";
-
-  useEffect(() => {
-    const quickRanges = [
-      { mode: "last-week", range: lastWeekQuickRange },
-      { mode: "current-week", range: currentWeekQuickRange },
-      { mode: "next-week", range: nextWeekQuickRange },
-    ];
-    const activeQuick = quickRanges.find(
-      ({ range }) =>
-        normalizedHeaderRange.startDate === range.startDate &&
-        normalizedHeaderRange.endDate === range.endDate
-    );
-
-    if (!activeQuick) {
-      setLastNonQuickRange({
-        startDate: normalizedHeaderRange.startDate,
-        endDate: normalizedHeaderRange.endDate,
-      });
-      if (dateFilterMode !== "custom") {
-        setDateFilterMode("custom");
-      }
-      return;
-    }
-
-    if (dateFilterMode !== activeQuick.mode) {
-      setDateFilterMode(activeQuick.mode);
-    }
-  }, [
-    normalizedHeaderRange.startDate,
-    normalizedHeaderRange.endDate,
-    lastWeekQuickRange.startDate,
-    lastWeekQuickRange.endDate,
-    currentWeekQuickRange.startDate,
-    currentWeekQuickRange.endDate,
-    nextWeekQuickRange.startDate,
-    nextWeekQuickRange.endDate,
-    dateFilterMode,
-  ]);
 
   const setPeriodLoadingState = (setter, period, value) => {
     setter((current) => ({ ...current, [period]: value }));
@@ -563,6 +559,7 @@ export default function UnifiedOpsApp() {
     [acdMetricsData, acdTimeView, acdViewType]
   );
   const analyticsSubtitle = useMemo(() => buildAnalyticsSubtitle(analyticsData), [analyticsData]);
+  const dashboardIsRefreshing = Boolean(dashboardLoadingMessage);
 
   useEffect(() => {
     if (activeView !== "overview") {
@@ -581,6 +578,7 @@ export default function UnifiedOpsApp() {
     }
 
     async function loadOverviewSection({ forceLoading = false } = {}) {
+      setDashboardLoadingMessage("Refreshing Overview…");
       if (forceLoading || (!overviewData && !cachedPayload)) {
         setOverviewLoading(true);
       }
@@ -599,6 +597,7 @@ export default function UnifiedOpsApp() {
         if (!cancelled) {
           setOverviewData(overviewPayload);
           setOverviewLoading(false);
+          setDashboardLoadingMessage("");
           writeClientCache(cacheKey, overviewPayload);
         }
       } catch (error) {
@@ -608,6 +607,7 @@ export default function UnifiedOpsApp() {
             setOverviewError(`Demo mode: ${error.message || "Unable to load Overview metrics."}`);
           }
           setOverviewLoading(false);
+          setDashboardLoadingMessage("");
         }
       }
     }
@@ -639,6 +639,7 @@ export default function UnifiedOpsApp() {
     }
 
     async function loadLeadershipOverview({ forceLoading = false } = {}) {
+      setDashboardLoadingMessage("Refreshing Overview…");
       if (forceLoading || (!leadershipOverviewData && !cachedPayload)) {
         setLeadershipOverviewLoading(true);
       }
@@ -656,6 +657,7 @@ export default function UnifiedOpsApp() {
         if (!cancelled) {
           setLeadershipOverviewData(payload);
           setLeadershipOverviewLoading(false);
+          setDashboardLoadingMessage("");
           writeClientCache(cacheKey, payload);
         }
       } catch (error) {
@@ -665,6 +667,7 @@ export default function UnifiedOpsApp() {
             setLeadershipOverviewError(`Demo mode: ${error?.message || "Unable to load Overview."}`);
           }
           setLeadershipOverviewLoading(false);
+          setDashboardLoadingMessage("");
         }
       }
     }
@@ -695,6 +698,7 @@ export default function UnifiedOpsApp() {
     }
 
     async function loadCompetition({ forceLoading = false } = {}) {
+      setDashboardLoadingMessage("Refreshing Pod Wise…");
       if (forceLoading || (!competitionData && !cachedPayload)) {
         setCompetitionLoading(true);
       }
@@ -712,6 +716,7 @@ export default function UnifiedOpsApp() {
 
         if (!cancelled) {
           setCompetitionData(payload);
+          setDashboardLoadingMessage("");
           writeClientCache(cacheKey, payload);
         }
       } catch {
@@ -723,6 +728,7 @@ export default function UnifiedOpsApp() {
       } finally {
         if (!cancelled) {
           setCompetitionLoading(false);
+          setDashboardLoadingMessage("");
         }
       }
     }
@@ -748,6 +754,7 @@ export default function UnifiedOpsApp() {
     let cancelled = false;
 
     async function loadPodTasks() {
+      setDashboardLoadingMessage("Refreshing Pod Tasks…");
       setPodTasksLoading(true);
       try {
         const response = await fetch("/api/dashboard/pod-tasks", { cache: "no-store" });
@@ -757,6 +764,7 @@ export default function UnifiedOpsApp() {
         }
         if (!cancelled) {
           setPodTasksData(payload);
+          setDashboardLoadingMessage("");
         }
       } catch {
         if (!cancelled) {
@@ -765,6 +773,7 @@ export default function UnifiedOpsApp() {
       } finally {
         if (!cancelled) {
           setPodTasksLoading(false);
+          setDashboardLoadingMessage("");
         }
       }
     }
@@ -783,6 +792,7 @@ export default function UnifiedOpsApp() {
     let cancelled = false;
 
     async function loadBeatsPerformance() {
+      setDashboardLoadingMessage("Refreshing Beats Performance…");
       let hasCachedPayload = false;
 
       try {
@@ -801,6 +811,7 @@ export default function UnifiedOpsApp() {
               setBeatsPerformanceData(parsedCache.payload);
               setBeatsPerformanceError("");
               setBeatsPerformanceLoading(false);
+              setDashboardLoadingMessage("");
             }
           }
         }
@@ -822,6 +833,7 @@ export default function UnifiedOpsApp() {
           setBeatsPerformanceData(payload);
           setBeatsPerformanceError("");
           setBeatsPerformanceLoading(false);
+          setDashboardLoadingMessage("");
         }
 
         try {
@@ -843,6 +855,7 @@ export default function UnifiedOpsApp() {
       } finally {
         if (!cancelled) {
           setBeatsPerformanceLoading(false);
+          setDashboardLoadingMessage("");
         }
       }
     }
@@ -869,6 +882,7 @@ export default function UnifiedOpsApp() {
     }
 
     async function loadPlanner2({ forceLoading = false } = {}) {
+      setDashboardLoadingMessage("Refreshing Planner…");
       if (forceLoading || (!planner2Data && !cachedPayload)) {
         setPlanner2Loading(true);
       }
@@ -886,6 +900,7 @@ export default function UnifiedOpsApp() {
 
         if (!cancelled) {
           setPlanner2Data(payload);
+          setDashboardLoadingMessage("");
           writeClientCache(cacheKey, payload);
         }
       } catch (error) {
@@ -911,6 +926,7 @@ export default function UnifiedOpsApp() {
       } finally {
         if (!cancelled) {
           setPlanner2Loading(false);
+          setDashboardLoadingMessage("");
         }
       }
     }
@@ -941,6 +957,7 @@ export default function UnifiedOpsApp() {
     }
 
     async function loadAnalytics({ forceLoading = false } = {}) {
+      setDashboardLoadingMessage("Refreshing Analytics…");
       if (forceLoading || (!analyticsData && !cachedPayload)) {
         setAnalyticsLoading(true);
       }
@@ -956,6 +973,7 @@ export default function UnifiedOpsApp() {
 
         if (!cancelled) {
           setAnalyticsData(payload);
+          setDashboardLoadingMessage("");
           writeClientCache(cacheKey, payload);
         }
       } catch (error) {
@@ -968,6 +986,7 @@ export default function UnifiedOpsApp() {
       } finally {
         if (!cancelled) {
           setAnalyticsLoading(false);
+          setDashboardLoadingMessage("");
         }
       }
     }
@@ -985,6 +1004,7 @@ export default function UnifiedOpsApp() {
   async function requestAcdMetrics(cancelState = null) {
     if (!cancelState?.cancelled) {
       setAcdMetricsLoading(true);
+      setDashboardLoadingMessage("Refreshing ACD productivity…");
       setAcdMetricsError("");
     }
 
@@ -997,6 +1017,7 @@ export default function UnifiedOpsApp() {
 
       if (!cancelState?.cancelled) {
         setAcdMetricsData(payload);
+        setDashboardLoadingMessage("");
       }
 
       return payload;
@@ -1010,6 +1031,7 @@ export default function UnifiedOpsApp() {
     } finally {
       if (!cancelState?.cancelled) {
         setAcdMetricsLoading(false);
+        setDashboardLoadingMessage("");
       }
     }
   }
@@ -1069,12 +1091,13 @@ export default function UnifiedOpsApp() {
   useEffect(() => {
     if (activeView !== "production") return undefined;
     let cancelled = false;
+    setDashboardLoadingMessage("Refreshing Production…");
     setProductionPipelineLoading(true);
     fetch("/api/dashboard/production", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => { if (!cancelled) setProductionPipelineData(data); })
       .catch(() => {})
-      .finally(() => { if (!cancelled) setProductionPipelineLoading(false); });
+      .finally(() => { if (!cancelled) { setProductionPipelineLoading(false); setDashboardLoadingMessage(""); } });
     return () => { cancelled = true; };
   }, [activeView]);
 
@@ -1208,7 +1231,7 @@ export default function UnifiedOpsApp() {
     "beats-performance": "Beats Performance",
     "pod-wise": "POD Wise",
     planner: "Planner",
-    planner2: "Planner2",
+    planner2: "Planner",
     analytics: "Analytics",
     production: "Production",
     details: "Details",
@@ -1230,7 +1253,6 @@ export default function UnifiedOpsApp() {
               ["overview", "Editorial Funnel"],
               ["pod-wise", "POD Wise"],
               ["planner", "Planner"],
-              ["planner2", "Planner2"],
               ["analytics", "Analytics"],
               ["production", "Production"],
             ].map(([id, label]) => (
@@ -1253,6 +1275,13 @@ export default function UnifiedOpsApp() {
               onClick={() => setActiveView("details")}
             >
               Details
+            </button>
+            <button
+              type="button"
+              className={`sidebar-link${activeView === "planner2" ? " active" : ""}`}
+              onClick={() => setActiveView("planner2")}
+            >
+              Planner
             </button>
           </div>
         </nav>
@@ -1320,26 +1349,37 @@ export default function UnifiedOpsApp() {
                       </button>
                     </>
                   ) : (
-                    <select
-                      className="app-topbar-quick-btn"
-                      disabled={headerDateRangeDisabled}
-                      value={isLastWeekSelected ? "last-week" : "custom"}
-                      onChange={(event) => {
-                        if (event.target.value === "last-week") {
-                          setLastNonQuickRange({ startDate: normalizedHeaderRange.startDate, endDate: normalizedHeaderRange.endDate });
-                          setDateFilterMode("last-week");
-                          setDashboardDateRange(lastWeekQuickRange);
-                        } else {
-                          setDateFilterMode("custom");
-                          setDashboardDateRange(buildDateRangeSelection({ startDate: lastNonQuickRange.startDate, endDate: lastNonQuickRange.endDate, minDate: MIN_DASHBOARD_DATE }));
-                        }
-                      }}
-                    >
-                      <option value="last-week">Last week</option>
-                      <option value="custom">Custom range</option>
-                    </select>
+                    <label className={`app-topbar-date-field${headerDateRangeUsesWeekPreset ? " is-active" : ""}`}>
+                      <span className="app-topbar-date-label">Filter by week</span>
+                      <select
+                        className={`app-topbar-quick-btn${headerDateRangeUsesWeekPreset ? " is-active" : ""}`}
+                        disabled={headerDateRangeDisabled}
+                        value={weekFilterSelection}
+                        onChange={(event) => {
+                          const nextOption = monthWeekOptions.find((option) => option.id === event.target.value);
+                          if (!nextOption) {
+                            return;
+                          }
+
+                          setWeekFilterSelection(nextOption.id);
+                          setDashboardDateRange(
+                            buildDateRangeSelection({
+                              startDate: nextOption.weekStart,
+                              endDate: nextOption.weekEnd,
+                              minDate: MIN_DASHBOARD_DATE,
+                            })
+                          );
+                        }}
+                      >
+                        {monthWeekOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   )}
-                  <label className="app-topbar-date-field">
+                  <label className={`app-topbar-date-field${headerDateRangeUsesManualDates ? " is-active" : ""}`}>
                     <span className="app-topbar-date-label">Start date</span>
                     <input
                       className="app-topbar-date-input"
@@ -1349,7 +1389,6 @@ export default function UnifiedOpsApp() {
                       value={normalizedHeaderRange.startDate}
                       disabled={headerDateRangeDisabled}
                       onChange={(event) => {
-                        setDateFilterMode("custom");
                         setDashboardDateRange((current) =>
                           buildDateRangeSelection({
                             startDate: event.target.value,
@@ -1360,7 +1399,7 @@ export default function UnifiedOpsApp() {
                       }}
                     />
                   </label>
-                  <label className="app-topbar-date-field">
+                  <label className={`app-topbar-date-field${headerDateRangeUsesManualDates ? " is-active" : ""}`}>
                     <span className="app-topbar-date-label">End date</span>
                     <input
                       className="app-topbar-date-input"
@@ -1369,7 +1408,6 @@ export default function UnifiedOpsApp() {
                       value={normalizedHeaderRange.endDate}
                       disabled={headerDateRangeDisabled}
                       onChange={(event) => {
-                        setDateFilterMode("custom");
                         setDashboardDateRange((current) =>
                           buildDateRangeSelection({
                             startDate: current?.startDate || normalizedHeaderRange.startDate,
@@ -1380,6 +1418,9 @@ export default function UnifiedOpsApp() {
                       }}
                     />
                   </label>
+                  <div className="app-topbar-range-note">
+                    {`Selected date range ${formatWeekRangeLabel(normalizedHeaderRange.startDate, normalizedHeaderRange.endDate)}`}
+                  </div>
                 </div>
               ) : null}
               <label className="theme-switch" aria-label="Toggle dark mode">
@@ -1397,7 +1438,19 @@ export default function UnifiedOpsApp() {
             </div>
           </div>
 
-          <div className="ops-shell">
+          {dashboardIsRefreshing ? (
+            <div className="dashboard-loading-layer" aria-live="polite">
+              <div className="dashboard-loading-strip" aria-hidden="true" />
+              {dashboardLoadingMessage ? (
+                <div className="dashboard-loading-banner" role="status">
+                  <span className="dashboard-loading-dot" aria-hidden="true" />
+                  <span>{dashboardLoadingMessage}</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className={`ops-shell ${dashboardIsRefreshing ? "is-refreshing" : ""}`}>
             {activeView === "leadership-overview" ? (
               <div className="section-shell">
                 <LeadershipOverviewContent
@@ -1477,6 +1530,8 @@ export default function UnifiedOpsApp() {
                   beatsPerformanceError={beatsPerformanceError}
                   onShare={copySection}
                   copyingSection={copyingSection}
+                  onNavigate={setActiveView}
+                  selectedDateRange={dashboardDateRange}
                 />
               </div>
             ) : null}
