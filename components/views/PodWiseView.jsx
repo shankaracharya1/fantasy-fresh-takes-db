@@ -77,15 +77,18 @@ function PodTasksBarChart({ title, subtitle, items, maxValue, accentColor }) {
 
 export function PodTasksContent({ podTasksData, podTasksLoading, onShare, copyingSection }) {
   const fallbackPods = ["Berman", "Roth", "Lee", "Gilatar", "Woodward"];
-  const safeData =
-    podTasksData ||
-    {
-      scriptsPendingByPod: fallbackPods.map((podLead) => ({ podLead, count: 0 })),
-      beatsPendingByPod: fallbackPods.map((podLead) => ({ podLead, count: 0 })),
-      totalScriptsPending: 0,
-      totalBeatsPending: 0,
-    };
-  const { scriptsPendingByPod, beatsPendingByPod, totalScriptsPending, totalBeatsPending } = safeData;
+
+  // API returns { pods: [{ podLeadName, pendingBeats, scriptsToReview }] }
+  // Normalise into the shape this component needs
+  const rawPods = Array.isArray(podTasksData?.pods) ? podTasksData.pods : null;
+  const scriptsPendingByPod = rawPods
+    ? rawPods.map((p) => ({ podLead: p.podLeadName, count: Number(p.scriptsToReview) || 0 }))
+    : fallbackPods.map((podLead) => ({ podLead, count: 0 }));
+  const beatsPendingByPod = rawPods
+    ? rawPods.map((p) => ({ podLead: p.podLeadName, count: Number(p.pendingBeats) || 0 }))
+    : fallbackPods.map((podLead) => ({ podLead, count: 0 }));
+  const totalScriptsPending = scriptsPendingByPod.reduce((sum, r) => sum + r.count, 0);
+  const totalBeatsPending = beatsPendingByPod.reduce((sum, r) => sum + r.count, 0);
   const maxScripts = Math.max(...scriptsPendingByPod.map((r) => r.count), 1);
   const maxBeats = Math.max(...beatsPendingByPod.map((r) => r.count), 1);
 
