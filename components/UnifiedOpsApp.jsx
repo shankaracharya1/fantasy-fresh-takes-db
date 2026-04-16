@@ -1253,23 +1253,25 @@ export default function UnifiedOpsApp() {
 
           <div className="sidebar-section">
             <div className="sidebar-section-label">VIEWS</div>
-            {[
-              ["leadership-overview", "Overview"],
-              ["overview", "Editorial Funnel"],
-              ["beats-performance", "Beats Performance"],
-              ["planner2", "Planner"],
-              ["analytics", "Analytics"],
-              ["production", "Production"],
-            ].map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={`sidebar-link${activeView === id ? " active" : ""}`}
-                onClick={() => setActiveView(id)}
-              >
-                {label}
-              </button>
-            ))}
+            <div className="sidebar-more-items">
+              {[
+                ["leadership-overview", "Overview"],
+                ["overview", "Editorial Funnel"],
+                ["beats-performance", "Beats Performance"],
+                ["planner2", "Planner"],
+                ["analytics", "Analytics"],
+                ["production", "Production"],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`sidebar-link${activeView === id ? " active" : ""}`}
+                  onClick={() => setActiveView(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="sidebar-section">
