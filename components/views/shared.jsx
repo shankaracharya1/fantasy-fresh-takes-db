@@ -33,7 +33,7 @@ export const ANALYTICS_LEGEND_FALLBACK = [
   { label: "Metric not meeting", tone: "metric-miss" },
 ];
 
-export const BEATS_PERFORMANCE_CLIENT_CACHE_KEY = "beats-performance-dashboard-v1";
+export const BEATS_PERFORMANCE_CLIENT_CACHE_KEY = "beats-performance-dashboard-v2";
 export const BEATS_PERFORMANCE_CLIENT_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 
 const DEFAULT_START = "2025-01-01";

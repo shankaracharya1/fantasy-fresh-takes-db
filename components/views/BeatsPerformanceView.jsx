@@ -528,6 +528,9 @@ export default function BeatsPerformanceContent({
       <div className="section-stack">
         {beatsPerformanceLoading ? <div className="warning-note">Loading data. Showing placeholder values.</div> : null}
         {beatsPerformanceError ? <div className="warning-note">{beatsPerformanceError}</div> : null}
+        {!beatsPerformanceLoading && !beatsPerformanceError && Array.isArray(safeBeatsPerformanceData?.warnings) && safeBeatsPerformanceData.warnings.length > 0
+          ? safeBeatsPerformanceData.warnings.map((w) => <div key={w} className="warning-note">{w}</div>)
+          : null}
 
         <div className="pod-summary-grid beats-summary-grid">
           {metricCards.map((card) => (

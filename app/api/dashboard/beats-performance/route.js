@@ -4,12 +4,14 @@ import { getBeatsPerformancePayload } from "../../../../lib/beats-performance.js
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-export async function GET() {
+export async function GET(request) {
+  const url = new URL(request.url);
+  const force = url.searchParams.get("force") === "true";
   try {
-    const payload = await getBeatsPerformancePayload();
+    const payload = await getBeatsPerformancePayload({ force });
     return NextResponse.json(payload, {
       headers: {
-        "Cache-Control": "public, max-age=300, s-maxage=14400, stale-while-revalidate=86400",
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (error) {
