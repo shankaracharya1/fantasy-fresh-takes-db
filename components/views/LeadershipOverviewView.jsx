@@ -211,7 +211,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   ];
 
   return (
-    <div className="section-stack overview-flow-shell" style={{ marginTop: 24 }}>
+    <div className="section-stack overview-flow-shell">
       {overviewError ? <div className="warning-note">{overviewError}</div> : null}
 
       {overviewData?.confidenceNote ? (

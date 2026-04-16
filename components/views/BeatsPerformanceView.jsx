@@ -498,7 +498,7 @@ export default function BeatsPerformanceContent({
     .sort((left, right) => right.total - left.total || left.label.localeCompare(right.label));
 
   return (
-    <div className="beats-performance-shell" style={{ marginTop: 24 }}>
+    <div className="beats-performance-shell">
       <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-start" }}>
         <button
           type="button"
