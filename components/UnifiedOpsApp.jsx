@@ -383,7 +383,7 @@ function writeClientCache(key, payload) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const MORE_VIEWS = new Set(["details", "planner2", "pod-wise"]);
+const MORE_VIEWS = new Set(["details", "planner", "pod-wise"]);
 
 export default function UnifiedOpsApp() {
   const [activeView, setActiveView] = useState("leadership-overview");
@@ -1258,7 +1258,7 @@ export default function UnifiedOpsApp() {
                 ["leadership-overview", "Overview"],
                 ["overview", "Editorial Funnel"],
                 ["beats-performance", "Beats Performance"],
-                ["planner", "Planner"],
+                ["planner2", "Planner"],
                 ["analytics", "Analytics"],
                 ["production", "Production"],
               ].map(([id, label]) => (
@@ -1288,7 +1288,7 @@ export default function UnifiedOpsApp() {
               <div className="sidebar-more-items">
                 {[
                   ["details", "Details"],
-                  ["planner2", "Planner"],
+                  ["planner", "Planner"],
                   ["pod-wise", "POD Wise"],
                 ].map(([id, label]) => (
                   <button
