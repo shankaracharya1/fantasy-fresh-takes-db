@@ -1288,26 +1288,13 @@ export default function UnifiedOpsApp() {
 
         <main className="ops-main">
           <div className="app-topbar">
-            <div className="app-topbar-top">
-              <div className="app-topbar-copy">
-                <h1 className="app-topbar-title">{activeViewLabelMap[activeView] || "Dashboard"}</h1>
-              </div>
-              <label className="theme-switch" aria-label="Toggle dark mode">
-                <span className="theme-switch-label">{themeMode === "dark" ? "Dark" : "Light"}</span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={themeMode === "dark"}
-                  onChange={(event) => setThemeMode(event.target.checked ? "dark" : "light")}
-                />
-                <span className="theme-switch-track" aria-hidden="true">
-                  <span className="theme-switch-thumb" />
-                </span>
-              </label>
+            <div className="app-topbar-copy">
+              <h1 className="app-topbar-title">{activeViewLabelMap[activeView] || "Dashboard"}</h1>
             </div>
-            {headerSupportsDateRange ? (
-              <div className="app-topbar-range" data-share-ignore="true">
-                {activeView === "planner2" ? (
+            <div className="app-topbar-right">
+              {headerSupportsDateRange ? (
+                <div className="app-topbar-range" data-share-ignore="true">
+                  {activeView === "planner2" ? (
                   <>
                     <button
                       type="button"
@@ -1436,6 +1423,19 @@ export default function UnifiedOpsApp() {
                 </div>
               </div>
             ) : null}
+              <label className="theme-switch" aria-label="Toggle dark mode">
+                <span className="theme-switch-label">{themeMode === "dark" ? "Dark" : "Light"}</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={themeMode === "dark"}
+                  onChange={(event) => setThemeMode(event.target.checked ? "dark" : "light")}
+                />
+                <span className="theme-switch-track" aria-hidden="true">
+                  <span className="theme-switch-thumb" />
+                </span>
+              </label>
+            </div>
           </div>
 
           {dashboardIsRefreshing ? (
@@ -1531,9 +1531,11 @@ export default function UnifiedOpsApp() {
             ) : null}
 
             {activeView === "planner" ? (
-              <PlannerErrorBoundary>
-                <GanttTracker onPlannerSnapshotChange={setPlannerBoardSnapshot} />
-              </PlannerErrorBoundary>
+              <div className="section-shell">
+                <PlannerErrorBoundary>
+                  <GanttTracker onPlannerSnapshotChange={setPlannerBoardSnapshot} />
+                </PlannerErrorBoundary>
+              </div>
             ) : null}
 
             {activeView === "planner2" ? (
