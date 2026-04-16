@@ -402,6 +402,7 @@ export default function UnifiedOpsApp() {
   const [leadershipOverviewError, setLeadershipOverviewError] = useState("");
   const [competitionData, setCompetitionData] = useState(null);
   const [competitionLoading, setCompetitionLoading] = useState(true);
+  const [v2CompetitionData, setV2CompetitionData] = useState(null);
   const [analyticsData, setAnalyticsData] = useState(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState("");
@@ -689,10 +690,7 @@ export default function UnifiedOpsApp() {
 
 
   useEffect(() => {
-    if (activeView !== "pod-wise" && activeView !== "beats-performance-v2") {
-      return undefined;
-    }
-    if (activeView === "pod-wise" && podWiseView !== "performance") {
+    if (activeView !== "pod-wise" || podWiseView !== "performance") {
       return undefined;
     }
 
@@ -750,6 +748,29 @@ export default function UnifiedOpsApp() {
       window.clearInterval(intervalId);
     };
   }, [activeView, podWiseView, dashboardDateRange, podPerformanceRangeMode, podPerformanceScope]);
+
+  useEffect(() => {
+    if (activeView !== "beats-performance-v2") return undefined;
+    const V2_CACHE_KEY = "beats-performance-v2-competition";
+    const cachedPayload = readClientCache(V2_CACHE_KEY);
+    if (cachedPayload) {
+      setV2CompetitionData(cachedPayload);
+    }
+    let cancelled = false;
+    async function loadV2Competition() {
+      try {
+        const response = await fetch("/api/dashboard/competition?mode=lifetime&scope=bau", { cache: "no-store" });
+        const payload = await readJson(response);
+        if (!response.ok) throw new Error(payload.error || "Unable to load competition data.");
+        if (!cancelled) {
+          setV2CompetitionData(payload);
+          writeClientCache(V2_CACHE_KEY, payload);
+        }
+      } catch {}
+    }
+    void loadV2Competition();
+    return () => { cancelled = true; };
+  }, [activeView]);
 
   useEffect(() => {
     if (activeView !== "pod-wise" || podWiseView !== "tasks") {
@@ -1552,7 +1573,7 @@ export default function UnifiedOpsApp() {
                   onNavigate={setActiveView}
                   selectedDateRange={dashboardDateRange}
                   isV2={activeView === "beats-performance-v2"}
-                  competitionPodRows={competitionData?.podRows}
+                  competitionPodRows={v2CompetitionData?.podRows}
                 />
               </div>
             ) : null}
