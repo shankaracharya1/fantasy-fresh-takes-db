@@ -514,28 +514,6 @@ export default function BeatsPerformanceContent({
 
   return (
     <div className="beats-performance-shell">
-      <div style={{ marginBottom: 16, display: "flex", justifyContent: "flex-start" }}>
-        <button
-          type="button"
-          onClick={() => onNavigate?.("leadership-overview")}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "10px 16px",
-            borderRadius: 999,
-            border: "1px solid rgba(28, 25, 23, 0.12)",
-            background: "rgba(255,255,255,0.86)",
-            color: "#1f1b16",
-            fontWeight: 700,
-            cursor: "pointer",
-            boxShadow: "0 10px 26px rgba(57, 47, 31, 0.08)",
-          }}
-        >
-          <span aria-hidden="true">←</span>
-          Back to Overview
-        </button>
-      </div>
       <div style={{ marginBottom: 14, fontSize: 13, fontWeight: 700, color: "var(--subtle)" }}>
         Showing {activeDateRangeLabel}
       </div>
