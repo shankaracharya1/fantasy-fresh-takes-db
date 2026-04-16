@@ -689,7 +689,10 @@ export default function UnifiedOpsApp() {
 
 
   useEffect(() => {
-    if (activeView !== "pod-wise" || podWiseView !== "performance") {
+    if (activeView !== "pod-wise" && activeView !== "beats-performance-v2") {
+      return undefined;
+    }
+    if (activeView === "pod-wise" && podWiseView !== "performance") {
       return undefined;
     }
 
@@ -1548,6 +1551,8 @@ export default function UnifiedOpsApp() {
                   copyingSection={copyingSection}
                   onNavigate={setActiveView}
                   selectedDateRange={dashboardDateRange}
+                  isV2={activeView === "beats-performance-v2"}
+                  competitionPodRows={competitionData?.podRows}
                 />
               </div>
             ) : null}

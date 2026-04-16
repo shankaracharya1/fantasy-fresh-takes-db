@@ -194,6 +194,8 @@ export default function BeatsPerformanceContent({
   copyingSection,
   onNavigate,
   selectedDateRange,
+  isV2 = false,
+  competitionPodRows = [],
 }) {
   const [workflowSorts, setWorkflowSorts] = useState({
     editorial: { key: "assetCode", direction: "asc" },
@@ -274,13 +276,26 @@ export default function BeatsPerformanceContent({
   const previousAbandonedCount = previousScopedRows.filter((row) => row.statusCategory === "abandoned").length;
   const previousReviewPendingCount = previousScopedRows.filter((row) => row.statusCategory === "review_pending").length;
   const previousIterateCount = previousScopedRows.filter((row) => row.statusCategory === "iterate").length;
-  const metricCards = [
-    { label: "Total Beats", value: formatMetricValue(totalBeats), delta: null },
-    { label: "Approved beats", value: formatMetricValue(approvedCount), delta: null },
-    { label: "Review pending", value: formatMetricValue(reviewPendingCount), delta: null },
-    { label: "Iterate", value: formatMetricValue(iterateCount), delta: null },
-    { label: "Abandoned", value: formatMetricValue(abandonedCount), delta: null },
-  ];
+  const compRows = Array.isArray(competitionPodRows) ? competitionPodRows : [];
+  const compTotalScripts = compRows.reduce((s, r) => s + (Number(r.lifetimeScripts) || 0), 0);
+  const compTotalSuccessful = compRows.reduce((s, r) => s + (Number(r.hitRateNumerator) || 0), 0);
+  const compSuccessRate = compTotalScripts > 0 ? `${Math.round((compTotalSuccessful / compTotalScripts) * 100)}%` : "0%";
+
+  const metricCards = isV2
+    ? [
+        { label: "Total Beats", value: formatMetricValue(totalBeats), delta: null },
+        { label: "Approved beats", value: formatMetricValue(approvedCount), delta: null },
+        { label: "Total scripts", value: formatMetricValue(compTotalScripts), delta: null },
+        { label: "Successful", value: formatMetricValue(compTotalSuccessful), delta: null },
+        { label: "Success Rate", value: compSuccessRate, delta: null },
+      ]
+    : [
+        { label: "Total Beats", value: formatMetricValue(totalBeats), delta: null },
+        { label: "Approved beats", value: formatMetricValue(approvedCount), delta: null },
+        { label: "Review pending", value: formatMetricValue(reviewPendingCount), delta: null },
+        { label: "Iterate", value: formatMetricValue(iterateCount), delta: null },
+        { label: "Abandoned", value: formatMetricValue(abandonedCount), delta: null },
+      ];
   const podStatusSummaryRows = activePods
     .map((podLeadName) => {
       const podRows = scopedRows.filter((row) => row.podLeadName === podLeadName);
