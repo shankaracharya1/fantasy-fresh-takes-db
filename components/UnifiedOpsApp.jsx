@@ -445,6 +445,7 @@ export default function UnifiedOpsApp() {
     activeView === "analytics" ||
     activeView === "production" ||
     activeView === "beats-performance" ||
+    activeView === "beats-performance-v2" ||
     activeView === "planner2";
   const headerDateRangeDisabled =
     (activeView === "overview" && overviewLoading) ||
@@ -453,6 +454,7 @@ export default function UnifiedOpsApp() {
     (activeView === "analytics" && analyticsLoading && !analyticsData) ||
     (activeView === "production" && acdMetricsLoading && !acdMetricsData) ||
     (activeView === "beats-performance" && beatsPerformanceLoading && !beatsPerformanceData) ||
+    (activeView === "beats-performance-v2" && beatsPerformanceLoading && !beatsPerformanceData) ||
     (activeView === "planner2" && planner2Loading && !planner2Data);
   const weekFilterSourceRows = leadershipOverviewData?.allBeatRows || overviewData?.allBeatRows || beatsPerformanceData?.rows || [];
   const monthWeekOptions = useMemo(() => buildMonthWeekFilterOptions(weekFilterSourceRows), [weekFilterSourceRows]);
@@ -788,7 +790,7 @@ export default function UnifiedOpsApp() {
   }, [activeView, podWiseView, podTasksData]);
 
   useEffect(() => {
-    if (activeView !== "beats-performance") {
+    if (activeView !== "beats-performance" && activeView !== "beats-performance-v2") {
       return undefined;
     }
 
@@ -1232,6 +1234,7 @@ export default function UnifiedOpsApp() {
     "leadership-overview": "Overview",
     overview: "Editorial Funnel",
     "beats-performance": "Beats Performance",
+    "beats-performance-v2": "Beats Performance V2",
     "pod-wise": "POD Wise",
     planner: "Planner",
     planner2: "Planner",
@@ -1258,6 +1261,7 @@ export default function UnifiedOpsApp() {
                 ["leadership-overview", "Overview"],
                 ["overview", "Editorial Funnel"],
                 ["beats-performance", "Beats Performance"],
+                ["beats-performance-v2", "Beats Performance V2"],
                 ["planner2", "Planner"],
                 ["analytics", "Analytics"],
                 ["production", "Production"],
@@ -1535,7 +1539,7 @@ export default function UnifiedOpsApp() {
               </div>
             ) : null}
 
-            {activeView === "beats-performance" ? (
+            {activeView === "beats-performance" || activeView === "beats-performance-v2" ? (
               <div className="section-shell">
                 <BeatsPerformanceContent
                   beatsPerformanceData={beatsPerformanceData}
