@@ -253,9 +253,9 @@ export default function ProductionContent({
   busyAction,
   onShare,
   copyingSection,
+  productionSubView = "pipeline",
 }) {
   const [selectedAssetTypes, setSelectedAssetTypes] = useState(ASSET_TYPE_OPTIONS);
-  const [productionSubView, setProductionSubView] = useState("pipeline");
   const safeAcdMetricsData =
     acdMetricsData ||
     {
@@ -311,33 +311,6 @@ export default function ProductionContent({
           {note}
         </div>
       ))}
-
-      <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }} data-share-ignore="true">
-        <div style={{
-          display: "inline-flex", borderRadius: 999, padding: 4,
-          background: "var(--bg-deep)", border: "1px solid var(--border)",
-        }}>
-          {[["pipeline", "Production Pipeline"], ["throughput", "Production Throughput"]].map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setProductionSubView(id)}
-              style={{
-                padding: "8px 22px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-                borderRadius: 999, border: "none",
-                background: productionSubView === id
-                  ? "linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 72%, #8a4d2c))"
-                  : "transparent",
-                color: productionSubView === id ? "#fffdf8" : "var(--subtle)",
-                boxShadow: productionSubView === id ? "0 14px 22px -18px rgba(23, 34, 47, 0.9)" : "none",
-                transition: "all 150ms ease",
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {productionSubView === "pipeline" && (
         <ShareablePanel shareLabel="Production Pipeline" onShare={onShare} isSharing={copyingSection === "Production Pipeline"}>

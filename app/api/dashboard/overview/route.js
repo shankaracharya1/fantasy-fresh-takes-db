@@ -292,13 +292,9 @@ function makeFuzzyBeatKey(showName, beatName) {
   return beat ? `${show}|${beat}` : "";
 }
 
-// FT = Fresh Take / new q1, RW_L = large rework, RW_S = small rework, RW = other
 function classifyScriptType(reworkType) {
   const rt = String(reworkType || "").trim().toLowerCase();
-  if (rt === "fresh take" || rt === "fresh takes" || rt.startsWith("new q1")) return "FT";
-  if (rt.includes("large")) return "RW_L";
-  if (rt.includes("small")) return "RW_S";
-  return "RW";
+  return rt === "fresh take" || rt === "fresh takes" || rt.startsWith("new q1") ? "FT" : "RW";
 }
 
 function isApprovedIdeationStatus(statusLabel) {
@@ -323,32 +319,12 @@ function getLatestAssetStage(asset) {
   return "";
 }
 
-function buildPodThroughputForRange(liveRows, ideationRows, startDate, endDate) {
-  // Two-tier ideation lookup:
-  // 1. Full key (show|beat) — most precise
-  // 2. Beat-only key — fallback when show names differ across sheets (e.g. "MVS" vs "My Vampire System: A Dragon's Revenge")
-  const ideationFullKeys = new Set();
-  const ideationBeatOnlyKeys = new Set();
-  for (const row of Array.isArray(ideationRows) ? ideationRows : []) {
-    const fullKey = makeFuzzyBeatKey(row?.showName, row?.beatName);
-    const beatOnly = fuzzyBeatNormalize(row?.beatName || "");
-    if (fullKey) ideationFullKeys.add(fullKey);
-    if (beatOnly) ideationBeatOnlyKeys.add(beatOnly);
-  }
-
-  // Filter live rows: date range + GA only (Q1 manual + thumbnail)
-  const filtered = (Array.isArray(liveRows) ? liveRows : []).filter((row) => {
-    const liveDate = String(row?.liveDate || "").slice(0, 10);
-    if (!liveDate || liveDate < startDate || liveDate > endDate) return false;
-    return getAssetTypeFromAssetCode(row?.assetCode) === "GA";
-  });
-
-  // Group by pod → writer → beat, tracking FT/RW type counts
+function buildPodThroughputForRange({ editorialRows = [], readyRows = [], productionRows = [], liveRows = [] } = {}, startDate, endDate) {
   const podMap = new Map();
   const ensurePod = (name) => {
     const pod = normalizeText(name) || "Unknown POD";
     if (!podMap.has(pod)) {
-      podMap.set(pod, { podLeadName: pod, totalScripts: 0, ftCount: 0, rwCount: 0, writers: new Map(), beats: new Map() });
+      podMap.set(pod, { podLeadName: pod, totalScripts: 0, ftCount: 0, rwCount: 0, writers: new Map() });
     }
     return podMap.get(pod);
   };
@@ -360,40 +336,30 @@ function buildPodThroughputForRange(liveRows, ideationRows, startDate, endDate) 
     return pod.writers.get(writer);
   };
 
-  for (const row of filtered) {
-    const pod = ensurePod(row?.podLeadName);
-    pod.totalScripts += 1;
-    const writer = ensureWriter(pod, row?.writerName);
-    writer.totalScripts += 1;
+  const countRows = (rows) => {
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const leadDate = String(row?.dateSubmittedByLead || "").slice(0, 10);
+      if (!leadDate || leadDate < startDate || leadDate > endDate) continue;
+      const pod = ensurePod(row?.podLeadName || row?.podLeadRaw);
+      pod.totalScripts += 1;
+      const writer = ensureWriter(pod, row?.writerName);
+      writer.totalScripts += 1;
 
-    const scriptType = classifyScriptType(row?.reworkType);
-    if (scriptType === "FT") { pod.ftCount += 1; writer.ftCount += 1; }
-    else { pod.rwCount += 1; writer.rwCount += 1; }
-
-    const beatName = normalizeText(row?.beatName) || "Unknown Beat";
-    const showName = normalizeText(row?.showName) || "";
-    const fuzzyKey = makeFuzzyBeatKey(showName, beatName);
-    const beatOnlyKey = fuzzyBeatNormalize(beatName);
-    const inIdeation = Boolean(
-      (fuzzyKey && ideationFullKeys.has(fuzzyKey)) ||
-      (beatOnlyKey && ideationBeatOnlyKeys.has(beatOnlyKey))
-    );
-
-    const beatMapKey = fuzzyKey || normalizeKey(beatName);
-    if (!pod.beats.has(beatMapKey)) {
-      pod.beats.set(beatMapKey, {
-        beatName, showName,
-        scriptCount: 0, ftCount: 0, rwLargeCount: 0, rwSmallCount: 0, rwOtherCount: 0,
-        inIdeation,
-      });
+      const scriptType = classifyScriptType(row?.reworkType);
+      if (scriptType === "FT") {
+        pod.ftCount += 1;
+        writer.ftCount += 1;
+      } else {
+        pod.rwCount += 1;
+        writer.rwCount += 1;
+      }
     }
-    const beat = pod.beats.get(beatMapKey);
-    beat.scriptCount += 1;
-    if (scriptType === "FT") beat.ftCount += 1;
-    else if (scriptType === "RW_L") beat.rwLargeCount += 1;
-    else if (scriptType === "RW_S") beat.rwSmallCount += 1;
-    else beat.rwOtherCount += 1;
-  }
+  };
+
+  countRows(editorialRows);
+  countRows(readyRows);
+  countRows(productionRows);
+  countRows(liveRows);
 
   return Array.from(podMap.values())
     .sort((a, b) => b.totalScripts - a.totalScripts || a.podLeadName.localeCompare(b.podLeadName))
@@ -403,10 +369,6 @@ function buildPodThroughputForRange(liveRows, ideationRows, startDate, endDate) 
       ftCount: pod.ftCount,
       rwCount: pod.rwCount,
       writerRows: Array.from(pod.writers.values()).sort((a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName)),
-      beats: Array.from(pod.beats.values()).sort((a, b) => {
-        if (a.inIdeation !== b.inIdeation) return a.inIdeation ? 1 : -1;
-        return b.scriptCount - a.scriptCount;
-      }),
     }));
 }
 
@@ -564,15 +526,22 @@ function buildCurrentEditorialPodRows(plannerState, liveRows, ideationRows) {
   );
 }
 
-function buildCurrentWeekPayload(plannerState, { liveRows = [], ideationRows = [], productionRows = [], ideationSourceError = "" } = {}) {
+function buildCurrentWeekPayload(
+  plannerState,
+  { editorialRows = [], readyRows = [], liveRows = [], ideationRows = [], productionRows = [], ideationSourceError = "" } = {}
+) {
   const timing = buildPlannerTimingSummary(plannerState.plannerBeats);
   const allProductionAssetCount = countAllAssetsWithStage(plannerState.pods, "production");
   const allLiveOnMetaAssetCount = countAllAssetsWithStage(plannerState.pods, "live_on_meta");
   const activeWriterCount = countActiveWritersInPods(plannerState.pods);
   const submittedByThursday = countAssetsSubmittedByDay(plannerState.pods, 3);
   const podThroughputRows = buildPodThroughputForRange(
-    liveRows,
-    ideationRows,
+    {
+      editorialRows,
+      readyRows,
+      productionRows,
+      liveRows,
+    },
     plannerState.weekSelection.weekStart,
     plannerState.weekSelection.weekEnd
   );
@@ -782,7 +751,13 @@ function buildHitRateAndFunnelForSelection(analyticsRows, selection, { includeNe
   };
 }
 
-function buildLastWeekPayload(liveRows, analyticsRows, ideationRows, productionRows, { includeNewShowsPod = false } = {}) {
+function buildLastWeekPayload(
+  liveRows,
+  analyticsRows,
+  ideationRows,
+  productionRows,
+  { editorialRows = [], readyRows = [], includeNewShowsPod = false } = {}
+) {
   const weekSelection = getWeekSelection("last");
   const weekLabel = formatWeekRangeLabel(weekSelection.weekStart, weekSelection.weekEnd);
   const allFreshTakeRows = buildReleasedFreshTakeAttemptsForPeriod(liveRows, "last");
@@ -791,7 +766,16 @@ function buildLastWeekPayload(liveRows, analyticsRows, ideationRows, productionR
     : allFreshTakeRows.filter((row) => !isNonBauPodLeadName(row?.podLeadName));
   const tatSummary = buildTatSummaryFromRows(freshTakeRows);
   const hitRateData = buildHitRateAndFunnelForSelection(analyticsRows, weekSelection, { includeNewShowsPod });
-  const podThroughputRows = buildPodThroughputForRange(liveRows, ideationRows, weekSelection.weekStart, weekSelection.weekEnd);
+  const podThroughputRows = buildPodThroughputForRange(
+    {
+      editorialRows,
+      readyRows,
+      productionRows,
+      liveRows,
+    },
+    weekSelection.weekStart,
+    weekSelection.weekEnd
+  );
 
   // Previous week comparison (week before last)
   const prevWeekStart = addDays(weekSelection.weekStart, -7);
@@ -843,7 +827,14 @@ function buildLastWeekPayload(liveRows, analyticsRows, ideationRows, productionR
   };
 }
 
-function buildRangePayload(liveRows, analyticsRows, ideationRows, productionRows, rangeSelection, { includeNewShowsPod = false } = {}) {
+function buildRangePayload(
+  liveRows,
+  analyticsRows,
+  ideationRows,
+  productionRows,
+  rangeSelection,
+  { editorialRows = [], readyRows = [], includeNewShowsPod = false } = {}
+) {
   const rangeLabel = rangeSelection.rangeLabel || formatWeekRangeLabel(rangeSelection.startDate, rangeSelection.endDate);
   const allFreshTakeRows = buildReleasedFreshTakeAttemptsForRange(
     liveRows,
@@ -859,7 +850,16 @@ function buildRangePayload(liveRows, analyticsRows, ideationRows, productionRows
     return liveDate && liveDate >= rangeSelection.startDate && liveDate <= rangeSelection.endDate;
   });
   const hitRateData = buildHitRateAndFunnelForSelection(filteredAnalyticsRows, rangeSelection, { includeNewShowsPod });
-  const podThroughputRows = buildPodThroughputForRange(liveRows, ideationRows, rangeSelection.startDate, rangeSelection.endDate);
+  const podThroughputRows = buildPodThroughputForRange(
+    {
+      editorialRows,
+      readyRows,
+      productionRows,
+      liveRows,
+    },
+    rangeSelection.startDate,
+    rangeSelection.endDate
+  );
   const freshTakeInProductionCount = countFreshTakesInProduction(
     productionRows,
     rangeSelection.startDate,
@@ -934,7 +934,11 @@ export async function GET(request) {
       ]);
       const rangeSelection = buildDateRangeSelection({ startDate, endDate });
       return NextResponse.json({
-        ...buildRangePayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, rangeSelection, { includeNewShowsPod }),
+        ...buildRangePayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, rangeSelection, {
+          editorialRows: editorialWorkflowResult.rows,
+          readyRows: rfpWorkflowResult.rows,
+          includeNewShowsPod,
+        }),
         analyticsSourceError: analyticsResult.error,
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: rangeSelection.startDate, endDate: rangeSelection.endDate, liveRows }),
       });
@@ -955,7 +959,11 @@ export async function GET(request) {
       ]);
       const lastWeekSelection = getWeekSelection("last");
       return NextResponse.json({
-        ...buildLastWeekPayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, { includeNewShowsPod }),
+        ...buildLastWeekPayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, {
+          editorialRows: editorialWorkflowResult.rows,
+          readyRows: rfpWorkflowResult.rows,
+          includeNewShowsPod,
+        }),
         analyticsSourceError: analyticsResult.error,
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: lastWeekSelection.weekStart, endDate: lastWeekSelection.weekEnd, liveRows }),
       });
@@ -980,6 +988,8 @@ export async function GET(request) {
       ]);
       return NextResponse.json({
         ...buildCurrentWeekPayload(plannerState, {
+          editorialRows: editorialWorkflowResult.rows,
+          readyRows: rfpWorkflowResult.rows,
           liveRows,
           ideationRows: ideationResult.rows,
           productionRows: productionResult.rows,

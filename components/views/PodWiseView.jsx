@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import {
   EmptyState,
   ShareablePanel,
@@ -7,6 +8,300 @@ import {
 } from "./shared.jsx";
 
 // ─── Private components ───────────────────────────────────────────────────────
+
+const POD_LINE_COLORS = [
+  "#2d5a3d", "#c2703e", "#2563eb", "#9333ea", "#d97706",
+  "#0891b2", "#be185d", "#16a34a", "#7c3aed", "#dc2626",
+];
+
+// Build a smooth cubic-bezier path through an array of {x,y} points (with null gaps)
+function buildSmoothedPath(points) {
+  const segments = [];
+  let seg = [];
+  for (const pt of points) {
+    if (pt) { seg.push(pt); }
+    else if (seg.length) { segments.push(seg); seg = []; }
+  }
+  if (seg.length) segments.push(seg);
+  return segments.map((s) => {
+    if (s.length === 1) return `M ${s[0].x} ${s[0].y}`;
+    let d = `M ${s[0].x} ${s[0].y}`;
+    for (let i = 1; i < s.length; i++) {
+      const cpx = (s[i - 1].x + s[i].x) / 2;
+      d += ` C ${cpx},${s[i - 1].y} ${cpx},${s[i].y} ${s[i].x},${s[i].y}`;
+    }
+    return d;
+  }).join(" ");
+}
+
+function buildSmoothedAreaPath(points, chartH) {
+  const segments = [];
+  let seg = [];
+  for (const pt of points) {
+    if (pt) { seg.push(pt); }
+    else if (seg.length) { segments.push(seg); seg = []; }
+  }
+  if (seg.length) segments.push(seg);
+  return segments.map((s) => {
+    if (s.length === 0) return "";
+    let d = `M ${s[0].x} ${s[0].y}`;
+    for (let i = 1; i < s.length; i++) {
+      const cpx = (s[i - 1].x + s[i].x) / 2;
+      d += ` C ${cpx},${s[i - 1].y} ${cpx},${s[i].y} ${s[i].x},${s[i].y}`;
+    }
+    d += ` L ${s[s.length - 1].x},${chartH} L ${s[0].x},${chartH} Z`;
+    return d;
+  }).join(" ");
+}
+
+function HitRateTrendChart({ trendData, loading }) {
+  const [granularity, setGranularity] = useState("week");
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  const containerRef = useRef(null);
+  const [containerW, setContainerW] = useState(720);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      if (entry) setContainerW(Math.floor(entry.contentRect.width) || 720);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const series = granularity === "week"
+    ? (trendData?.weeks || [])
+    : (trendData?.months || []);
+  const podNames = trendData?.podNames || [];
+  const activePods = podNames.filter((pod) => series.some((pt) => pod in pt.pods));
+
+  const H = 260;
+  const PAD = { top: 20, right: 20, bottom: 40, left: 46 };
+  const W = Math.max(containerW, 280);
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+  const xStep = series.length > 1 ? chartW / (series.length - 1) : chartW / 2;
+  const yScale = (val) => chartH - (val / 100) * chartH;
+  const yTicks = [0, 25, 50, 75, 100];
+
+  const xLabel = (i) => {
+    if (granularity === "week") return `Wk ${i + 1}`;
+    const pt = series[i];
+    return pt.monthLabel?.slice(0, 3) || pt.monthKey?.slice(5) || "";
+  };
+  const labelEvery = series.length <= 10 ? 1 : series.length <= 20 ? 2 : Math.ceil(series.length / 10);
+
+  const handleSvgMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mouseX = ((e.clientX - rect.left) / rect.width) * W - PAD.left;
+    const idx = Math.max(0, Math.min(series.length - 1, Math.round(mouseX / xStep)));
+    setHoveredIdx(idx);
+  };
+
+  // Tooltip positioning (% from left of container)
+  const tooltipLeftPx = hoveredIdx !== null
+    ? ((hoveredIdx * xStep + PAD.left) / W) * containerW
+    : 0;
+  const tooltipData = hoveredIdx !== null ? series[hoveredIdx] : null;
+  const tooltipRows = activePods
+    .map((pod, i) => ({ pod, color: POD_LINE_COLORS[i % POD_LINE_COLORS.length], val: tooltipData?.pods[pod]?.hitRate }))
+    .filter((r) => r.val !== undefined)
+    .sort((a, b) => b.val - a.val);
+
+  return (
+    <div style={{ marginTop: 32 }}>
+      {/* Header + toggle */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>Hit Rate Trend by POD</div>
+        <div className="week-toggle-group">
+          {[{ id: "week", label: "Week" }, { id: "month", label: "Month" }].map((opt) => (
+            <button key={opt.id} type="button"
+              className={granularity === opt.id ? "is-active" : ""}
+              onClick={() => setGranularity(opt.id)}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ color: "var(--subtle)", fontSize: 13, padding: "16px 0" }}>Loading trend data…</div>
+      ) : activePods.length === 0 || series.length === 0 ? (
+        <div style={{ color: "var(--subtle)", fontSize: 13, padding: "16px 0" }}>No trend data available yet.</div>
+      ) : (
+        <>
+          {/* Legend */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", marginBottom: 14 }}>
+            {activePods.map((pod, i) => (
+              <span key={pod} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--ink)" }}>
+                <span style={{ width: 24, height: 3, background: POD_LINE_COLORS[i % POD_LINE_COLORS.length], borderRadius: 99, display: "inline-block" }} />
+                {pod}
+              </span>
+            ))}
+          </div>
+
+          {/* Chart container — relative so tooltip can be absolute */}
+          <div ref={containerRef} style={{ position: "relative", userSelect: "none" }}>
+            <svg
+              viewBox={`0 0 ${W} ${H}`}
+              width="100%"
+              style={{ display: "block", overflow: "visible" }}
+              onMouseMove={handleSvgMouseMove}
+              onMouseLeave={() => setHoveredIdx(null)}
+            >
+              <defs>
+                {activePods.map((pod, pi) => {
+                  const color = POD_LINE_COLORS[pi % POD_LINE_COLORS.length];
+                  return (
+                    <linearGradient key={pod} id={`pod-grad-${pi}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+                      <stop offset="100%" stopColor={color} stopOpacity="0" />
+                    </linearGradient>
+                  );
+                })}
+              </defs>
+
+              <g transform={`translate(${PAD.left},${PAD.top})`}>
+                {/* Chart background */}
+                <rect x={0} y={0} width={chartW} height={chartH} fill="white" fillOpacity="0.5" rx={4} />
+
+                {/* Horizontal grid lines + Y labels */}
+                {yTicks.map((tick) => (
+                  <g key={tick}>
+                    <line x1={0} x2={chartW} y1={yScale(tick)} y2={yScale(tick)}
+                      stroke={tick === 0 ? "#c8bfb5" : "#e8e0d8"} strokeWidth={tick === 0 ? 1 : 1}
+                      strokeDasharray={tick === 0 ? "none" : "3 4"} />
+                    <text x={-8} y={yScale(tick)} textAnchor="end" dominantBaseline="middle"
+                      fontSize={9.5} fill="#9a8e84" fontWeight="500">{tick}%</text>
+                  </g>
+                ))}
+
+                {/* Vertical grid lines + X labels */}
+                {series.map((_, i) => {
+                  const x = i * xStep;
+                  const showLabel = i % labelEvery === 0;
+                  return (
+                    <g key={i}>
+                      <line x1={x} x2={x} y1={0} y2={chartH}
+                        stroke="#ece6e0" strokeWidth={1} strokeDasharray="3 4" />
+                      {showLabel && (
+                        <text x={x} y={chartH + 14} textAnchor="middle"
+                          fontSize={9.5} fill="#9a8e84" fontWeight="500">
+                          {xLabel(i)}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+
+                {/* Hover crosshair */}
+                {hoveredIdx !== null && (
+                  <line
+                    x1={hoveredIdx * xStep} x2={hoveredIdx * xStep}
+                    y1={0} y2={chartH}
+                    stroke="#2d2420" strokeWidth={1.5} strokeOpacity={0.25}
+                    strokeDasharray="4 3"
+                    style={{ pointerEvents: "none" }}
+                  />
+                )}
+
+                {/* Area fills */}
+                {activePods.map((pod, pi) => {
+                  const points = series.map((pt, i) => {
+                    const val = pt.pods[pod]?.hitRate;
+                    return val !== undefined ? { x: i * xStep, y: yScale(val) } : null;
+                  });
+                  const areaD = buildSmoothedAreaPath(points, chartH);
+                  return areaD ? (
+                    <path key={pod} d={areaD}
+                      fill={`url(#pod-grad-${pi})`}
+                      style={{ pointerEvents: "none" }} />
+                  ) : null;
+                })}
+
+                {/* Lines */}
+                {activePods.map((pod, pi) => {
+                  const color = POD_LINE_COLORS[pi % POD_LINE_COLORS.length];
+                  const points = series.map((pt, i) => {
+                    const val = pt.pods[pod]?.hitRate;
+                    return val !== undefined ? { x: i * xStep, y: yScale(val), val } : null;
+                  });
+                  const lineD = buildSmoothedPath(points);
+                  return lineD ? (
+                    <path key={pod} d={lineD}
+                      fill="none" stroke={color} strokeWidth={2.5}
+                      strokeLinejoin="round" strokeLinecap="round"
+                      style={{ pointerEvents: "none" }} />
+                  ) : null;
+                })}
+
+                {/* Dots — always small, larger at hovered column */}
+                {activePods.map((pod, pi) => {
+                  const color = POD_LINE_COLORS[pi % POD_LINE_COLORS.length];
+                  return series.map((pt, i) => {
+                    const val = pt.pods[pod]?.hitRate;
+                    if (val === undefined) return null;
+                    const isHovered = hoveredIdx === i;
+                    return (
+                      <circle key={`${pod}-${i}`}
+                        cx={i * xStep} cy={yScale(val)}
+                        r={isHovered ? 6 : 3.5}
+                        fill={isHovered ? color : "white"}
+                        stroke={color}
+                        strokeWidth={isHovered ? 0 : 2}
+                        style={{ transition: "r 0.15s ease, fill 0.15s ease", pointerEvents: "none" }}
+                      />
+                    );
+                  });
+                })}
+              </g>
+            </svg>
+
+            {/* HTML tooltip — shows all PODs at hovered column */}
+            {hoveredIdx !== null && tooltipRows.length > 0 && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: tooltipLeftPx,
+                  transform: tooltipLeftPx > containerW * 0.65
+                    ? "translateX(calc(-100% - 8px))"
+                    : "translateX(10px)",
+                  pointerEvents: "none",
+                  zIndex: 10,
+                  background: "white",
+                  border: "1px solid #e0d8d0",
+                  borderRadius: 10,
+                  boxShadow: "0 8px 24px -8px rgba(23,34,47,0.22), 0 2px 8px -2px rgba(23,34,47,0.10)",
+                  padding: "10px 14px",
+                  minWidth: 140,
+                  animation: "fadeInTooltip 0.12s ease",
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#5a4f46", marginBottom: 8, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                  {xLabel(hoveredIdx)}
+                  {granularity === "week" && series[hoveredIdx]?.weekLabel
+                    ? <span style={{ fontWeight: 400, marginLeft: 4, textTransform: "none", letterSpacing: 0 }}>— {series[hoveredIdx].weekLabel}</span>
+                    : null}
+                </div>
+                {tooltipRows.map((r) => (
+                  <div key={r.pod} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 4, fontSize: 12 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: r.color, flexShrink: 0, display: "inline-block" }} />
+                      <span style={{ color: "#2d2420" }}>{r.pod}</span>
+                    </span>
+                    <span style={{ fontWeight: 700, color: r.color }}>{r.val}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 const POD_TIER_GREEN_MIN = 35;
 const POD_TIER_AMBER_MIN = 20;
@@ -142,6 +437,8 @@ export default function PodWiseContent({
   onPerformanceRangeModeChange,
   performanceScope,
   onPerformanceScopeChange,
+  podTrendData,
+  podTrendLoading,
   onShare,
   copyingSection,
 }) {
@@ -279,30 +576,6 @@ export default function PodWiseContent({
           })}
         </div>
 
-        <div className="table-wrap">
-          <table className="ops-table overview-table">
-            <thead>
-              <tr>
-                <th>POD lead</th>
-                <th>Writers</th>
-                <th>Output</th>
-                <th>Success</th>
-                <th>Throughput score</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((row) => (
-                <tr key={`pod-score-${row.podLeadName}`}>
-                  <td>{row.podLeadName}</td>
-                  <td>{formatMetricValue(row.writerCount)}</td>
-                  <td>{formatMetricValue(row.scripts)}</td>
-                  <td>{formatMetricValue(row.successful)}</td>
-                  <td>{formatMetricValue(row.throughputScore)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
 
         <div className="pod-legend">
           {[
@@ -316,6 +589,8 @@ export default function PodWiseContent({
             </div>
           ))}
         </div>
+
+        <HitRateTrendChart trendData={podTrendData} loading={podTrendLoading} />
       </div>
     </ShareablePanel>
   );

@@ -324,10 +324,26 @@ export function getAcdLeaderboardDataset(metricsInput, mode, viewType) {
 
 // ─── Small Shared Components ──────────────────────────────────────────────────
 
-export function MetricCard({ label, value, hint, tone = "default", body = null, className = "", unit = "" }) {
+export function MetricCard({
+  label,
+  value,
+  hint,
+  info,
+  tone = "default",
+  body = null,
+  className = "",
+  unit = "",
+}) {
   return (
-    <article className={`metric-card tone-${tone} ${className}`.trim()}>
-      <div className="metric-label">{label}</div>
+    <article className={`metric-card tone-${tone} ${className}`.trim()} style={{ position: "relative" }}>
+      <div className="metric-card-topline">
+        <div className="metric-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {info ? (
+            <HoverInfo text={info} label={`${label} info`} />
+          ) : null}
+          <span>{label}</span>
+        </div>
+      </div>
       {body ? (
         <div className="metric-body">{body}</div>
       ) : (
@@ -338,6 +354,22 @@ export function MetricCard({ label, value, hint, tone = "default", body = null, 
       )}
       {hint ? <div className="metric-hint">{hint}</div> : null}
     </article>
+  );
+}
+
+export function HoverInfo({ text, label }) {
+  const safeText = String(text || "").trim();
+  if (!safeText) return null;
+
+  return (
+    <span className="metric-info-wrap" aria-label={label || safeText}>
+      <span className="metric-info-button" aria-hidden="true">
+        i
+      </span>
+      <span className="metric-info-popover" role="tooltip">
+        {safeText}
+      </span>
+    </span>
   );
 }
 
@@ -653,19 +685,19 @@ export function AcdLeaderboardChart({ rows, viewLabel, emptyText = "No ACD data 
     <div className="acd-chart-canvas" role="img" aria-label={`${viewLabel} productivity bar chart`}>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart data={chartRows} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 8 }} barCategoryGap={12}>
-          <CartesianGrid horizontal={false} stroke="#ddd6c9" strokeDasharray="3 3" />
+          <CartesianGrid horizontal={false} stroke="var(--border)" strokeDasharray="3 3" />
           <XAxis
             type="number"
-            tick={{ fill: "#a39e93", fontSize: 12 }}
+            tick={{ fill: "var(--subtle)", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
-            label={{ value: "Minutes", position: "insideBottomRight", offset: -2, fill: "#a39e93", fontSize: 12 }}
+            label={{ value: "Minutes", position: "insideBottomRight", offset: -2, fill: "var(--subtle)", fontSize: 12 }}
           />
           <YAxis
             type="category"
             dataKey="name"
             width={yAxisWidth}
-            tick={{ fill: "#1c1917", fontSize: 12 }}
+            tick={{ fill: "var(--ink)", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
           />
@@ -675,7 +707,7 @@ export function AcdLeaderboardChart({ rows, viewLabel, emptyText = "No ACD data 
               dataKey="totalMinutes"
               position="right"
               formatter={(value) => `${formatNumber(value)} min`}
-              fill="#1c1917"
+              fill="var(--ink)"
               fontSize={12}
             />
             {chartRows.map((row, index) => (

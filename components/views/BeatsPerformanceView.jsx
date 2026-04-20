@@ -197,21 +197,7 @@ export default function BeatsPerformanceContent({
   isV2 = false,
   competitionPodRows = [],
 }) {
-  const [workflowSorts, setWorkflowSorts] = useState({
-    editorial: { key: "assetCode", direction: "asc" },
-    readyForProduction: { key: "assetCode", direction: "asc" },
-    production: { key: "assetCode", direction: "asc" },
-    live: { key: "assetCode", direction: "asc" },
-  });
-  const [workflowPages, setWorkflowPages] = useState({
-    editorial: 0,
-    readyForProduction: 0,
-    production: 0,
-    live: 0,
-  });
   const [expandedPods, setExpandedPods] = useState([]);
-  const [progressView, setProgressView] = useState("pod");
-  const [hoveredProgressKey, setHoveredProgressKey] = useState(null);
 
   const safeBeatsPerformanceData =
     beatsPerformanceData ||
@@ -233,30 +219,9 @@ export default function BeatsPerformanceContent({
       : "All available data";
   const beatRows = Array.isArray(safeBeatsPerformanceData?.rows) ? safeBeatsPerformanceData.rows : [];
   const freshTakeRows = Array.isArray(safeBeatsPerformanceData?.freshTakeRows) ? safeBeatsPerformanceData.freshTakeRows : [];
-  const workflowTables = safeBeatsPerformanceData?.workflowTables || {};
-  const editorialWorkflowRows = Array.isArray(workflowTables?.editorial) ? workflowTables.editorial : [];
-  const readyForProductionWorkflowRows = Array.isArray(workflowTables?.readyForProduction) ? workflowTables.readyForProduction : [];
-  const productionWorkflowRows = Array.isArray(workflowTables?.production) ? workflowTables.production : [];
-  const liveWorkflowRows = (Array.isArray(workflowTables?.live) ? workflowTables.live : []).filter((row) => {
-    const finalUploadDate = String(row?.finalUploadDate || "").slice(0, 10);
-    if (!finalUploadDate || finalUploadDate < LIVE_MIN_FINAL_UPLOAD_DATE) {
-      return false;
-    }
-    return rowHasDateInRange(finalUploadDate, activeDateRange);
-  });
-  const effectiveWorkflowPod = "all";
-  const effectiveWorkflowPodKey = "all";
-
   useEffect(() => {
     setExpandedPods([]);
   }, [activeDateRange?.startDate, activeDateRange?.endDate]);
-
-  useEffect(() => {
-    setWorkflowPages({
-      production: 0,
-      live: 0,
-    });
-  }, [workflowSorts]);
 
   const scopedRows = beatRows.filter((row) =>
     rowHasDateInRange(row?.assignedDate || row?.primaryDate || row?.completedDate || row?.rawBucketLabel, activeDateRange)
@@ -278,16 +243,10 @@ export default function BeatsPerformanceContent({
   const previousIterateCount = previousScopedRows.filter((row) => row.statusCategory === "iterate").length;
   const compRows = Array.isArray(competitionPodRows) ? competitionPodRows : [];
   const compTotalScripts = compRows.reduce((s, r) => s + (Number(r.lifetimeScripts) || 0), 0);
-  const compTotalSuccessful = compRows.reduce((s, r) => s + (Number(r.hitRateNumerator) || 0), 0);
-  const compSuccessRate = compTotalScripts > 0 ? `${Math.round((compTotalSuccessful / compTotalScripts) * 100)}%` : "0%";
 
   const metricCards = isV2
     ? [
-        { label: "Total Beats", value: formatMetricValue(totalBeats), delta: null },
-        { label: "Approved beats", value: formatMetricValue(approvedCount), delta: null },
         { label: "Total scripts", value: formatMetricValue(compTotalScripts), delta: null },
-        { label: "Successful", value: formatMetricValue(compTotalSuccessful), delta: null },
-        { label: "Success Rate", value: compSuccessRate, delta: null },
       ]
     : [
         { label: "Total Beats", value: formatMetricValue(totalBeats), delta: null },
@@ -320,198 +279,6 @@ export default function BeatsPerformanceContent({
     })
     .sort((left, right) => right.total - left.total || left.podLeadName.localeCompare(right.podLeadName));
 
-  const workflowTableConfigs = [
-    {
-      id: "live",
-      title: "Live",
-      subtitle: "Filtered rows from the Live sheet",
-      columns: [
-        ["assetCode", "AD code"],
-        ["podLeadName", "POD"],
-        ["writerName", "Writer"],
-        ["showName", "Show"],
-        ["beatName", "Angle name"],
-        ["productionType", "Production Type"],
-        ["dateAssigned", "Date assigned"],
-        ["dateSubmittedByLead", "Date submitted by Lead"],
-        ["etaToStartProd", "ETA to start prod"],
-        ["etaPromoCompletion", "ETA for promo completion"],
-        ["cl", "CL"],
-        ["cd", "CD"],
-        ["acd1WorkedOnWorldSettings", "ACD 1 Worked on world settings"],
-        ["acdMultipleSelections", "ACD Multiple selections allowed."],
-        ["finalUploadDate", "Final Upload Date"],
-      ],
-    },
-  ];
-  const preparedWorkflowTables = workflowTableConfigs.map((config) => {
-    const filteredRows = filterWorkflowRows(
-      workflowTables?.[config.id],
-      effectiveWorkflowPod,
-      effectiveWorkflowPodKey
-    ).filter((row) => {
-      if (config.id === "live") {
-        const finalUploadDate = String(row?.finalUploadDate || "").slice(0, 10);
-        if (!finalUploadDate || finalUploadDate < LIVE_MIN_FINAL_UPLOAD_DATE) {
-          return false;
-        }
-        return rowHasDateInRange(finalUploadDate, activeDateRange);
-      }
-
-      return rowHasDateInRange(row?.filterDates, activeDateRange);
-    });
-    const sortedRows = sortWorkflowRows(filteredRows, workflowSorts[config.id] || { key: "assetCode", direction: "asc" });
-    const pagination = paginateRows(sortedRows, workflowPages[config.id] || 0, 10);
-    return {
-      ...config,
-      rows: sortedRows,
-      paginatedRows: pagination.paginatedRows,
-      pageOptions: pagination.options,
-      safePage: pagination.safePage,
-      sort: workflowSorts[config.id] || { key: "assetCode", direction: "asc" },
-    };
-  });
-  const ideationAvailabilityRows = scopedRows.map((row) => ({
-    beatCodeKey: normalizeStageMatchKey(row.beatCode),
-    showKey: normalizeStageMatchKey(row.showName),
-    beatKey: normalizeStageMatchKey(row.beatName),
-  }));
-  const workflowTablesWithAvailability = preparedWorkflowTables.map((table) => ({
-    ...table,
-    columns: [...table.columns, ["beatsAvailable", "Beats is available"]],
-    paginatedRows: table.paginatedRows.map((row) => {
-      const scriptCodeKey = normalizeStageMatchKey(row.scriptCode);
-      const showKey = normalizeStageMatchKey(row.showName);
-      const beatKey = normalizeStageMatchKey(row.beatName);
-      const fuzzyBeatMatch = matchAngleName(
-        row.beatName,
-        scopedRows
-          .filter((candidate) => normalizeStageMatchKey(candidate.showName) === showKey || !showKey)
-          .map((candidate) => candidate.beatName)
-          .filter(Boolean)
-      );
-      const beatsAvailable = ideationAvailabilityRows.some(
-        (candidate) =>
-          (fuzzyBeatMatch && candidate.beatKey === normalizeStageMatchKey(fuzzyBeatMatch)) ||
-          (beatKey && candidate.beatKey === beatKey) ||
-          (scriptCodeKey && candidate.beatCodeKey === scriptCodeKey) ||
-          (beatKey && candidate.showKey === showKey && candidate.beatKey === beatKey)
-      );
-
-      return {
-        ...row,
-        beatsAvailable: beatsAvailable ? "Yes" : "No",
-      };
-    }),
-  }));
-  const editorialRows = editorialWorkflowRows.filter((row) => rowHasDateInRange(row?.filterDates, activeDateRange));
-  const readyForProductionRows = readyForProductionWorkflowRows.filter((row) => rowHasDateInRange(row?.filterDates, activeDateRange));
-  const productionRows = productionWorkflowRows.filter((row) => rowHasDateInRange(row?.filterDates, activeDateRange));
-  const progressMatchValue = (row) => String((progressView === "writer" ? row?.writerName : row?.podLeadName) || "").trim();
-
-  const progressRows = Array.from(
-    scopedRows.reduce((map, row) => {
-      const keySource = progressView === "writer" ? row?.writerName : row?.podLeadName;
-      const safeKey = String(keySource || "").trim();
-      if (!safeKey) {
-        return map;
-      }
-
-      if (!map.has(safeKey)) {
-        map.set(safeKey, {
-          label: safeKey,
-          approved: 0,
-          editorial: 0,
-          readyProduction: 0,
-          live: 0,
-        });
-      }
-
-      const current = map.get(safeKey);
-      current.approved += row?.statusCategory === "approved" ? 1 : 0;
-      return map;
-    }, new Map())
-  )
-    .map(([label, entry]) => ({ ...entry, label }))
-    .map((entry) => {
-      const editorialCount = editorialRows.filter((row) => {
-        const compareValue = progressView === "writer" ? row?.writerName : row?.podLeadName;
-        return String(compareValue || "").trim() === entry.label;
-      }).length;
-
-      const readyProductionCount =
-        readyForProductionRows.filter((row) => {
-          const compareValue = progressView === "writer" ? row?.writerName : row?.podLeadName;
-          return String(compareValue || "").trim() === entry.label;
-        }).length +
-        productionRows.filter((row) => {
-          const compareValue = progressView === "writer" ? row?.writerName : row?.podLeadName;
-          return String(compareValue || "").trim() === entry.label;
-        }).length;
-
-      const liveCount = liveWorkflowRows.filter((row) => {
-        const compareValue = progressView === "writer" ? row?.writerName : row?.podLeadName;
-        return String(compareValue || "").trim() === entry.label;
-      }).length;
-
-      return {
-        ...entry,
-        editorial: editorialCount,
-        readyProduction: readyProductionCount,
-        live: liveCount,
-        details: [
-          ...scopedRows
-            .filter((row) => progressMatchValue(row) === entry.label && row?.statusCategory === "approved")
-            .map((row) => ({
-              id: `ideation-${row.id}`,
-              beatName: row?.beatName || row?.beatCode || "-",
-              stageLabel: "Approved in Ideation",
-              etaLabel: "-",
-              tone: "approved",
-            })),
-          ...editorialRows
-            .filter((row) => progressMatchValue(row) === entry.label)
-            .map((row) => ({
-              id: `editorial-${row.id}`,
-              beatName: row?.beatName || row?.scriptCode || "-",
-              stageLabel: String(row?.status || "").trim(),
-              etaLabel: row?.etaPromoCompletion || row?.etaToStartProd || "-",
-              tone: "editorial",
-            })),
-          ...readyForProductionRows
-            .filter((row) => progressMatchValue(row) === entry.label)
-            .map((row) => ({
-              id: `ready-${row.id}`,
-              beatName: row?.beatName || row?.scriptCode || "-",
-              stageLabel: String(row?.status || "").trim(),
-              etaLabel: row?.etaPromoCompletion || row?.etaToStartProd || "-",
-              tone: "ready-production",
-            })),
-          ...productionRows
-            .filter((row) => progressMatchValue(row) === entry.label)
-            .map((row) => ({
-              id: `production-${row.id}`,
-              beatName: row?.beatName || row?.scriptCode || "-",
-              stageLabel: String(row?.status || "").trim(),
-              etaLabel: row?.etaPromoCompletion || row?.etaToStartProd || "-",
-              tone: "ready-production",
-            })),
-          ...liveWorkflowRows
-            .filter((row) => progressMatchValue(row) === entry.label)
-            .map((row) => ({
-              id: `live-${row.id}`,
-              beatName: row?.beatName || row?.scriptCode || "-",
-              stageLabel: String(row?.status || "").trim(),
-              etaLabel: row?.etaPromoCompletion || row?.finalUploadDate || "-",
-              tone: "live",
-            })),
-        ],
-        total: entry.approved + editorialCount + readyProductionCount + liveCount,
-      };
-    })
-    .filter((entry) => entry.total > 0)
-    .sort((left, right) => right.total - left.total || left.label.localeCompare(right.label));
-
   return (
     <div className="beats-performance-shell">
       <div style={{ marginBottom: 14, fontSize: 13, fontWeight: 700, color: "var(--subtle)" }}>
@@ -525,14 +292,16 @@ export default function BeatsPerformanceContent({
           ? safeBeatsPerformanceData.warnings.map((w) => <div key={w} className="warning-note">{w}</div>)
           : null}
 
-        <div className="pod-summary-grid beats-summary-grid">
-          {metricCards.map((card) => (
-            <div key={card.label} className="metric-card beats-metric-card">
-              <div className="metric-label">{card.label}</div>
-              <div className="metric-value">{card.value}</div>
-            </div>
-          ))}
-        </div>
+        {metricCards.length > 0 && (
+          <div className="pod-summary-grid beats-summary-grid">
+            {metricCards.map((card) => (
+              <div key={card.label} className="metric-card beats-metric-card">
+                <div className="metric-label">{card.label}</div>
+                <div className="metric-value">{card.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }} />
 
@@ -636,230 +405,6 @@ export default function BeatsPerformanceContent({
           </table>
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }} />
-
-        <div className="pod-section-header">
-          <div style={{ display: "grid", gap: 4 }}>
-            <span className="pod-section-title">Progress by Stage</span>
-            <span className="pod-section-subtitle">
-              Compare approved Ideation beats against Editorial, Ready + Production, and Live counts
-            </span>
-          </div>
-          <div className="beats-progress-toggle" role="tablist" aria-label="Progress grouping">
-            <button
-              type="button"
-              className={progressView === "pod" ? "beats-progress-toggle-button is-active" : "beats-progress-toggle-button"}
-              onClick={() => setProgressView("pod")}
-            >
-              POD
-            </button>
-            <button
-              type="button"
-              className={progressView === "writer" ? "beats-progress-toggle-button is-active" : "beats-progress-toggle-button"}
-              onClick={() => setProgressView("writer")}
-            >
-              Writer
-            </button>
-          </div>
-        </div>
-
-        <div className="beats-progress-card">
-        {progressRows.length > 0 ? (
-            <div className="beats-progress-list">
-              {progressRows.map((row) => {
-                const safeTotal = Math.max(row.total, 1);
-                const isHovered = hoveredProgressKey === `${progressView}-${row.label}`;
-                const segments = [
-                  { key: "approved", label: "Approved", value: row.approved, className: "is-approved" },
-                  { key: "editorial", label: "Editorial", value: row.editorial, className: "is-editorial" },
-                  {
-                    key: "ready-production",
-                    label: "Ready + Production",
-                    value: row.readyProduction,
-                    className: "is-ready-production",
-                  },
-                  { key: "live", label: "Live", value: row.live, className: "is-live" },
-                ];
-
-                return (
-                  <div
-                    key={`${progressView}-${row.label}`}
-                    className="beats-progress-entry"
-                    onMouseEnter={() => setHoveredProgressKey(`${progressView}-${row.label}`)}
-                    onMouseLeave={() => setHoveredProgressKey((current) => (current === `${progressView}-${row.label}` ? null : current))}
-                  >
-                    <div className="beats-progress-row">
-                      <div className="beats-progress-name">{row.label}</div>
-                      <div className="beats-progress-bar-wrap">
-                        <div className="beats-progress-bar">
-                          {segments.map((segment) => {
-                            if (segment.value <= 0) {
-                              return null;
-                            }
-
-                            const width = `${(segment.value / safeTotal) * 100}%`;
-                            return (
-                              <div
-                                key={`${row.label}-${segment.key}`}
-                                className={`beats-progress-segment ${segment.className}`}
-                                style={{ width }}
-                                title={`${segment.label}: ${segment.value}`}
-                              >
-                                <span>{segment.value}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="beats-progress-legend">
-                          <span className="beats-progress-legend-item">
-                            <span className="beats-progress-dot is-approved" />
-                            Approved {row.approved}
-                          </span>
-                          <span className="beats-progress-legend-item">
-                            <span className="beats-progress-dot is-editorial" />
-                            Editorial {row.editorial}
-                          </span>
-                          <span className="beats-progress-legend-item">
-                            <span className="beats-progress-dot is-ready-production" />
-                            Ready + Production {row.readyProduction}
-                          </span>
-                          <span className="beats-progress-legend-item">
-                            <span className="beats-progress-dot is-live" />
-                            Live {row.live}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="beats-progress-total">{row.total}</div>
-                    </div>
-                    {isHovered ? (
-                      <div className="beats-progress-hover-card">
-                        <div className="beats-progress-hover-head">
-                          <span>{row.label}</span>
-                          <span>{row.details.length} items</span>
-                        </div>
-                        <div className="beats-progress-hover-table">
-                          <div className="beats-progress-hover-header">Angle name</div>
-                          <div className="beats-progress-hover-header">Stage where it is</div>
-                          <div className="beats-progress-hover-header">ETA for promo completion</div>
-                          {row.details.length > 0 ? (
-                            row.details.map((detail) => (
-                              <Fragment key={detail.id}>
-                                <div className={`beats-progress-hover-cell is-${detail.tone || "approved"}`}>{detail.beatName}</div>
-                                <div className={`beats-progress-hover-cell is-${detail.tone || "approved"}`}>{detail.stageLabel || ""}</div>
-                                <div className={`beats-progress-hover-cell is-${detail.tone || "approved"}`}>{detail.etaLabel}</div>
-                              </Fragment>
-                            ))
-                          ) : (
-                            <div className="beats-progress-hover-empty" style={{ gridColumn: "1 / -1" }}>
-                              No detail rows available.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="beats-progress-empty">No progress rows match the selected date range.</div>
-          )}
-        </div>
-
-        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }} />
-
-        {workflowTablesWithAvailability.map((table) => (
-          <div key={table.id} style={{ display: "grid", gap: 12 }}>
-            <div className="pod-section-header">
-              <span className="pod-section-title">{table.title}</span>
-              <span className="pod-section-subtitle">{table.subtitle}</span>
-            </div>
-
-            <div className="table-wrap">
-              <table className="ops-table">
-                <thead>
-                  <tr>
-                    {table.columns.map(([key, label]) => {
-                      const isActive = table.sort.key === key;
-                      const arrow = isActive ? (table.sort.direction === "asc" ? " ↑" : " ↓") : " ↕";
-                      return (
-                        <th key={`${table.id}-${key}`}>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setWorkflowSorts((current) => ({
-                                ...current,
-                                [table.id]: {
-                                  key,
-                                  direction:
-                                    current?.[table.id]?.key === key && current?.[table.id]?.direction === "asc" ? "desc" : "asc",
-                                },
-                              }))
-                            }
-                            style={{
-                              background: "none",
-                              border: "none",
-                              padding: 0,
-                              font: "inherit",
-                              color: "inherit",
-                              cursor: "pointer",
-                            }}
-                          >
-                            {label}
-                            {arrow}
-                          </button>
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {table.paginatedRows.length > 0 ? (
-                    table.paginatedRows.map((row) => (
-                      <tr key={`${table.id}-${row.id}-${row.rowIndex || ""}`}>
-                        {table.columns.map(([key]) => (
-                          <td key={`${table.id}-${row.id}-${key}`}>
-                            {key.toLowerCase().includes("date") || key.toLowerCase().includes("eta")
-                              ? row[key]
-                                ? formatDateLabel(row[key])
-                                : "-"
-                              : row[key] || "-"}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={table.columns.length} className="empty-cell">
-                        No {table.title.toLowerCase()} rows match the selected filters.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {table.pageOptions.length > 1 ? (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {table.pageOptions.map((option) => (
-                  <button
-                    key={`${table.id}-${option.label}`}
-                    type="button"
-                    className={table.safePage === option.index ? "toggle-chip is-active" : "toggle-chip"}
-                    onClick={() =>
-                      setWorkflowPages((current) => ({
-                        ...current,
-                        [table.id]: option.index,
-                      }))
-                    }
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ))}
       </div>
     </ShareablePanel>
     </div>
