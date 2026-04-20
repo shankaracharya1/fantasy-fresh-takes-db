@@ -1027,10 +1027,10 @@ export default function OverviewContent({
                 <div className="metric-value">{podLoading ? "..." : formatMetricValue(totalBeats)}</div>
                 {!podLoading && totalBeats > 0 && (
                   <div style={{ marginTop: 10 }}>
-                    <MiniBar label="Approved"       value={beatBreakdown.approved}      total={totalBeats} color="#2d5a3d" />
+                    <MiniBar label="Approved"       value={beatBreakdown.approved}      total={totalBeats} color="var(--forest)" />
                     <MiniBar label="Abandoned"      value={beatBreakdown.abandoned}     total={totalBeats} color="#7d5a3a" />
-                    <MiniBar label="Review pending" value={beatBreakdown.reviewPending} total={totalBeats} color="#c2703e" />
-                    <MiniBar label="Iterate"        value={beatBreakdown.iterate}       total={totalBeats} color="#9f2e2e" />
+                    <MiniBar label="Review pending" value={beatBreakdown.reviewPending} total={totalBeats} color="var(--terracotta)" />
+                    <MiniBar label="Iterate"        value={beatBreakdown.iterate}       total={totalBeats} color="var(--red)" />
                     <MiniBar label="To be ideated"  value={beatBreakdown.toBeIdeated}   total={totalBeats} color="#a39e93" />
                   </div>
                 )}
@@ -1052,9 +1052,9 @@ export default function OverviewContent({
                       return (
                         <>
                           <div style={{ height: 10, borderRadius: 5, background: "var(--surface, #ece8e1)", overflow: "hidden", marginBottom: 6 }}>
-                            <div style={{ width: `${pct}%`, height: "100%", borderRadius: 5, background: "#2d5a3d", transition: "width 0.4s ease" }} />
+                            <div style={{ width: `${pct}%`, height: "100%", borderRadius: 5, background: "var(--forest)", transition: "width 0.4s ease" }} />
                           </div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "#2d5a3d" }}>{pct}% approval rate</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--forest)" }}>{pct}% approval rate</div>
                         </>
                       );
                     })()}
@@ -1070,10 +1070,10 @@ export default function OverviewContent({
                 <div className="metric-value">{podLoading ? "..." : formatMetricValue(freshTakeCount)}</div>
                 {!podLoading && freshTakeCount > 0 && (
                   <div style={{ marginTop: 8 }}>
-                    <MiniBar label="Editorial"    value={ftBreakdown.editorial}          total={freshTakeCount} color="#7c6bbf" />
-                    <MiniBar label="Ready+Prod"   value={ftBreakdown.readyForProduction} total={freshTakeCount} color="#c2703e" />
-                    <MiniBar label="Production"   value={ftBreakdown.production}         total={freshTakeCount} color="#2d7a6e" />
-                    <MiniBar label="Live"         value={ftBreakdown.live}               total={freshTakeCount} color="#2d5a3d" />
+                    <MiniBar label="Editorial"    value={ftBreakdown.editorial}          total={freshTakeCount} color="var(--terracotta)" />
+                    <MiniBar label="Ready+Prod"   value={ftBreakdown.readyForProduction} total={freshTakeCount} color="var(--forest)" />
+                    <MiniBar label="Production"   value={ftBreakdown.production}         total={freshTakeCount} color="#3f8f83" />
+                    <MiniBar label="Live"         value={ftBreakdown.live}               total={freshTakeCount} color="var(--red)" />
                   </div>
                 )}
               </>
@@ -1089,7 +1089,7 @@ export default function OverviewContent({
                 {!overviewLoading && overviewData?.hitRate != null && (
                   <div style={{ marginTop: 8 }}>
                     <div style={{ height: 10, borderRadius: 5, background: "var(--surface, #ece8e1)", overflow: "hidden", marginBottom: 6 }}>
-                      <div style={{ width: `${Math.min(100, overviewData.hitRate)}%`, height: "100%", borderRadius: 5, background: "#c2703e", transition: "width 0.4s ease" }} />
+                      <div style={{ width: `${Math.min(100, overviewData.hitRate)}%`, height: "100%", borderRadius: 5, background: "var(--terracotta)", transition: "width 0.4s ease" }} />
                     </div>
                     {overviewData?.hitRateNumerator != null && overviewData?.hitRateDenominator != null && (
                       <div style={{ fontSize: 11, color: "var(--subtle)" }}>

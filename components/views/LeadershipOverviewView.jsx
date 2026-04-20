@@ -5,6 +5,7 @@ import {
   AcdLeaderboardChart,
   HoverInfo,
   MetricCard,
+  ProgressBar,
   ToggleGroup,
   formatNumber,
   formatMetricValue,
@@ -40,6 +41,11 @@ function isDateInSelectedRange(value, startDate, endDate) {
   if (startDate && date < startDate) return false;
   if (endDate && date > endDate) return false;
   return true;
+}
+
+function isFreshTakeType(value) {
+  const rt = String(value || "").trim().toLowerCase();
+  return rt === "fresh take" || rt === "fresh takes";
 }
 
 function ScriptTypeBadges({ ftCount = 0, rwCount = 0, compact = false }) {
@@ -86,6 +92,23 @@ function ScriptTypeBadges({ ftCount = 0, rwCount = 0, compact = false }) {
     return <span style={{ color: "var(--subtle)" }}>—</span>;
   }
   return <span>{parts}</span>;
+}
+
+function MiniBarRow({ label, value, max, color = "var(--forest)" }) {
+  const safeValue = Number(value || 0);
+  const safeMax = Math.max(1, Number(max || 0));
+  return (
+    <div className="overview-mini-bar-row">
+      <span className="overview-mini-bar-value">{formatMetricValue(safeValue)}</span>
+      <div className="overview-mini-bar-track">
+        <div
+          className="overview-mini-bar-fill"
+          style={{ width: `${Math.max(4, Math.min(100, (safeValue / safeMax) * 100))}%`, background: color }}
+        />
+      </div>
+      <span className="overview-mini-bar-label">{label}</span>
+    </div>
+  );
 }
 
 function PodStageBreakdownTable({ rows = [], loading = false, infoText = "" }) {
@@ -362,34 +385,9 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   const podThroughputRows = Array.isArray(overviewData?.podThroughputRows) ? overviewData.podThroughputRows : [];
   const scopedFullGenAiRows = fullGenAiRows;
 
-  // Use server-computed counts (pre-filtered + deduplicated by the route)
-  const totalBeats = overviewData?.totalBeatsCount ?? 0;
-  const approvedBeats = overviewData?.approvedBeatsCount ?? 0;
-
-  const prodNotStarted = useMemo(() => {
-    const weekStart = normalizeDateOnly(overviewData?.weekStart);
-    const weekEnd = normalizeDateOnly(overviewData?.weekEnd);
-    // Source: Editorial sheet — Script status = "Approved for Production by CL",
-    // filtered by Date submitted by Lead within the selected week, unique by beat
-    const seen = new Set();
-    const ftKeys = new Set();
-    const rwKeys = new Set();
-    for (const row of Array.isArray(allWorkflowRows) ? allWorkflowRows : []) {
-      if (row.source !== "editorial") continue;
-      const ss = String(row.scriptStatus || "").trim().toLowerCase();
-      if (ss !== "approved for production by cl") continue;
-      const date = normalizeDateOnly(row.leadSubmittedDate);
-      if (!isDateInSelectedRange(date, weekStart, weekEnd)) continue;
-      const key = String(row?.assetCode || "").trim().toLowerCase() ||
-        `${String(row?.showName || "").trim().toLowerCase()}|${String(row?.beatName || "").trim().toLowerCase()}`;
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      const rt = String(row.reworkType || "").trim().toLowerCase();
-      if (rt === "fresh take" || rt === "fresh takes") ftKeys.add(key);
-      else if (rt) rwKeys.add(key);
-    }
-    return { total: seen.size, ft: ftKeys.size, rw: rwKeys.size };
-  }, [allWorkflowRows, overviewData?.weekStart, overviewData?.weekEnd]);
+  const totalBeats = beatRows.length;
+  const approvedBeats = beatRows.filter((row) => row?.statusCategory === "approved").length;
+  const reviewPendingBeats = beatRows.filter((row) => row?.statusCategory === "review_pending").length;
 
   const freshTakeCount = useMemo(() => {
     const weekStart = normalizeDateOnly(overviewData?.weekStart);
@@ -408,7 +406,74 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
     }
     return seen.size;
   }, [allWorkflowRows, overviewData?.weekStart, overviewData?.weekEnd]);
-  const moveToGenAiCount = 0;
+  const productionStageCounts = useMemo(() => {
+    const weekStart = normalizeDateOnly(overviewData?.weekStart);
+    const weekEnd = normalizeDateOnly(overviewData?.weekEnd);
+    const stagePriority = {
+      editorial: 1,
+      ready_for_production: 2,
+      production: 3,
+      live: 4,
+    };
+    const allowedStages = new Set(Object.keys(stagePriority));
+    const byAsset = new Map();
+    const cohortKeys = new Set();
+
+    for (const row of Array.isArray(allWorkflowRows) ? allWorkflowRows : []) {
+      const source = String(row?.source || "");
+      if (!allowedStages.has(source)) continue;
+      const key =
+        String(row?.assetCode || "").trim().toLowerCase() ||
+        `${String(row?.showName || "").trim().toLowerCase()}|${String(row?.beatName || "").trim().toLowerCase()}`;
+      if (!key) continue;
+      if (!byAsset.has(key)) byAsset.set(key, []);
+      byAsset.get(key).push(row);
+
+      const leadDate = normalizeDateOnly(row?.leadSubmittedDate);
+      if (!isDateInSelectedRange(leadDate, weekStart, weekEnd)) continue;
+      if (!isFreshTakeType(row?.reworkType)) continue;
+      cohortKeys.add(key);
+    }
+
+    const counts = {
+      editorial: 0,
+      ready: 0,
+      production: 0,
+      live: 0,
+    };
+
+    for (const key of cohortKeys) {
+      const rows = byAsset.get(key) || [];
+      let bestStage = "editorial";
+      for (const row of rows) {
+        const source = String(row?.source || "");
+        if (!allowedStages.has(source)) continue;
+        if (stagePriority[source] > stagePriority[bestStage]) {
+          bestStage = source;
+        }
+      }
+      if (bestStage === "ready_for_production") counts.ready += 1;
+      else if (bestStage === "production") counts.production += 1;
+      else if (bestStage === "live") counts.live += 1;
+      else counts.editorial += 1;
+    }
+
+    return {
+      ...counts,
+      totalCohort: cohortKeys.size,
+    };
+  }, [allWorkflowRows, overviewData?.weekStart, overviewData?.weekEnd]);
+  const productionStageTotal = productionStageCounts.totalCohort || 0;
+  const productionStageMax = Math.max(
+    productionStageCounts.editorial,
+    productionStageCounts.ready,
+    productionStageCounts.production,
+    productionStageCounts.live,
+    1
+  );
+  const successfulAdsCount = scopedFullGenAiRows.filter((r) => r.success).length;
+  const hitRatePercent = scopedFullGenAiRows.length > 0 ? (successfulAdsCount / scopedFullGenAiRows.length) * 100 : 0;
+  const beatsStageMax = Math.max(approvedBeats, reviewPendingBeats, 1);
 
   const overviewThroughputRows = useMemo(() => {
     const weekStart = overviewData?.weekStart;
@@ -468,8 +533,6 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
       }))
       .sort((a, b) => b.attempts - a.attempts || a.showName.localeCompare(b.showName) || a.beatName.localeCompare(b.beatName))
   , [scopedFullGenAiRows]);
-  const successfulAdsCount = scopedFullGenAiRows.filter((r) => r.success).length;
-
   return (
     <div className="section-stack overview-flow-shell">
       {overviewError ? <div className="warning-note">{overviewError}</div> : null}
@@ -499,36 +562,69 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
             Ideation data issue: {overviewData.ideationSourceError}
           </div>
         )}
-        <div className="metric-grid five-col">
+        <div className="metric-grid four-col">
           <MetricCard
             label="Total Beats"
-            value={overviewLoading ? "..." : formatMetricValue(totalBeats)}
+            value={overviewLoading ? "..." : `${formatMetricValue(totalBeats)}`}
             info="Counts unique ideation rows by Beats completed date (Beats assigned date as fallback) inside the selected date range."
-          />
-          <MetricCard
-            label="Approved Beats"
-            value={overviewLoading ? "..." : formatMetricValue(approvedBeats)}
-            tone={approvedBeats > 0 ? "positive" : "default"}
-            info="Counts approved ideation rows using the same selected date range."
-          />
-          <MetricCard
-            label="Production Not Started"
-            value={overviewLoading ? "..." : formatMetricValue(prodNotStarted.total)}
-            hint={overviewLoading ? "" : `FT: ${prodNotStarted.ft} · RW: ${prodNotStarted.rw}`}
-            tone={prodNotStarted.total > 0 ? "warning" : "default"}
-            info='Approved beats in the Editorial stage with Script status = "Approved for Production by CL". Breakdown shows Fresh Take vs Rework counts.'
+            body={
+              <>
+                <div className="metric-value">{overviewLoading ? "..." : formatMetricValue(totalBeats)}</div>
+                {!overviewLoading ? (
+                  <div className="overview-mini-bar-stack">
+                    <MiniBarRow label="Approved" value={approvedBeats} max={beatsStageMax} color="var(--forest)" />
+                    <MiniBarRow label="Review pending" value={reviewPendingBeats} max={beatsStageMax} color="var(--terracotta)" />
+                  </div>
+                ) : null}
+              </>
+            }
           />
           <MetricCard
             label="Fresh take"
             value={overviewLoading ? "..." : formatMetricValue(freshTakeCount)}
             hint="Editorial, Ready for Production, Production, Live"
             info='Counts workflow rows from Editorial, Ready for Production, Production, and Live using the "Date submitted by Lead" field.'
+            body={
+              <>
+                <div className="metric-value">{overviewLoading ? "..." : formatMetricValue(freshTakeCount)}</div>
+                {!overviewLoading ? (
+                  <ProgressBar value={freshTakeCount} target={Math.max(totalBeats, 1)} color="var(--forest)" />
+                ) : null}
+              </>
+            }
           />
           <MetricCard
-            label="Move to GenAI"
-            value={overviewLoading ? "..." : formatMetricValue(moveToGenAiCount)}
-            hint="WIP"
-            info="WIP. The logic for this card is not finalized yet."
+            label="Production"
+            value={overviewLoading ? "..." : formatMetricValue(productionStageTotal)}
+            hint='Fresh Take cohort status by stage'
+            info='Takes Fresh Take assets whose "Date submitted by Lead" is in selected range, then shows their current highest stage: Editorial, Ready for Production, Production, or Live.'
+            body={
+              <>
+                <div className="metric-value">{overviewLoading ? "..." : formatMetricValue(productionStageTotal)}</div>
+                {!overviewLoading ? (
+                  <div className="overview-mini-bar-stack">
+                    <MiniBarRow label="Editorial" value={productionStageCounts.editorial} max={productionStageMax} color="var(--terracotta)" />
+                    <MiniBarRow label="Ready for Production" value={productionStageCounts.ready} max={productionStageMax} color="var(--forest)" />
+                    <MiniBarRow label="Production" value={productionStageCounts.production} max={productionStageMax} color="#3f8f83" />
+                    <MiniBarRow label="Live" value={productionStageCounts.live} max={productionStageMax} color="var(--red)" />
+                  </div>
+                ) : null}
+              </>
+            }
+          />
+          <MetricCard
+            label="Hit Rate"
+            value={overviewLoading ? "..." : scopedFullGenAiRows.length > 0 ? formatPercent(hitRatePercent) : "-"}
+            hint={overviewLoading ? "" : `${formatMetricValue(successfulAdsCount)} of ${formatMetricValue(scopedFullGenAiRows.length)} assets`}
+            info="Hit rate = successful ads / total GI/GA assets in selected range."
+            body={
+              <>
+                <div className="metric-value">{overviewLoading ? "..." : scopedFullGenAiRows.length > 0 ? formatPercent(hitRatePercent) : "-"}</div>
+                {!overviewLoading ? (
+                  <ProgressBar value={Number(hitRatePercent || 0)} target={100} color="var(--forest)" />
+                ) : null}
+              </>
+            }
           />
         </div>
       </section>
