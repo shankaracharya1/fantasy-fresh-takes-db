@@ -1085,6 +1085,11 @@ export default function OverviewContent({
                 <>
                   <div className="metric-value">{podLoading ? "..." : formatMetricValue(freshTakeCount)}</div>
                   {!podLoading && freshTakeCount > 0 && (
+                    <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>
+                      {ftBreakdown.editorial} still in Editorial
+                    </div>
+                  )}
+                  {!podLoading && freshTakeCount > 0 && (
                     <div style={{ marginTop: 8 }}>
                       <MiniBar label="Editorial"    value={ftBreakdown.editorial}          total={freshTakeCount} color="var(--terracotta)" />
                       <MiniBar label="Ready+Prod"   value={ftBreakdown.readyForProduction} total={freshTakeCount} color="var(--forest)" />
