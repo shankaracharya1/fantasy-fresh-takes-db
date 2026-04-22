@@ -1,5 +1,5 @@
 "use client";
-import { useState, Fragment } from "react";
+import { useState, useRef, Fragment } from "react";
 
 import {
   AcdCollapsibleTable,
@@ -873,7 +873,6 @@ export function OverviewNextWeek({ overviewData, overviewLoading, overviewError,
 // ─── Main View ────────────────────────────────────────────────────────────────
 
 function MiniBar({ label, value, total, color }) {
-  if (value === 0) return null;
   const pct = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
@@ -882,6 +881,346 @@ function MiniBar({ label, value, total, color }) {
         <div style={{ width: `${pct}%`, height: "100%", borderRadius: 4, background: color, transition: "width 0.4s ease" }} />
       </div>
       <span style={{ width: 90, fontSize: 10, color: "var(--subtle)", flexShrink: 0, textAlign: "left" }}>{label}</span>
+    </div>
+  );
+}
+
+function ZoomPreviewTable({
+  zoomPercent = 100,
+  onZoomChange,
+  activeView = "editorial",
+  onViewChange,
+  totalBeats = 0,
+  freshTakeCount = 0,
+  productionTotal = 0,
+  hitRate = null,
+  tables = {},
+}) {
+  const pinchStateRef = useRef({ active: false, startDistance: 0, startZoom: 100 });
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [hoveredLinkedAdCode, setHoveredLinkedAdCode] = useState("");
+  const [headerFontSize, setHeaderFontSize] = useState(9);
+  const clampHeaderSize = (v) => Math.max(7, Math.min(16, Number(v)));
+  const changeHeaderSize = (delta) => setHeaderFontSize((prev) => clampHeaderSize(prev + delta));
+  const safeZoom = Math.max(50, Math.min(200, Number(zoomPercent || 100)));
+  const visibleTableKeys = ["editorial", "production", "live", "hit"];
+  const baseColumns = ["Ad code", "POD", "Show", "Angle name"];
+  const clampZoom = (value) => Math.max(50, Math.min(200, Number(value || 100)));
+  const setZoom = (value) => onZoomChange?.(clampZoom(value));
+  const normalizeAdCode = (value) => String(value || "").trim().toLowerCase();
+  const isFreshTypeLabel = (value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    return normalized === "fresh take" || normalized === "fresh takes" || normalized.startsWith("new q1") || normalized === "ft";
+  };
+  const getCompactColumnStyle = (columnLabel, isHeader = false) => {
+    const baseStyle = {
+      padding: isHeader ? "4px 5px" : "3px 5px",
+      fontSize: isHeader ? headerFontSize : 10,
+      whiteSpace: "nowrap",
+      verticalAlign: "top",
+    };
+    if (columnLabel === "Ad code") {
+      return { ...baseStyle, minWidth: 112, fontWeight: isHeader ? 700 : 600 };
+    }
+    if (columnLabel === "Angle name") {
+      return { ...baseStyle, minWidth: 170 };
+    }
+    if (columnLabel === "Show") {
+      return { ...baseStyle, minWidth: 118 };
+    }
+    if (columnLabel === "POD") {
+      return { ...baseStyle, minWidth: 80 };
+    }
+    return baseStyle;
+  };
+  const toggleExpandedRow = (rowKey) => {
+    setExpandedRows((previous) => {
+      const next = new Set(previous);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  };
+  const touchDistance = (touches) => {
+    if (!touches || touches.length < 2) return 0;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  };
+
+  return (
+    <div style={{ marginTop: 16, width: "100%", minWidth: 0 }}>
+      <div
+        style={{
+          border: "1px solid var(--border)",
+          borderRadius: 16,
+          overflow: "hidden",
+          background: "var(--card)",
+          boxShadow: "0 10px 25px rgba(0,0,0,0.06)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "10px 14px",
+            borderBottom: "1px solid var(--border)",
+            background: "var(--subtle-bg, #f0ece4)",
+          }}
+        >
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444" }} />
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
+            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e" }} />
+            <span style={{ marginLeft: 8, fontSize: 12, color: "var(--subtle)" }}>Preview window</span>
+          </div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRight: "1px solid var(--border)", paddingRight: 12 }}>
+              <span style={{ fontSize: 11, color: "var(--subtle)", whiteSpace: "nowrap" }}>Header</span>
+              <button type="button" className="ghost-button" onClick={() => changeHeaderSize(-1)}>-</button>
+              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 28, textAlign: "center" }}>{headerFontSize}px</div>
+              <button type="button" className="ghost-button" onClick={() => changeHeaderSize(1)}>+</button>
+            </div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <button type="button" className="ghost-button" onClick={() => setZoom(safeZoom - 10)}>-</button>
+              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 52, textAlign: "center" }}>{safeZoom}%</div>
+              <button type="button" className="ghost-button" onClick={() => setZoom(safeZoom + 10)}>+</button>
+              <button type="button" className="ghost-button" onClick={() => setZoom(100)}>Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            overflowX: "auto",
+            overflowY: "auto",
+            maxHeight: 560,
+            minHeight: 460,
+            padding: 16,
+            touchAction: "pan-x pan-y",
+            width: "100%",
+            maxWidth: "100%",
+            minWidth: 0,
+          }}
+          onWheel={(event) => {
+            // Trackpad pinch and Ctrl/Cmd + wheel zoom in browsers emit wheel events here.
+            if (!(event.ctrlKey || event.metaKey)) return;
+            event.preventDefault();
+            const delta = event.deltaY < 0 ? 5 : -5;
+            setZoom(safeZoom + delta);
+          }}
+          onTouchStart={(event) => {
+            if (event.touches.length < 2) return;
+            const dist = touchDistance(event.touches);
+            if (!dist) return;
+            pinchStateRef.current = {
+              active: true,
+              startDistance: dist,
+              startZoom: safeZoom,
+            };
+          }}
+          onTouchMove={(event) => {
+            if (!pinchStateRef.current.active || event.touches.length < 2) return;
+            const currentDistance = touchDistance(event.touches);
+            if (!currentDistance || !pinchStateRef.current.startDistance) return;
+            const ratio = currentDistance / pinchStateRef.current.startDistance;
+            setZoom(pinchStateRef.current.startZoom * ratio);
+          }}
+          onTouchEnd={() => {
+            if (pinchStateRef.current.active) {
+              pinchStateRef.current = { active: false, startDistance: 0, startZoom: safeZoom };
+            }
+          }}
+        >
+            <div
+              style={{
+                display: "inline-block",
+                width: "max-content",
+                minWidth: "100%",
+                transform: `scale(${safeZoom / 100})`,
+                transformOrigin: "top left",
+                transition: "transform 0.18s ease",
+              }}
+            >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: 10, width: "max-content" }}>
+              {visibleTableKeys.map((tableKey) => {
+                const tableData = tables?.[tableKey] || { title: "Details", columns: [], rows: [] };
+                const tableColumns = Array.isArray(tableData.columns) ? tableData.columns : [];
+                const tableColumnCount = Math.max(1, tableColumns.length);
+                const tableMinWidth = Math.max(500, tableColumnCount * 96);
+                const tableHasCompactExpandable =
+                  tableColumns.length > baseColumns.length &&
+                  baseColumns.every((column) => tableColumns.includes(column));
+                const tableBaseColumnIndexes = tableHasCompactExpandable
+                  ? baseColumns.map((column) => tableColumns.indexOf(column)).filter((index) => index >= 0)
+                  : [];
+                const tableExtraColumnIndexes = tableHasCompactExpandable
+                  ? tableColumns.map((_, index) => index).filter((index) => !tableBaseColumnIndexes.includes(index))
+                  : [];
+                const adCodeColumnIndex = tableColumns.indexOf("Ad code");
+                const typeOfReworkColumnIndex = tableColumns.indexOf("Type of rework");
+
+                return (
+                  <div
+                    key={`schema-table-${tableKey}`}
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderRadius: 10,
+                      overflow: "hidden",
+                      background: "var(--card)",
+                      width: "max-content",
+                      minWidth: 560,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: "4px 6px",
+                        borderBottom: "1px solid var(--border)",
+                        fontSize: 9,
+                        fontWeight: 700,
+                        letterSpacing: 0.4,
+                        textTransform: "uppercase",
+                        color: "var(--subtle)",
+                      }}
+                    >
+                      <div>{tableData.title}</div>
+                      {tableKey === "editorial" && tableData?.summary ? (
+                        <div style={{ marginTop: 3, fontSize: 10, fontWeight: 500, letterSpacing: 0, textTransform: "none", color: "var(--subtle)" }}>
+                          {tableData.summary}
+                        </div>
+                      ) : null}
+                    </div>
+                    <table className="ops-table overview-table" style={{ marginTop: 0, border: 0, width: "max-content", minWidth: tableMinWidth, fontSize: 10 }}>
+                      <thead>
+                        <tr>
+                          {tableHasCompactExpandable ? (
+                            <>
+                              {baseColumns.map((column) => (
+                                <th key={`${tableData.title}-${column}`} style={{ padding: "4px 6px", fontSize: 9, whiteSpace: "nowrap" }}>{column}</th>
+                              ))}
+                              <th style={{ textAlign: "center", width: 28, padding: "4px 4px", fontSize: 9 }}>+</th>
+                            </>
+                          ) : (
+                            tableColumns.map((column) => (
+                              <th key={`${tableData.title}-${column}`} style={{ padding: "4px 6px", fontSize: 9, whiteSpace: "nowrap" }}>{column}</th>
+                            ))
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.isArray(tableData.rows) && tableData.rows.length > 0 ? (
+                          tableData.rows.flatMap((row, rowIndex) => {
+                            const rowKey = `${tableKey}-${rowIndex}`;
+                            const isExpanded = expandedRows.has(rowKey);
+                            const rowCells = Array.isArray(row) ? row : [];
+                            const rowAdCode = adCodeColumnIndex >= 0 ? normalizeAdCode(rowCells[adCodeColumnIndex]) : "";
+                            const rowTypeOfRework = typeOfReworkColumnIndex >= 0 ? String(rowCells[typeOfReworkColumnIndex] || "") : "";
+                            const isEditorialFreshTakeRow = tableKey === "editorial" && isFreshTypeLabel(rowTypeOfRework);
+                            const isLinkedHighlightTable = tableKey === "editorial" || tableKey === "production" || tableKey === "live";
+                            const isLinkedMatch = Boolean(hoveredLinkedAdCode && rowAdCode && rowAdCode === hoveredLinkedAdCode);
+                            const linkedRowStyle =
+                              isLinkedHighlightTable && isLinkedMatch
+                                ? { background: "rgba(45, 90, 61, 0.14)" }
+                                : undefined;
+                            if (!tableHasCompactExpandable) {
+                              return (
+                                <tr
+                                  key={`${tableData.title}-row-${rowIndex}`}
+                                  style={linkedRowStyle}
+                                  onMouseEnter={() => {
+                                    if (tableKey === "editorial" && isEditorialFreshTakeRow && rowAdCode) {
+                                      setHoveredLinkedAdCode(rowAdCode);
+                                    }
+                                  }}
+                                  onMouseLeave={() => {
+                                    if (tableKey === "editorial" && isEditorialFreshTakeRow) {
+                                      setHoveredLinkedAdCode("");
+                                    }
+                                  }}
+                                >
+                                  {rowCells.map((cell, cellIndex) => (
+                                    <td key={`${tableData.title}-row-${rowIndex}-cell-${cellIndex}`} style={{ padding: "4px 6px", whiteSpace: "nowrap" }}>
+                                      {cell == null || cell === "" ? "—" : String(cell)}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            }
+
+                            const summaryTr = (
+                              <tr
+                                key={`${tableData.title}-row-${rowIndex}`}
+                                style={linkedRowStyle}
+                                onMouseEnter={() => {
+                                  if (tableKey === "editorial" && isEditorialFreshTakeRow && rowAdCode) {
+                                    setHoveredLinkedAdCode(rowAdCode);
+                                  }
+                                }}
+                                onMouseLeave={() => {
+                                  if (tableKey === "editorial" && isEditorialFreshTakeRow) {
+                                    setHoveredLinkedAdCode("");
+                                  }
+                                }}
+                              >
+                                {tableBaseColumnIndexes.map((columnIndex) => (
+                                  <td key={`${tableData.title}-row-${rowIndex}-base-${columnIndex}`} style={{ padding: "4px 6px", whiteSpace: "nowrap" }}>
+                                    {rowCells[columnIndex] == null || rowCells[columnIndex] === "" ? "—" : String(rowCells[columnIndex])}
+                                  </td>
+                                ))}
+                                <td style={{ textAlign: "center", padding: "4px 4px" }}>
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    onClick={() => toggleExpandedRow(rowKey)}
+                                    style={{ minWidth: 20, padding: "0 5px", lineHeight: 1, fontSize: 10 }}
+                                    aria-expanded={isExpanded}
+                                  >
+                                    {isExpanded ? "−" : "+"}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+
+                            if (!isExpanded) return [summaryTr];
+
+                            const detailTr = (
+                              <tr key={`${tableData.title}-row-${rowIndex}-details`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
+                              <td colSpan={baseColumns.length + 1} style={{ padding: 8 }}>
+                                <div style={{ display: "grid", gap: 4 }}>
+                                  {tableExtraColumnIndexes.map((columnIndex) => (
+                                      <div key={`${tableData.title}-row-${rowIndex}-detail-${columnIndex}`} style={{ display: "grid", gridTemplateColumns: "minmax(110px, 170px) 1fr", columnGap: 6, fontSize: 10 }}>
+                                        <span style={{ color: "var(--subtle)", fontWeight: 600 }}>{tableColumns[columnIndex]}</span>
+                                        <span>{rowCells[columnIndex] == null || rowCells[columnIndex] === "" ? "—" : String(rowCells[columnIndex])}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+
+                            return [summaryTr, detailTr];
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={tableHasCompactExpandable ? baseColumns.length + 1 : Math.max(1, tableColumns.length)} style={{ color: "var(--subtle)" }}>
+                              No rows for selected date range.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 11, color: "var(--subtle)" }}>
+              Tip: use Ctrl/⌘ + scroll (or pinch on touch devices) to zoom.
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -896,6 +1235,18 @@ function isDateInSelectedRange(value, startDate, endDate) {
   if (startDate && date < startDate) return false;
   if (endDate && date > endDate) return false;
   return true;
+}
+
+function isFreshTakeType(value) {
+  const rt = String(value || "").trim().toLowerCase();
+  return rt === "fresh take" || rt === "fresh takes";
+}
+
+function getWorkflowAssetKey(row) {
+  return (
+    String(row?.assetCode || "").trim().toLowerCase() ||
+    `${String(row?.showName || "").trim().toLowerCase()}|${String(row?.beatName || "").trim().toLowerCase()}`
+  );
 }
 
 export default function OverviewContent({
@@ -937,28 +1288,267 @@ export default function OverviewContent({
   };
   const approvedBeatsCount = beatBreakdown.approved;
 
-  // Fresh take breakdown — single filter pass
-  const ftSources = new Set(["editorial", "ready_for_production", "production", "live"]);
-  const weekWorkflowRows = allWorkflowRows.filter((row) =>
-    ftSources.has(row?.source) &&
-    isDateInSelectedRange(normalizeDateOnly(row?.leadSubmittedDate), weekStart, weekEnd)
+  // Fresh Take cohort:
+  // 1) pick assets with Fresh Take + Date submitted by Lead in selected range
+  // 2) for those assets, compute current highest stage across workflow
+  const stageSources = new Set(["editorial", "ready_for_production", "production", "live"]);
+  const workflowStageRows = allWorkflowRows.filter((row) => stageSources.has(row?.source));
+  const cohortAssetKeys = new Set(
+    workflowStageRows
+      .filter((row) => isDateInSelectedRange(normalizeDateOnly(row?.leadSubmittedDate), weekStart, weekEnd))
+      .filter((row) => isFreshTakeType(row?.reworkType))
+      .map((row) => getWorkflowAssetKey(row))
+      .filter(Boolean)
   );
-  const freshTakeCount = weekWorkflowRows.length;
-  const ftBreakdown = {
-    editorial:          weekWorkflowRows.filter((r) => r.source === "editorial").length,
-    readyForProduction: weekWorkflowRows.filter((r) => r.source === "ready_for_production").length,
-    production:         weekWorkflowRows.filter((r) => r.source === "production").length,
-    live:               weekWorkflowRows.filter((r) => r.source === "live").length,
+  const stagePriority = {
+    editorial: 1,
+    ready_for_production: 2,
+    production: 3,
+    live: 4,
   };
+  const stageByAsset = new Map();
+  for (const row of workflowStageRows) {
+    const key = getWorkflowAssetKey(row);
+    if (!key || !cohortAssetKeys.has(key)) continue;
+    const stage = String(row?.source || "");
+    if (!stagePriority[stage]) continue;
+    const current = stageByAsset.get(key);
+    if (!current || stagePriority[stage] > stagePriority[current]) {
+      stageByAsset.set(key, stage);
+    }
+  }
+  const ftBreakdown = { editorial: 0, readyForProduction: 0, production: 0, live: 0 };
+  for (const stage of stageByAsset.values()) {
+    if (stage === "ready_for_production") ftBreakdown.readyForProduction += 1;
+    else if (stage === "production") ftBreakdown.production += 1;
+    else if (stage === "live") ftBreakdown.live += 1;
+    else ftBreakdown.editorial += 1;
+  }
+  const freshTakeCount = cohortAssetKeys.size;
 
   const podLoading = leadershipOverviewLoading || overviewLoading;
 
   const [progressView, setProgressView] = useState("pod");
   const [hoveredProgressKey, setHoveredProgressKey] = useState(null);
+  const [editorialZoomPercent, setEditorialZoomPercent] = useState(100);
+  const [editorialSchemaView, setEditorialSchemaView] = useState("editorial");
 
+  const weekWorkflowRows = workflowStageRows.filter((row) =>
+    isDateInSelectedRange(normalizeDateOnly(row?.leadSubmittedDate), weekStart, weekEnd)
+  );
   const weekEditorialRows = weekWorkflowRows.filter((r) => r.source === "editorial");
   const weekReadyProdRows = weekWorkflowRows.filter((r) => r.source === "ready_for_production" || r.source === "production");
+  const weekProductionOnlyRows = weekWorkflowRows.filter((r) => r.source === "production");
   const weekLiveRows = weekWorkflowRows.filter((r) => r.source === "live");
+  const allAnalyticsRows = Array.isArray(leadershipOverviewData?.allAnalyticsRows) ? leadershipOverviewData.allAnalyticsRows : [];
+
+  const normalizeCell = (value) => {
+    if (value == null) return "";
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+    return String(value).trim();
+  };
+  const codeKey = (value) => normalizeCell(value).toLowerCase();
+  const uniqueCodeSetFromRows = (rows) =>
+    new Set(
+      (Array.isArray(rows) ? rows : [])
+        .map((row) => codeKey(row?.assetCode))
+        .filter(Boolean)
+    );
+  const editorialFreshTakeRows = weekEditorialRows.filter((row) => isFreshTakeType(row?.reworkType) && codeKey(row?.assetCode));
+  const editorialFreshTakeCodeSet = uniqueCodeSetFromRows(editorialFreshTakeRows);
+  const productionCodeSet = uniqueCodeSetFromRows(weekProductionOnlyRows);
+  const liveCodeSet = uniqueCodeSetFromRows(weekLiveRows);
+  const editorialFreshTakeInProductionCount = Array.from(editorialFreshTakeCodeSet).filter((code) => productionCodeSet.has(code)).length;
+  const editorialFreshTakeInLiveCount = Array.from(editorialFreshTakeCodeSet).filter((code) => liveCodeSet.has(code)).length;
+
+  const analyticsByAssetCode = new Map();
+  for (const row of allAnalyticsRows) {
+    const key = codeKey(row?.assetCode);
+    if (key && !analyticsByAssetCode.has(key)) {
+      analyticsByAssetCode.set(key, row);
+    }
+  }
+
+  const hitRateRows = weekLiveRows.map((liveRow) => {
+    const analytics = analyticsByAssetCode.get(codeKey(liveRow?.assetCode));
+    const amountSpent = Number(analytics?.amountSpentUsd);
+    const q1Completion = Number(analytics?.video0To25Pct);
+    const cti = Number(analytics?.clickToInstall);
+    const trueCompletion = Number(analytics?.absoluteCompletionPct);
+    const cpi = Number(analytics?.cpiUsd);
+    const isSuccess =
+      Number.isFinite(amountSpent) && amountSpent >= 100 &&
+      Number.isFinite(q1Completion) && q1Completion > 10 &&
+      Number.isFinite(cti) && cti >= 12 &&
+      Number.isFinite(trueCompletion) && trueCompletion >= 1.8 &&
+      Number.isFinite(cpi) && cpi <= 12;
+
+    return [
+      normalizeCell(liveRow?.assetCode),
+      normalizeCell(liveRow?.podLeadName),
+      normalizeCell(liveRow?.writerName),
+      normalizeCell(liveRow?.showName),
+      normalizeCell(liveRow?.beatName),
+      normalizeCell(liveRow?.reworkType),
+      normalizeCell(liveRow?.leadSubmittedDate),
+      Number.isFinite(amountSpent) ? amountSpent : "",
+      Number.isFinite(q1Completion) ? q1Completion : "",
+      Number.isFinite(cti) ? cti : "",
+      Number.isFinite(trueCompletion) ? trueCompletion : "",
+      Number.isFinite(cpi) ? cpi : "",
+      analytics ? (isSuccess ? "Success" : "Not hit") : "No analytics",
+    ];
+  });
+
+  const schemaTables = {
+    editorial: {
+      title: "1. Fresh take / Editorial",
+      summary: `Fresh Take between dates: ${editorialFreshTakeCodeSet.size} · In Production: ${editorialFreshTakeInProductionCount} · In Live: ${editorialFreshTakeInLiveCount}`,
+      columns: ["Ad code", "POD", "Writer", "Show", "Angle name", "Type of rework", "Script status", "Date submitted by Lead"],
+      rows: editorialFreshTakeRows.map((row) => [
+        normalizeCell(row?.assetCode),
+        normalizeCell(row?.podLeadName),
+        normalizeCell(row?.writerName),
+        normalizeCell(row?.showName),
+        normalizeCell(row?.beatName),
+        normalizeCell(row?.reworkType),
+        normalizeCell(row?.scriptStatus),
+        normalizeCell(row?.leadSubmittedDate),
+      ]),
+    },
+    production: {
+      title: "2. Production (Ready for Production + Production)",
+      columns: [
+        "Ad code",
+        "POD",
+        "Writer",
+        "Show",
+        "Angle name",
+        "Type of rework",
+        "Script status",
+        "Date submitted by Lead",
+        "Status",
+        "ETA to start prod",
+        "ETA for promo completion",
+        "CD",
+        "Final Upload Date",
+      ],
+      rows: weekReadyProdRows.map((row) => [
+        normalizeCell(row?.assetCode),
+        normalizeCell(row?.podLeadName),
+        normalizeCell(row?.writerName),
+        normalizeCell(row?.showName),
+        normalizeCell(row?.beatName),
+        normalizeCell(row?.reworkType),
+        normalizeCell(row?.scriptStatus),
+        normalizeCell(row?.leadSubmittedDate),
+        normalizeCell(row?.status),
+        normalizeCell(row?.etaToStartProd),
+        normalizeCell(row?.etaPromoCompletion),
+        normalizeCell(row?.cdName),
+        normalizeCell(row?.finalUploadDate),
+      ]),
+    },
+    live: {
+      title: "3. Live",
+      columns: [
+        "Ad code",
+        "POD",
+        "Writer",
+        "Show",
+        "Angle name",
+        "Type of rework",
+        "Script status",
+        "Date submitted by Lead",
+        "Status",
+        "ETA to start prod",
+        "ETA for promo completion",
+        "CD",
+        "Final Upload Date",
+        "Cost per App Install (USD)",
+        "3 Sec Play",
+        "ThruPlays",
+        "Q1/ thruplays",
+        "Video - 0% - 25%",
+        "Q1",
+        "Video - 25% - 50%",
+        "Video - 50% - 75%",
+        "Video - 75% - 95%",
+        "Video - 0% - 95%",
+        "Thruplay/3s",
+        "Completions/ Impressions",
+        "Q4/Q1",
+        "CPM (cost per 1,000 impressions) (USD)",
+        "CTR (link click-through rate)",
+        "Amount spent (USD)",
+        "Outbound Clicks to Completion",
+        "Reach",
+        "Impressions",
+        "Click to Install",
+        "CTR*CTI",
+        "App Installs",
+      ],
+      rows: weekLiveRows.map((row) => {
+        const analytics = analyticsByAssetCode.get(codeKey(row?.assetCode));
+        return [
+          normalizeCell(row?.assetCode),
+          normalizeCell(row?.podLeadName),
+          normalizeCell(row?.writerName),
+          normalizeCell(row?.showName),
+          normalizeCell(row?.beatName),
+          normalizeCell(row?.reworkType),
+          normalizeCell(row?.scriptStatus),
+          normalizeCell(row?.leadSubmittedDate),
+          normalizeCell(row?.status),
+          normalizeCell(row?.etaToStartProd),
+          normalizeCell(row?.etaPromoCompletion),
+          normalizeCell(row?.cdName),
+          normalizeCell(row?.finalUploadDate),
+          normalizeCell(row?.cpiUsd || analytics?.cpiUsd),
+          normalizeCell(row?.threeSecPlayPct || analytics?.threeSecPlayPct),
+          normalizeCell(row?.thruPlaysPct || analytics?.thruPlaysPct),
+          normalizeCell(row?.q1ToThruplays || analytics?.q1ToThruplays),
+          normalizeCell(row?.video0To25Pct || analytics?.video0To25Pct),
+          normalizeCell(row?.q1 || analytics?.q1),
+          normalizeCell(row?.video25To50Pct || analytics?.video25To50Pct),
+          normalizeCell(row?.video50To75Pct || analytics?.video50To75Pct),
+          normalizeCell(row?.video75To95Pct || analytics?.video75To95Pct),
+          normalizeCell(row?.video0To95Pct || analytics?.video0To95Pct),
+          normalizeCell(row?.thruPlayTo3sRatio || analytics?.thruPlayTo3sRatio),
+          normalizeCell(row?.absoluteCompletionPct || analytics?.absoluteCompletionPct),
+          normalizeCell(row?.q4ToQ1 || analytics?.q4ToQ1),
+          normalizeCell(row?.cpmUsd || analytics?.cpmUsd),
+          normalizeCell(row?.ctrPct || analytics?.ctrPct),
+          normalizeCell(row?.amountSpentUsd || analytics?.amountSpentUsd),
+          normalizeCell(row?.outboundClicksToCompletionPct || analytics?.outboundClicksToCompletionPct),
+          normalizeCell(row?.reach || analytics?.reach),
+          normalizeCell(row?.impressions || analytics?.impressions),
+          normalizeCell(row?.clickToInstall || analytics?.clickToInstall),
+          normalizeCell(row?.ctrTimesCti || analytics?.ctrTimesCti),
+          normalizeCell(row?.appInstalls || analytics?.appInstalls),
+        ];
+      }),
+    },
+    hit: {
+      title: "4. Hit rate",
+      columns: [
+        "Ad code",
+        "POD",
+        "Writer",
+        "Show",
+        "Angle name",
+        "Type of rework",
+        "Date submitted by Lead",
+        "Amount Spent",
+        "Q1 Completion",
+        "CTI",
+        "True Completion",
+        "CPI",
+        "Result",
+      ],
+      rows: hitRateRows,
+    },
+  };
   const progressGetKey = (row) => String((progressView === "writer" ? row?.writerName : row?.podLeadName) || "").trim();
 
   const progressGroupMap = new Map();
@@ -1020,88 +1610,135 @@ export default function OverviewContent({
         ))}
 
         <div className="metric-grid four-col" style={{ alignItems: "stretch" }}>
-          <MetricCard
-            label="Total Beats"
-            body={
-              <>
-                <div className="metric-value">{podLoading ? "..." : formatMetricValue(totalBeats)}</div>
-                {!podLoading && totalBeats > 0 && (
-                  <div style={{ marginTop: 10 }}>
-                    <MiniBar label="Approved"       value={beatBreakdown.approved}      total={totalBeats} color="var(--forest)" />
-                    <MiniBar label="Abandoned"      value={beatBreakdown.abandoned}     total={totalBeats} color="#7d5a3a" />
-                    <MiniBar label="Review pending" value={beatBreakdown.reviewPending} total={totalBeats} color="var(--terracotta)" />
-                    <MiniBar label="Iterate"        value={beatBreakdown.iterate}       total={totalBeats} color="var(--red)" />
-                    <MiniBar label="To be ideated"  value={beatBreakdown.toBeIdeated}   total={totalBeats} color="#a39e93" />
-                  </div>
-                )}
-              </>
-            }
-          />
-          <MetricCard
-            label="Approved Beats"
-            body={
-              <>
-                <div className="metric-value">{podLoading ? "..." : formatMetricValue(approvedBeatsCount)}</div>
-                {!podLoading && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
-                      of {totalBeats} total beats
+          <div
+            onClick={() => setEditorialSchemaView("editorial")}
+            style={{
+              cursor: "pointer",
+              borderRadius: 14,
+              boxShadow: editorialSchemaView === "editorial" ? "0 0 0 1px var(--terracotta), 0 6px 18px rgba(247,118,44,0.14)" : "none",
+              transition: "box-shadow 0.2s ease",
+            }}
+          >
+            <MetricCard
+              label="Total Beats"
+              body={
+                <>
+                  <div className="metric-value">{podLoading ? "..." : formatMetricValue(totalBeats)}</div>
+                  {!podLoading && totalBeats > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <MiniBar label="Approved"       value={beatBreakdown.approved}      total={totalBeats} color="var(--forest)" />
+                      <MiniBar label="Abandoned"      value={beatBreakdown.abandoned}     total={totalBeats} color="#7d5a3a" />
+                      <MiniBar label="Review pending" value={beatBreakdown.reviewPending} total={totalBeats} color="var(--terracotta)" />
+                      <MiniBar label="Iterate"        value={beatBreakdown.iterate}       total={totalBeats} color="var(--red)" />
+                      <MiniBar label="To be ideated"  value={beatBreakdown.toBeIdeated}   total={totalBeats} color="#a39e93" />
                     </div>
-                    {totalBeats > 0 && (() => {
-                      const pct = Math.round((approvedBeatsCount / totalBeats) * 100);
-                      return (
-                        <>
-                          <div style={{ height: 10, borderRadius: 5, background: "var(--surface, #ece8e1)", overflow: "hidden", marginBottom: 6 }}>
-                            <div style={{ width: `${pct}%`, height: "100%", borderRadius: 5, background: "var(--forest)", transition: "width 0.4s ease" }} />
-                          </div>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--forest)" }}>{pct}% approval rate</div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-              </>
-            }
-          />
-          <MetricCard
-            label="Fresh Take"
-            body={
-              <>
-                <div className="metric-value">{podLoading ? "..." : formatMetricValue(freshTakeCount)}</div>
-                {!podLoading && freshTakeCount > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    <MiniBar label="Editorial"    value={ftBreakdown.editorial}          total={freshTakeCount} color="var(--terracotta)" />
-                    <MiniBar label="Ready+Prod"   value={ftBreakdown.readyForProduction} total={freshTakeCount} color="var(--forest)" />
-                    <MiniBar label="Production"   value={ftBreakdown.production}         total={freshTakeCount} color="#3f8f83" />
-                    <MiniBar label="Live"         value={ftBreakdown.live}               total={freshTakeCount} color="var(--red)" />
-                  </div>
-                )}
-              </>
-            }
-          />
-          <MetricCard
-            label="Hit Rate"
-            body={
-              <>
-                <div className="metric-value">
-                  {overviewLoading ? "..." : (overviewData?.hitRate != null ? `${overviewData.hitRate.toFixed(1)}%` : "-")}
-                </div>
-                {!overviewLoading && overviewData?.hitRate != null && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ height: 10, borderRadius: 5, background: "var(--surface, #ece8e1)", overflow: "hidden", marginBottom: 6 }}>
-                      <div style={{ width: `${Math.min(100, overviewData.hitRate)}%`, height: "100%", borderRadius: 5, background: "var(--terracotta)", transition: "width 0.4s ease" }} />
+                  )}
+                </>
+              }
+            />
+          </div>
+          <div
+            onClick={() => setEditorialSchemaView("editorial")}
+            style={{
+              cursor: "pointer",
+              borderRadius: 14,
+              boxShadow: editorialSchemaView === "editorial" ? "0 0 0 1px var(--terracotta), 0 6px 18px rgba(247,118,44,0.14)" : "none",
+              transition: "box-shadow 0.2s ease",
+            }}
+          >
+            <MetricCard
+              label="Fresh Take"
+              body={
+                <>
+                  <div className="metric-value">{podLoading ? "..." : formatMetricValue(freshTakeCount)}</div>
+                  {!podLoading && freshTakeCount > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <MiniBar label="Editorial"    value={ftBreakdown.editorial}          total={freshTakeCount} color="var(--terracotta)" />
+                      <MiniBar label="Ready+Prod"   value={ftBreakdown.readyForProduction} total={freshTakeCount} color="var(--forest)" />
+                      <MiniBar label="Production"   value={ftBreakdown.production}         total={freshTakeCount} color="#3f8f83" />
+                      <MiniBar label="Live"         value={ftBreakdown.live}               total={freshTakeCount} color="var(--red)" />
                     </div>
-                    {overviewData?.hitRateNumerator != null && overviewData?.hitRateDenominator != null && (
-                      <div style={{ fontSize: 11, color: "var(--subtle)" }}>
-                        {overviewData.hitRateNumerator} of {overviewData.hitRateDenominator} analytics-eligible
+                  )}
+                </>
+              }
+            />
+          </div>
+          <div
+            onClick={() => setEditorialSchemaView("production")}
+            style={{
+              cursor: "pointer",
+              borderRadius: 14,
+              boxShadow: editorialSchemaView === "production" ? "0 0 0 1px var(--terracotta), 0 6px 18px rgba(247,118,44,0.14)" : "none",
+              transition: "box-shadow 0.2s ease",
+            }}
+          >
+            <MetricCard
+              label="Production"
+              body={
+                <>
+                  <div className="metric-value">{podLoading ? "..." : formatMetricValue(freshTakeCount)}</div>
+                  {!podLoading && freshTakeCount > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <MiniBar label="Editorial"            value={ftBreakdown.editorial}          total={freshTakeCount} color="var(--terracotta)" />
+                      <MiniBar label="Ready for Production" value={ftBreakdown.readyForProduction} total={freshTakeCount} color="var(--forest)" />
+                      <MiniBar label="Production"           value={ftBreakdown.production}         total={freshTakeCount} color="#3f8f83" />
+                      <MiniBar label="Live"                 value={ftBreakdown.live}               total={freshTakeCount} color="var(--red)" />
+                    </div>
+                  )}
+                  {!podLoading && (
+                    <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 8 }}>
+                      Fresh Take cohort by current stage
+                    </div>
+                  )}
+                </>
+              }
+            />
+          </div>
+          <div
+            onClick={() => setEditorialSchemaView("hit")}
+            style={{
+              cursor: "pointer",
+              borderRadius: 14,
+              boxShadow: editorialSchemaView === "hit" ? "0 0 0 1px var(--terracotta), 0 6px 18px rgba(247,118,44,0.14)" : "none",
+              transition: "box-shadow 0.2s ease",
+            }}
+          >
+            <MetricCard
+              label="Hit Rate"
+              body={
+                <>
+                  <div className="metric-value">
+                    {overviewLoading ? "..." : (overviewData?.hitRate != null ? `${overviewData.hitRate.toFixed(1)}%` : "-")}
+                  </div>
+                  {!overviewLoading && overviewData?.hitRate != null && (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ height: 10, borderRadius: 5, background: "var(--surface, #ece8e1)", overflow: "hidden", marginBottom: 6 }}>
+                        <div style={{ width: `${Math.min(100, overviewData.hitRate)}%`, height: "100%", borderRadius: 5, background: "var(--terracotta)", transition: "width 0.4s ease" }} />
                       </div>
-                    )}
-                  </div>
-                )}
-              </>
-            }
-          />
+                      {overviewData?.hitRateNumerator != null && overviewData?.hitRateDenominator != null && (
+                        <div style={{ fontSize: 11, color: "var(--subtle)" }}>
+                          {overviewData.hitRateNumerator} of {overviewData.hitRateDenominator} analytics-eligible
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              }
+            />
+          </div>
         </div>
+
+        <ZoomPreviewTable
+          zoomPercent={editorialZoomPercent}
+          onZoomChange={setEditorialZoomPercent}
+          activeView={editorialSchemaView}
+          onViewChange={setEditorialSchemaView}
+          totalBeats={totalBeats}
+          freshTakeCount={freshTakeCount}
+          productionTotal={Number(ftBreakdown?.readyForProduction || 0) + Number(ftBreakdown?.production || 0) + Number(ftBreakdown?.live || 0)}
+          hitRate={overviewData?.hitRate}
+          tables={schemaTables}
+        />
 
         <PodThroughputRankingTable rows={podThroughputRows} loading={podLoading} />
 
@@ -1224,6 +1861,28 @@ export default function OverviewContent({
               {podLoading ? "Loading…" : "No progress rows match the selected date range."}
             </div>
           )}
+        </div>
+
+        <hr className="section-divider" />
+
+        <div className="panel-card">
+          <div className="overview-table-toolbar" style={{ marginBottom: 10 }}>
+            <div className="overview-table-toolbar-left">
+              <div className="overview-table-toolbar-title">Fresh Take Cohort (Selected Range)</div>
+              <div className="overview-table-toolbar-note">
+                Cohort = Fresh Take assets where Date submitted by Lead is in selected range, then grouped by current highest stage.
+              </div>
+            </div>
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <MiniBar label="Editorial" value={ftBreakdown.editorial} total={freshTakeCount || 1} color="var(--terracotta)" />
+            <MiniBar label="Ready for Production" value={ftBreakdown.readyForProduction} total={freshTakeCount || 1} color="var(--forest)" />
+            <MiniBar label="Production" value={ftBreakdown.production} total={freshTakeCount || 1} color="#3f8f83" />
+            <MiniBar label="Live" value={ftBreakdown.live} total={freshTakeCount || 1} color="var(--red)" />
+          </div>
+          <div style={{ fontSize: 12, color: "var(--subtle)", marginTop: 8 }}>
+            Total cohort assets: {podLoading ? "..." : formatMetricValue(freshTakeCount)}
+          </div>
         </div>
       </div>
     </ShareablePanel>
