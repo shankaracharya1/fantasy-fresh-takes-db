@@ -1284,6 +1284,12 @@ export default function OverviewContent({
             Total cohort assets: {podLoading ? "..." : formatMetricValue(freshTakeCount)}
           </div>
         </div>
+
+        <hr className="section-divider" />
+
+        <div className="panel-card">
+          <AcdCollapsibleTable acdMetricsData={acdMetricsData} acdMetricsLoading={acdMetricsLoading} />
+        </div>
       </div>
     </ShareablePanel>
   );
