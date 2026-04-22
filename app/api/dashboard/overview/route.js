@@ -244,6 +244,25 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
+function normalizeWriterAliasKey(value) {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+const GLOBAL_WRITER_ALIASES = new Map([
+  ["jacob", "Jacob Berman"],
+  ["berman", "Jacob Berman"],
+  ["jacob berman", "Jacob Berman"],
+]);
+
+function normalizeWriterName(value) {
+  const cleaned = normalizeText(value);
+  if (!cleaned) return "";
+  return GLOBAL_WRITER_ALIASES.get(normalizeWriterAliasKey(cleaned)) || cleaned;
+}
+
 function addDays(dateStr, days) {
   const d = new Date(dateStr + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + days);
@@ -321,15 +340,46 @@ function getLatestAssetStage(asset) {
 
 function buildPodThroughputForRange({ editorialRows = [], readyRows = [], productionRows = [], liveRows = [] } = {}, startDate, endDate) {
   const podMap = new Map();
+  const allRows = [
+    ...(Array.isArray(editorialRows) ? editorialRows : []),
+    ...(Array.isArray(readyRows) ? readyRows : []),
+    ...(Array.isArray(productionRows) ? productionRows : []),
+    ...(Array.isArray(liveRows) ? liveRows : []),
+  ];
+  const writerResolver = (() => {
+    const exactMap = new Map();
+    const tokenMap = new Map();
+    for (const row of allRows) {
+      const name = normalizeWriterName(row?.writerName);
+      const key = normalizeKey(name);
+      if (!name || !key || exactMap.has(key)) continue;
+      exactMap.set(key, name);
+      for (const token of key.split(" ").filter(Boolean)) {
+        if (!tokenMap.has(token)) tokenMap.set(token, new Set());
+        tokenMap.get(token).add(name);
+      }
+    }
+    return (rawValue) => {
+      const aliased = normalizeWriterName(rawValue);
+      const key = normalizeKey(aliased);
+      if (exactMap.has(key)) return exactMap.get(key);
+      const tokenMatches = tokenMap.get(key);
+      if (tokenMatches && tokenMatches.size === 1) {
+        return Array.from(tokenMatches)[0];
+      }
+      return aliased || "Unknown Writer";
+    };
+  })();
+
   const ensurePod = (name) => {
-    const pod = normalizeText(name) || "Unknown POD";
+    const pod = normalizePodLeadName(name) || "Unknown POD";
     if (!podMap.has(pod)) {
       podMap.set(pod, { podLeadName: pod, totalScripts: 0, ftCount: 0, rwCount: 0, writers: new Map() });
     }
     return podMap.get(pod);
   };
   const ensureWriter = (pod, name) => {
-    const writer = normalizeText(name) || "Unknown Writer";
+    const writer = writerResolver(name);
     if (!pod.writers.has(writer)) {
       pod.writers.set(writer, { writerName: writer, totalScripts: 0, ftCount: 0, rwCount: 0 });
     }

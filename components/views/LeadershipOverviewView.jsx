@@ -35,6 +35,10 @@ function normalizeDateOnly(value) {
   return String(value || "").trim().slice(0, 10);
 }
 
+function normalizeText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
 function isDateInSelectedRange(value, startDate, endDate) {
   const date = normalizeDateOnly(value);
   if (!date) return false;
@@ -46,6 +50,21 @@ function isDateInSelectedRange(value, startDate, endDate) {
 function isFreshTakeType(value) {
   const rt = String(value || "").trim().toLowerCase();
   return rt === "fresh take" || rt === "fresh takes";
+}
+
+function getWorkflowStageLabel(source) {
+  const key = String(source || "").trim().toLowerCase();
+  if (key === "editorial") return "Editorial";
+  if (key === "ready_for_production") return "Ready for Production";
+  if (key === "production") return "Production";
+  if (key === "live") return "Live";
+  return "Unknown";
+}
+
+function getFreshTakeScriptStatusLabel(row) {
+  const status = normalizeText(row?.scriptStatus);
+  if (status) return status;
+  return getWorkflowStageLabel(row?.source);
 }
 
 function ScriptTypeBadges({ ftCount = 0, rwCount = 0, compact = false }) {
@@ -262,6 +281,9 @@ function PodStageBreakdownTable({ rows = [], loading = false, infoText = "" }) {
 function PodThroughputRankingTable({ rows = [], loading = false }) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const [expandedPods, setExpandedPods] = useState(new Set());
+  const totalScripts = safeRows.reduce((sum, row) => sum + Number(row?.totalScripts || 0), 0);
+  const totalFt = safeRows.reduce((sum, row) => sum + Number(row?.ftCount || 0), 0);
+  const totalRw = safeRows.reduce((sum, row) => sum + Number(row?.rwCount || 0), 0);
 
   const togglePod = (podName) => {
     setExpandedPods((prev) => {
@@ -361,7 +383,14 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
             {loading ? (
               <tr><td colSpan="3" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
             ) : tableRows.length > 0 ? (
-              tableRows
+              <>
+                {tableRows}
+                <tr className="overview-table-total-row">
+                  <td><strong>Total</strong></td>
+                  <td style={{ textAlign: "center" }}><strong>{formatMetricValue(totalScripts)}</strong></td>
+                  <td><ScriptTypeBadges compact ftCount={totalFt} rwCount={totalRw} /></td>
+                </tr>
+              </>
             ) : (
               <tr><td colSpan="3">No scripts found for the selected date range.</td></tr>
             )}
@@ -388,24 +417,30 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   const totalBeats = beatRows.length;
   const approvedBeats = beatRows.filter((row) => row?.statusCategory === "approved").length;
   const reviewPendingBeats = beatRows.filter((row) => row?.statusCategory === "review_pending").length;
+  const abandonedBeats = beatRows.filter((row) => row?.statusCategory === "abandoned").length;
+  const iterateBeats = beatRows.filter((row) => row?.statusCategory === "iterate").length;
+  const toBeIdeatedBeats = beatRows.filter((row) => row?.statusCategory === "to_be_ideated").length;
 
-  const freshTakeCount = useMemo(() => {
+  const freshTakeSourceRows = useMemo(() => {
     const weekStart = normalizeDateOnly(overviewData?.weekStart);
     const weekEnd = normalizeDateOnly(overviewData?.weekEnd);
     const allowedSources = new Set(["editorial", "ready_for_production", "production", "live"]);
-    const seen = new Set();
+    const rows = [];
     for (const row of Array.isArray(allWorkflowRows) ? allWorkflowRows : []) {
-      if (!allowedSources.has(row?.source)) continue;
+      if (!allowedSources.has(String(row?.source || ""))) continue;
       const date = normalizeDateOnly(row?.leadSubmittedDate);
       if (!isDateInSelectedRange(date, weekStart, weekEnd)) continue;
-      const rt = String(row?.reworkType || "").trim().toLowerCase();
-      if (rt !== "fresh take" && rt !== "fresh takes") continue;
-      const key = String(row?.assetCode || "").trim().toLowerCase() ||
-        `${String(row?.showName || "").trim().toLowerCase()}|${String(row?.beatName || "").trim().toLowerCase()}`;
-      if (key) seen.add(key);
+      if (!isFreshTakeType(row?.reworkType)) continue;
+      rows.push(row);
     }
-    return seen.size;
+    return rows;
   }, [allWorkflowRows, overviewData?.weekStart, overviewData?.weekEnd]);
+  const freshTakeCount = freshTakeSourceRows.length;
+  const freshTakeRemainingCount = useMemo(
+    () => freshTakeSourceRows.filter((row) => String(row?.source || "") === "editorial").length,
+    [freshTakeSourceRows]
+  );
+
   const productionStageCounts = useMemo(() => {
     const weekStart = normalizeDateOnly(overviewData?.weekStart);
     const weekEnd = normalizeDateOnly(overviewData?.weekEnd);
@@ -463,9 +498,8 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
       totalCohort: cohortKeys.size,
     };
   }, [allWorkflowRows, overviewData?.weekStart, overviewData?.weekEnd]);
-  const productionStageTotal = productionStageCounts.totalCohort || 0;
+  const productionStageTotal = (productionStageCounts.ready || 0) + (productionStageCounts.production || 0) + (productionStageCounts.live || 0);
   const productionStageMax = Math.max(
-    productionStageCounts.editorial,
     productionStageCounts.ready,
     productionStageCounts.production,
     productionStageCounts.live,
@@ -473,7 +507,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   );
   const successfulAdsCount = scopedFullGenAiRows.filter((r) => r.success).length;
   const hitRatePercent = scopedFullGenAiRows.length > 0 ? (successfulAdsCount / scopedFullGenAiRows.length) * 100 : 0;
-  const beatsStageMax = Math.max(approvedBeats, reviewPendingBeats, 1);
+  const beatsStageMax = Math.max(approvedBeats, reviewPendingBeats, abandonedBeats, iterateBeats, toBeIdeatedBeats, 1);
 
   const overviewThroughputRows = useMemo(() => {
     const weekStart = overviewData?.weekStart;
@@ -551,11 +585,6 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
           <div>
             <div className="overview-section-title">Beats</div>
           </div>
-          <div className="overview-section-actions">
-            <button type="button" className="ghost-button overview-section-link" onClick={() => onNavigate?.("beats-performance")}>
-              Open expanded beat view
-            </button>
-          </div>
         </div>
         {overviewData?.ideationSourceError && (
           <div style={{ fontSize: 12, color: "var(--warning, #b45309)", marginBottom: 8 }}>
@@ -572,8 +601,11 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
                 <div className="metric-value">{overviewLoading ? "..." : formatMetricValue(totalBeats)}</div>
                 {!overviewLoading ? (
                   <div className="overview-mini-bar-stack">
-                    <MiniBarRow label="Approved" value={approvedBeats} max={beatsStageMax} color="var(--forest)" />
+                    <MiniBarRow label="Approved" value={approvedBeats} max={beatsStageMax} color="#2d5a3d" />
                     <MiniBarRow label="Review pending" value={reviewPendingBeats} max={beatsStageMax} color="var(--terracotta)" />
+                    <MiniBarRow label="Abandoned" value={abandonedBeats} max={beatsStageMax} color="#7d5a3a" />
+                    <MiniBarRow label="Iterate" value={iterateBeats} max={beatsStageMax} color="var(--red)" />
+                    <MiniBarRow label="To be ideated" value={toBeIdeatedBeats} max={beatsStageMax} color="#7a7a7a" />
                   </div>
                 ) : null}
               </>
@@ -581,14 +613,28 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
           />
           <MetricCard
             label="Fresh take"
-            value={overviewLoading ? "..." : formatMetricValue(freshTakeCount)}
-            hint="Editorial, Ready for Production, Production, Live"
-            info='Counts workflow rows from Editorial, Ready for Production, Production, and Live using the "Date submitted by Lead" field.'
+            value={overviewLoading ? "..." : `${formatMetricValue(freshTakeCount)} / ${formatMetricValue(freshTakeRemainingCount)}`}
+            info='Overall count / Remaining count. Counts Fresh Take rows filtered by "Date submitted by Lead"; remaining count includes only rows currently in Editorial.'
             body={
               <>
-                <div className="metric-value">{overviewLoading ? "..." : formatMetricValue(freshTakeCount)}</div>
+                <div className="metric-value">
+                  {overviewLoading ? "..." : `${formatMetricValue(freshTakeCount)} / ${formatMetricValue(freshTakeRemainingCount)}`}
+                </div>
                 {!overviewLoading ? (
-                  <ProgressBar value={freshTakeCount} target={Math.max(totalBeats, 1)} color="var(--forest)" />
+                  <div className="overview-mini-bar-stack">
+                    <MiniBarRow
+                      label="Overall count"
+                      value={freshTakeCount}
+                      max={Math.max(freshTakeCount, 1)}
+                      color="var(--forest)"
+                    />
+                    <MiniBarRow
+                      label="Remaining count"
+                      value={freshTakeRemainingCount}
+                      max={Math.max(freshTakeCount, 1)}
+                      color="var(--terracotta)"
+                    />
+                  </div>
                 ) : null}
               </>
             }
@@ -603,10 +649,9 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
                 <div className="metric-value">{overviewLoading ? "..." : formatMetricValue(productionStageTotal)}</div>
                 {!overviewLoading ? (
                   <div className="overview-mini-bar-stack">
-                    <MiniBarRow label="Editorial" value={productionStageCounts.editorial} max={productionStageMax} color="var(--terracotta)" />
                     <MiniBarRow label="Ready for Production" value={productionStageCounts.ready} max={productionStageMax} color="var(--forest)" />
                     <MiniBarRow label="Production" value={productionStageCounts.production} max={productionStageMax} color="#3f8f83" />
-                    <MiniBarRow label="Live" value={productionStageCounts.live} max={productionStageMax} color="var(--red)" />
+                    <MiniBarRow label="Live" value={productionStageCounts.live} max={productionStageMax} color="#2d5a3d" />
                   </div>
                 ) : null}
               </>

@@ -431,6 +431,7 @@ export default function UnifiedOpsApp() {
   const [productionExpanded, setProductionExpanded] = useState(false);
   const [podPerformanceRangeMode, setPodPerformanceRangeMode] = useState("selected");
   const [podPerformanceScope, setPodPerformanceScope] = useState("bau");
+  const [includeGuAssets, setIncludeGuAssets] = useState(false);
   const [podTasksData, setPodTasksData] = useState(null);
   const [podTasksLoading, setPodTasksLoading] = useState(false);
   const [podTrendData, setPodTrendData] = useState(null);
@@ -655,7 +656,7 @@ export default function UnifiedOpsApp() {
 
     let cancelled = false;
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
-    const cacheKey = `leadership-overview:${rangeSelection.startDate}:${rangeSelection.endDate}`;
+    const cacheKey = `leadership-overview:${rangeSelection.startDate}:${rangeSelection.endDate}:include-gu-${includeGuAssets ? "1" : "0"}`;
 
     const cachedPayload = readClientCache(cacheKey);
     if (cachedPayload) {
@@ -672,7 +673,7 @@ export default function UnifiedOpsApp() {
       setLeadershipOverviewError("");
 
       try {
-        const response = await fetch(`/api/dashboard/leadership-overview?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}`, {
+        const response = await fetch(`/api/dashboard/leadership-overview?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}&includeGuAssets=${includeGuAssets ? "true" : "false"}`, {
           cache: "no-store",
         });
         const payload = await readJson(response);
@@ -705,7 +706,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange]);
+  }, [activeView, dashboardDateRange, includeGuAssets]);
 
 
   useEffect(() => {
@@ -1210,14 +1211,15 @@ export default function UnifiedOpsApp() {
 
           <div className="sidebar-section">
             <div className="sidebar-section-label">VIEWS</div>
-            <div className="sidebar-more-items">
-              {[
-                ["leadership-overview", "Overview"],
-                ["overview", "Editorial Funnel"],
-              ].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
+	            <div className="sidebar-more-items">
+	              {[
+	                ["leadership-overview", "Overview"],
+	                ["overview", "Editorial Funnel"],
+	                ["pod-wise", "PODs Performance"],
+	              ].map(([id, label]) => (
+	                <button
+	                  key={id}
+	                  type="button"
                   className={`sidebar-link${activeView === id ? " active" : ""}`}
                   onClick={() => setActiveView(id)}
                 >
@@ -1229,36 +1231,32 @@ export default function UnifiedOpsApp() {
               <button
                 type="button"
                 className={`sidebar-link${activeView === "production" ? " active" : ""}`}
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
                 onClick={() => {
                   if (activeView !== "production") setActiveView("production");
                   setProductionExpanded((prev) => !prev);
                 }}
               >
                 <span>Production</span>
-                <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 4, transition: "transform 0.2s", display: "inline-block", transform: productionExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+                <span className={`sidebar-chevron${productionExpanded ? " is-open" : ""}`}>▾</span>
               </button>
-              {productionExpanded && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingLeft: 12 }}>
+              <div className={`sidebar-subitems${productionExpanded ? " is-open" : ""}`} aria-hidden={!productionExpanded}>
                   {[["pipeline", "Pipeline"], ["throughput", "Throughput"]].map(([id, label]) => (
                     <button
                       key={id}
                       type="button"
                       className={`sidebar-link${activeView === "production" && productionSubView === id ? " active" : ""}`}
-                      style={{ fontSize: 12, paddingTop: 5, paddingBottom: 5 }}
+                      data-subitem="production"
                       onClick={() => { setActiveView("production"); setProductionSubView(id); }}
                     >
                       {label}
                     </button>
                   ))}
                 </div>
-              )}
 
-              {[
-                ["pod-wise", "PODs Performance"],
-                ["planner2", "Planner"],
-                ["analytics", "Analytics"],
-              ].map(([id, label]) => (
+	              {[
+	                ["planner2", "Planner"],
+	                ["analytics", "Analytics"],
+	              ].map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -1461,6 +1459,14 @@ export default function UnifiedOpsApp() {
                 <div className="app-topbar-range-note">
                   {`Selected date range ${formatWeekRangeLabel(normalizedHeaderRange.startDate, normalizedHeaderRange.endDate)}`}
                 </div>
+                <label className="overview-inline-check" style={{ marginTop: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={includeGuAssets}
+                    onChange={(event) => setIncludeGuAssets(event.target.checked)}
+                  />
+                  <span>Include GU assets</span>
+                </label>
               </div>
             ) : null}
               <label className="theme-switch" aria-label="Toggle dark mode">
