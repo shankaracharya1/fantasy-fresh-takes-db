@@ -956,7 +956,7 @@ export default function OverviewContent({
   const workflowStageRows = allWorkflowRows.filter((row) => stageSources.has(row?.source));
   const cohortAssetKeys = new Set(
     workflowStageRows
-      .filter((row) => isDateInSelectedRange(normalizeDateOnly(row?.leadSubmittedDate), weekStart, weekEnd))
+      .filter((row) => isDateInSelectedRange(normalizeDateOnly(row?.strictLeadSubmittedDate), weekStart, weekEnd))
       .filter((row) => isFreshTakeType(row?.reworkType))
       .map((row) => getWorkflowAssetKey(row))
       .filter(Boolean)

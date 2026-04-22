@@ -41,13 +41,32 @@ function normalizeKey(value) {
   return normalizeText(value).toLowerCase();
 }
 
+function normalizeWriterAliasKey(value) {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+const GLOBAL_WRITER_ALIASES = new Map([
+  ["jacob", "Jacob Berman"],
+  ["berman", "Jacob Berman"],
+  ["jacob berman", "Jacob Berman"],
+]);
+
+function normalizeWriterName(value) {
+  const cleaned = normalizeText(value);
+  if (!cleaned) return "";
+  return GLOBAL_WRITER_ALIASES.get(normalizeWriterAliasKey(cleaned)) || cleaned;
+}
+
 function buildWriterNameResolver(rows) {
   const exactMap = new Map();
   const prefixCandidates = [];
   const tokenMap = new Map();
 
   function register(value) {
-    const displayName = normalizeText(value);
+    const displayName = normalizeWriterName(value);
     const key = normalizeKey(displayName);
     if (!displayName || !key || exactMap.has(key)) return;
 
@@ -61,7 +80,7 @@ function buildWriterNameResolver(rows) {
   }
 
   function registerPossibleWriters(value) {
-    const cleaned = normalizeText(value);
+    const cleaned = normalizeWriterName(value);
     if (!cleaned) return;
     for (const part of cleaned.split(",").map(normalizeText).filter(Boolean)) {
       register(part);
@@ -76,8 +95,11 @@ function buildWriterNameResolver(rows) {
   return function resolveWriterName(rawValue) {
     const cleaned = normalizeText(rawValue);
     if (!cleaned) return "Unknown Writer";
+    const aliased = normalizeWriterName(cleaned);
+    const aliasedKey = normalizeKey(aliased);
+    if (exactMap.has(aliasedKey)) return exactMap.get(aliasedKey);
 
-    const key = normalizeKey(cleaned);
+    const key = normalizeKey(aliased);
     if (exactMap.has(key)) return exactMap.get(key);
 
     const prefixMatches = prefixCandidates.filter((candidate) => candidate.key.startsWith(key));
@@ -94,7 +116,7 @@ function buildWriterNameResolver(rows) {
       return Array.from(tokenMatches)[0];
     }
 
-    return cleaned;
+    return aliased;
   };
 }
 
@@ -254,6 +276,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
   for (const row of editorialRows) {
     const stageDate = normalizeText(row?.dateSubmittedByLead || row?.dateAssigned);
     const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead || row?.dateAssigned || row?.dateSubmittedByWriter);
+    const strictLeadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     rows.push({
       source: "editorial",
       stageKey: row?.dateSubmittedByLead ? "editorial_review" : "editorial",
@@ -269,8 +292,14 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
       reworkType: normalizeText(row?.reworkType),
       productionType: normalizeText(row?.productionType),
       scriptStatus: normalizeText(row?.scriptStatus),
+      status: normalizeText(row?.status),
+      etaToStartProd: normalizeText(row?.etaToStartProd),
+      etaPromoCompletion: normalizeText(row?.etaPromoCompletion),
+      finalUploadDate: normalizeText(row?.finalUploadDate),
+      cdName: normalizeText(row?.cd),
       acdNames: [],
       leadSubmittedDate,
+      strictLeadSubmittedDate,
       writerSubmittedDate: normalizeText(row?.dateSubmittedByWriter || row?.dateSubmittedByLead || row?.dateAssigned),
       ...getTimeParts(stageDate),
     });
@@ -279,6 +308,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
   for (const row of readyRows) {
     const stageDate = normalizeText(row?.etaToStartProd || row?.dateSubmittedByLead);
     const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead || row?.etaToStartProd);
+    const strictLeadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     rows.push({
       source: "ready_for_production",
       stageKey: "ready_for_production",
@@ -293,8 +323,15 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
       beatName: normalizeText(row?.beatName),
       reworkType: normalizeText(row?.reworkType),
       productionType: normalizeText(row?.productionType),
+      scriptStatus: normalizeText(row?.scriptStatus),
+      status: normalizeText(row?.status),
+      etaToStartProd: normalizeText(row?.etaToStartProd),
+      etaPromoCompletion: normalizeText(row?.etaPromoCompletion),
+      finalUploadDate: normalizeText(row?.finalUploadDate),
+      cdName: normalizeText(row?.cd),
       acdNames: [],
       leadSubmittedDate,
+      strictLeadSubmittedDate,
       writerSubmittedDate: normalizeText(row?.dateSubmittedByWriter || row?.dateSubmittedByLead || row?.etaToStartProd),
       ...getTimeParts(stageDate),
     });
@@ -303,6 +340,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
   for (const row of productionRows) {
     const stageDate = normalizeText(row?.etaPromoCompletion || row?.etaToStartProd);
     const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead || row?.etaPromoCompletion || row?.etaToStartProd);
+    const strictLeadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     const acdNames = [
       ...String(row?.acd1WorkedOnWorldSettings || "").split(/[,/]/).map(normalizeText).filter(Boolean),
       ...String(row?.acdMultipleSelections || "").split(/[,/]/).map(normalizeText).filter(Boolean),
@@ -322,8 +360,14 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
       beatName: normalizeText(row?.beatName),
       reworkType: normalizeText(row?.reworkType),
       productionType: normalizeText(row?.productionType),
+      scriptStatus: normalizeText(row?.scriptStatus || row?.status),
+      status: normalizeText(row?.status),
+      etaToStartProd: normalizeText(row?.etaToStartProd),
+      etaPromoCompletion: normalizeText(row?.etaPromoCompletion),
+      finalUploadDate: normalizeText(row?.finalUploadDate),
       acdNames: acdNames.length ? acdNames : ["Unassigned"],
       leadSubmittedDate,
+      strictLeadSubmittedDate,
       writerSubmittedDate: normalizeText(row?.dateSubmittedByWriter || row?.dateSubmittedByLead || row?.etaPromoCompletion || row?.etaToStartProd),
       ...getTimeParts(stageDate),
     });
@@ -332,6 +376,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
   for (const row of liveRows) {
     const stageDate = normalizeText(row?.finalUploadDate);
     const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead || row?.finalUploadDate);
+    const strictLeadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     const acdNames = [
       ...String(row?.acd1WorkedOnWorldSettings || "").split(/[,/]/).map(normalizeText).filter(Boolean),
       ...String(row?.acdMultipleSelections || "").split(/[,/]/).map(normalizeText).filter(Boolean),
@@ -351,8 +396,36 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
       beatName: normalizeText(row?.beatName),
       reworkType: normalizeText(row?.reworkType),
       productionType: normalizeText(row?.productionType),
+      scriptStatus: normalizeText(row?.scriptStatus || row?.status),
+      status: normalizeText(row?.status),
+      etaToStartProd: normalizeText(row?.etaToStartProd),
+      etaPromoCompletion: normalizeText(row?.etaPromoCompletion),
+      finalUploadDate: normalizeText(row?.finalUploadDate),
+      cpiUsd: row?.cpiUsd,
+      threeSecPlayPct: row?.threeSecPlayPct,
+      thruPlaysPct: row?.thruPlaysPct,
+      q1ToThruplays: row?.q1ToThruplays,
+      video0To25Pct: row?.video0To25Pct,
+      q1: row?.q1,
+      video25To50Pct: row?.video25To50Pct,
+      video50To75Pct: row?.video50To75Pct,
+      video75To95Pct: row?.video75To95Pct,
+      video0To95Pct: row?.video0To95Pct,
+      thruPlayTo3sRatio: row?.thruPlayTo3sRatio,
+      absoluteCompletionPct: row?.absoluteCompletionPct,
+      q4ToQ1: row?.q4ToQ1,
+      cpmUsd: row?.cpmUsd,
+      ctrPct: row?.ctrPct,
+      amountSpentUsd: row?.amountSpentUsd,
+      outboundClicksToCompletionPct: row?.outboundClicksToCompletionPct,
+      reach: row?.reach,
+      impressions: row?.impressions,
+      clickToInstall: row?.clickToInstall,
+      ctrTimesCti: row?.ctrTimesCti,
+      appInstalls: row?.appInstalls,
       acdNames: acdNames.length ? acdNames : ["Unassigned"],
       leadSubmittedDate,
+      strictLeadSubmittedDate,
       writerSubmittedDate: normalizeText(
         row?.dateSubmittedByWriter || row?.dateSubmittedByLead || row?.etaPromoCompletion || row?.finalUploadDate
       ),
@@ -545,9 +618,12 @@ function classifyFtRw(reworkType) {
   return "rw";
 }
 
-function isPodThroughputAssetCode(assetCode) {
+function isIncludedWorkflowAssetCode(assetCode, includeGuAssets = false) {
   const code = normalizeText(assetCode).toUpperCase();
-  return code.startsWith("GA") || code.startsWith("GI");
+  if (!code) return false;
+  if (code.startsWith("GA") || code.startsWith("GI")) return true;
+  if (includeGuAssets && code.startsWith("GU")) return true;
+  return false;
 }
 
 function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
@@ -555,7 +631,6 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
   const filtered = (Array.isArray(workflowRows) ? workflowRows : []).filter((row) => {
     const leadDate = String(row?.leadSubmittedDate || "").slice(0, 10);
     if (!leadDate || leadDate < startDate || leadDate > endDate) return false;
-    if (!isPodThroughputAssetCode(row?.assetCode)) return false;
     return ["editorial", "ready_for_production", "production", "live"].includes(String(row?.source || ""));
   });
 
@@ -643,6 +718,17 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
 
         const key = normalizeKey(current.writerName);
         if (!acc.has(key)) {
+          const currentTokens = key.split(" ").filter(Boolean);
+          if (currentTokens.length > 1) {
+            const singleTokenKey = currentTokens[0];
+            if (singleTokenKey && acc.has(singleTokenKey)) {
+              const singleEntry = acc.get(singleTokenKey);
+              current.totalScripts += Number(singleEntry.totalScripts || 0);
+              current.ftCount += Number(singleEntry.ftCount || 0);
+              current.rwCount += Number(singleEntry.rwCount || 0);
+              acc.delete(singleTokenKey);
+            }
+          }
           acc.set(key, current);
           return acc;
         }
@@ -671,6 +757,7 @@ export async function GET(request) {
   const period = normalizeWeekView(url.searchParams.get("period") || "current");
   const startDate = url.searchParams.get("startDate");
   const endDate = url.searchParams.get("endDate");
+  const includeGuAssets = String(url.searchParams.get("includeGuAssets") || "").toLowerCase() === "true";
   const weekSelection = startDate || endDate ? buildDateRangeSelection({ startDate, endDate, period }) : getWeekSelection(period);
 
   try {
@@ -720,9 +807,10 @@ export async function GET(request) {
       productionRows: workflowProductionRows,
       liveRows: liveResult?.rows || [],
     });
+    const filteredWorkflowRows = workflowRows.filter((row) => isIncludedWorkflowAssetCode(row?.assetCode, includeGuAssets));
     const scopedBeatRows = beatRows.filter((row) => isDateWithinWeek(row.primaryDate, weekSelection));
-    const scopedWorkflowRows = workflowRows.filter((row) => isDateWithinWeek(row.stageDate, weekSelection));
-    const approvedMatchedRows = buildApprovedMatchedRows(scopedBeatRows, workflowRows);
+    const scopedWorkflowRows = filteredWorkflowRows.filter((row) => isDateWithinWeek(row.stageDate, weekSelection));
+    const approvedMatchedRows = buildApprovedMatchedRows(scopedBeatRows, filteredWorkflowRows);
 
     // Pre-compute beat counts server-side (unique by beatCode or show|beat)
     const totalBeatsCount = (() => {
@@ -745,8 +833,8 @@ export async function GET(request) {
     const fullGenAiRows = buildFullGenAiRows(analyticsResult?.rows || []).filter((row) =>
       isDateWithinWeek(row.primaryDate, weekSelection)
     );
-    const currentWeekUpdateRows = buildCurrentWeekUpdateRows(beatRows, workflowRows, weekSelection);
-    const podThroughputRows = buildPodThroughputRowsForRange(workflowRows, weekSelection.weekStart, weekSelection.weekEnd);
+    const currentWeekUpdateRows = buildCurrentWeekUpdateRows(beatRows, filteredWorkflowRows, weekSelection);
+    const podThroughputRows = buildPodThroughputRowsForRange(filteredWorkflowRows, weekSelection.weekStart, weekSelection.weekEnd);
 
     return NextResponse.json({
       ok: true,
@@ -762,9 +850,10 @@ export async function GET(request) {
       beatRows: scopedBeatRows,
       allBeatRows: beatRows,
       workflowRows: scopedWorkflowRows,
-      allWorkflowRows: workflowRows,
+      allWorkflowRows: filteredWorkflowRows,
       approvedMatchedRows,
       fullGenAiRows,
+      allAnalyticsRows: Array.isArray(analyticsResult?.rows) ? analyticsResult.rows : [],
       fullGenAiSourceError: analyticsResult?.error || "",
       ideationSourceError: ideationResult?.error || "",
       editorialSourceError: editorialResult?.error || "",
@@ -789,6 +878,7 @@ export async function GET(request) {
       allWorkflowRows: [],
       approvedMatchedRows: [],
       fullGenAiRows: [],
+      allAnalyticsRows: [],
       fullGenAiSourceError: "Analytics source unavailable.",
       ideationSourceError: "Ideation source unavailable.",
       currentWeekUpdateRows: [],
