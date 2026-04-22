@@ -275,7 +275,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
 
   for (const row of editorialRows) {
     const stageDate = normalizeText(row?.dateSubmittedByLead || row?.dateAssigned);
-    const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead || row?.dateAssigned || row?.dateSubmittedByWriter);
+    const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     const strictLeadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     rows.push({
       source: "editorial",
@@ -307,7 +307,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
 
   for (const row of readyRows) {
     const stageDate = normalizeText(row?.etaToStartProd || row?.dateSubmittedByLead);
-    const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead || row?.etaToStartProd);
+    const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     const strictLeadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     rows.push({
       source: "ready_for_production",
@@ -339,7 +339,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
 
   for (const row of productionRows) {
     const stageDate = normalizeText(row?.etaPromoCompletion || row?.etaToStartProd);
-    const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead || row?.etaPromoCompletion || row?.etaToStartProd);
+    const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     const strictLeadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     const acdNames = [
       ...String(row?.acd1WorkedOnWorldSettings || "").split(/[,/]/).map(normalizeText).filter(Boolean),
@@ -375,7 +375,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
 
   for (const row of liveRows) {
     const stageDate = normalizeText(row?.finalUploadDate);
-    const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead || row?.finalUploadDate);
+    const leadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     const strictLeadSubmittedDate = normalizeText(row?.dateSubmittedByLead);
     const acdNames = [
       ...String(row?.acd1WorkedOnWorldSettings || "").split(/[,/]/).map(normalizeText).filter(Boolean),
@@ -629,9 +629,19 @@ function isIncludedWorkflowAssetCode(assetCode, includeGuAssets = false) {
 function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
   const resolveWriterName = buildWriterNameResolver(workflowRows);
   const filtered = (Array.isArray(workflowRows) ? workflowRows : []).filter((row) => {
-    const leadDate = String(row?.leadSubmittedDate || "").slice(0, 10);
-    if (!leadDate || leadDate < startDate || leadDate > endDate) return false;
-    return ["editorial", "ready_for_production", "production", "live"].includes(String(row?.source || ""));
+    const source = String(row?.source || "");
+    if (!["editorial", "ready_for_production", "production", "live"].includes(source)) return false;
+    const isFt = classifyFtRw(row?.reworkType) === "ft";
+    if (isFt) {
+      // Fresh Take: strict Date submitted by Lead across all 4 sheets (no fallbacks)
+      const d = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
+      return d && d >= startDate && d <= endDate;
+    } else {
+      // Rework: Ready for Production sheet only, Date approved for prod (etaToStartProd)
+      if (source !== "ready_for_production") return false;
+      const d = String(row?.etaToStartProd || "").slice(0, 10);
+      return d && d >= startDate && d <= endDate;
+    }
   });
 
   const podMap = new Map();

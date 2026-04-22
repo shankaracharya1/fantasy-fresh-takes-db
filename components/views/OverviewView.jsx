@@ -489,7 +489,6 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     });
   };
 
-  const totalScripts = safeRows.reduce((sum, pod) => sum + (pod.totalScripts || 0), 0);
   const totalFt = safeRows.reduce((sum, pod) => sum + (pod.ftCount || 0), 0);
   const totalRw = safeRows.reduce((sum, pod) => sum + (pod.rwCount || 0), 0);
 
@@ -525,13 +524,8 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
             )}
           </span>
         </td>
-        <td style={{ fontWeight: 700, textAlign: "center" }}>{formatMetricValue(pod.totalScripts)}</td>
-        <td>
-          <ScriptTypeBadges
-            compact
-            ftCount={pod.ftCount || 0}
-            rwCount={pod.rwCount || 0}
-          />
+        <td style={{ fontWeight: 700, textAlign: "center" }}>
+          {pod.ftCount || 0} / {pod.rwCount || 0}
         </td>
       </tr>
     );
@@ -541,13 +535,8 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
         tableRows.push(
           <tr key={`writer-${pod.podLeadName}-${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
             <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>• {writer.writerName}</td>
-            <td style={{ textAlign: "center", fontSize: 12 }}>{formatMetricValue(writer.totalScripts)}</td>
-            <td>
-              <ScriptTypeBadges
-                compact
-                ftCount={writer.ftCount || 0}
-                rwCount={writer.rwCount || 0}
-              />
+            <td style={{ textAlign: "center", fontSize: 12 }}>
+              {writer.ftCount || 0} / {writer.rwCount || 0}
             </td>
           </tr>
         );
@@ -559,33 +548,29 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     <div style={{ marginTop: 20 }}>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>POD throughput</div>
       <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
-        Editorial, Ready for Production, Production, Live · date-filtered by Date submitted by Lead · FT = Fresh Take · RW = Rework
+        FT = Fresh Take · Date submitted by Lead (all sheets) &nbsp;·&nbsp; RW = Rework · Date approved for prod (Ready for Production sheet)
       </div>
       <div className="table-wrap">
         <table className="ops-table overview-table">
           <thead>
             <tr>
               <th>POD / Writer</th>
-              <th style={{ textAlign: "center" }}># Scripts</th>
-              <th>Type</th>
+              <th style={{ textAlign: "center" }}>Fresh Take / Rework</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="3" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+              <tr><td colSpan="2" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
             ) : tableRows.length > 0 ? (
               <>
                 {tableRows}
                 <tr style={{ borderTop: "2px solid var(--border)", background: "var(--subtle-bg, #f0ece4)" }}>
                   <td style={{ fontWeight: 700 }}>Total</td>
-                  <td style={{ fontWeight: 700, textAlign: "center" }}>{formatMetricValue(totalScripts)}</td>
-                  <td>
-                    <ScriptTypeBadges compact ftCount={totalFt} rwCount={totalRw} />
-                  </td>
+                  <td style={{ fontWeight: 700, textAlign: "center" }}>{totalFt} / {totalRw}</td>
                 </tr>
               </>
             ) : (
-              <tr><td colSpan="3">No scripts found for the selected date range.</td></tr>
+              <tr><td colSpan="2">No scripts found for the selected date range.</td></tr>
             )}
           </tbody>
         </table>
@@ -986,6 +971,14 @@ export default function OverviewContent({
     else ftBreakdown.editorial += 1;
   }
   const freshTakeCount = cohortAssetKeys.size;
+  const freshTakeEditorialRemainingCount = new Set(
+    workflowStageRows
+      .filter((row) => row?.source === "editorial")
+      .filter((row) => isDateInSelectedRange(normalizeDateOnly(row?.strictLeadSubmittedDate), weekStart, weekEnd))
+      .filter((row) => isFreshTakeType(row?.reworkType))
+      .map((row) => getWorkflowAssetKey(row))
+      .filter(Boolean)
+  ).size;
 
   const podLoading = leadershipOverviewLoading || overviewLoading;
 
@@ -1083,18 +1076,14 @@ export default function OverviewContent({
               label="Fresh Take"
               body={
                 <>
-                  <div className="metric-value">{podLoading ? "..." : formatMetricValue(freshTakeCount)}</div>
-                  {!podLoading && freshTakeCount > 0 && (
-                    <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 4 }}>
-                      {ftBreakdown.editorial} still in Editorial
-                    </div>
-                  )}
-                  {!podLoading && freshTakeCount > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <MiniBar label="Editorial"    value={ftBreakdown.editorial}          total={freshTakeCount} color="var(--terracotta)" />
-                      <MiniBar label="Ready+Prod"   value={ftBreakdown.readyForProduction} total={freshTakeCount} color="var(--forest)" />
-                      <MiniBar label="Production"   value={ftBreakdown.production}         total={freshTakeCount} color="#3f8f83" />
-                      <MiniBar label="Live"         value={ftBreakdown.live}               total={freshTakeCount} color="var(--red)" />
+                  <div className="metric-value">
+                    {podLoading
+                      ? "..."
+                      : `${formatMetricValue(freshTakeCount)} / ${formatMetricValue(freshTakeEditorialRemainingCount)}`}
+                  </div>
+                  {!podLoading && (
+                    <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 6 }}>
+                      Overall count / Remaining count
                     </div>
                   )}
                 </>
