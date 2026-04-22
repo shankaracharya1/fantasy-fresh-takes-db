@@ -1100,7 +1100,7 @@ function ZoomPreviewTable({
                         </div>
                       ) : null}
                     </div>
-                    <table className="ops-table overview-table" style={{ marginTop: 0, border: 0, width: "max-content", minWidth: tableMinWidth, fontSize: 10 }}>
+                    <table className="ops-table overview-table preview-grid-table" style={{ marginTop: 0, border: 0, width: "max-content", minWidth: tableMinWidth, fontSize: 10 }}>
                       <thead>
                         <tr>
                           {tableHasCompactExpandable ? (

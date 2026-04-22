@@ -231,6 +231,7 @@ select {
 .sidebar-link {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 11px 13px;
   border-radius: var(--radius-btn);
@@ -243,6 +244,35 @@ select {
   background: transparent;
   text-align: left;
   width: 100%;
+}
+
+.sidebar-chevron {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 4px;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.sidebar-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.sidebar-subitems {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 12px;
+}
+
+.sidebar-subitems.is-open {
+  display: flex;
+}
+
+.sidebar-link[data-subitem="production"] {
+  font-size: 12px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 
 .sidebar-link:hover {
@@ -2170,6 +2200,16 @@ select {
 
 .overview-table {
   min-width: 640px;
+}
+
+.preview-grid-table th,
+.preview-grid-table td {
+  border-right: 1px solid var(--border);
+}
+
+.preview-grid-table th:last-child,
+.preview-grid-table td:last-child {
+  border-right: none;
 }
 
 .overview-table-total-row {
