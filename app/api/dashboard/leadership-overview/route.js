@@ -637,8 +637,8 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
       const d = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
       return d && d >= startDate && d <= endDate;
     } else {
-      // Rework: Ready for Production sheet only, Date approved for prod (etaToStartProd)
-      if (source !== "ready_for_production") return false;
+      // Rework: Production, Ready for Production, and Live sheets — Date approved for prod (etaToStartProd)
+      if (!["ready_for_production", "production", "live"].includes(source)) return false;
       const d = String(row?.etaToStartProd || "").slice(0, 10);
       return d && d >= startDate && d <= endDate;
     }

@@ -548,7 +548,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     <div style={{ marginTop: 20 }}>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>POD throughput</div>
       <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
-        FT = Fresh Take · Date submitted by Lead (all sheets) &nbsp;·&nbsp; RW = Rework · Date approved for prod (Ready for Production sheet)
+        FT = Fresh Take · Date submitted by Lead (all sheets) &nbsp;·&nbsp; RW = Rework · Date approved for prod (Ready for Prod / Production / Live)
       </div>
       <div className="table-wrap">
         <table className="ops-table overview-table">
