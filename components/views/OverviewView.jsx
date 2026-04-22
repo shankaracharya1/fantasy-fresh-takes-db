@@ -899,9 +899,25 @@ function ZoomPreviewTable({
   const pinchStateRef = useRef({ active: false, startDistance: 0, startZoom: 100 });
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [hoveredLinkedAdCode, setHoveredLinkedAdCode] = useState("");
-  const [headerFontSize, setHeaderFontSize] = useState(9);
-  const clampHeaderSize = (v) => Math.max(7, Math.min(16, Number(v)));
-  const changeHeaderSize = (delta) => setHeaderFontSize((prev) => clampHeaderSize(prev + delta));
+  const [colWidths, setColWidths] = useState({});
+  const resizingRef = useRef(null);
+
+  const startColResize = (colKey, startX, startWidth) => {
+    resizingRef.current = { colKey, startX, startWidth };
+    const onMove = (e) => {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const delta = clientX - resizingRef.current.startX;
+      const newWidth = Math.max(40, resizingRef.current.startWidth + delta);
+      setColWidths((prev) => ({ ...prev, [resizingRef.current.colKey]: newWidth }));
+    };
+    const onUp = () => {
+      resizingRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
   const safeZoom = Math.max(50, Math.min(200, Number(zoomPercent || 100)));
   const visibleTableKeys = ["editorial", "production", "live", "hit"];
   const baseColumns = ["Ad code", "POD", "Show", "Angle name"];
@@ -915,7 +931,7 @@ function ZoomPreviewTable({
   const getCompactColumnStyle = (columnLabel, isHeader = false) => {
     const baseStyle = {
       padding: isHeader ? "4px 5px" : "3px 5px",
-      fontSize: isHeader ? headerFontSize : 10,
+      fontSize: isHeader ? 9 : 10,
       whiteSpace: "nowrap",
       verticalAlign: "top",
     };
@@ -975,19 +991,11 @@ function ZoomPreviewTable({
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e" }} />
             <span style={{ marginLeft: 8, fontSize: 12, color: "var(--subtle)" }}>Preview window</span>
           </div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 12 }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, borderRight: "1px solid var(--border)", paddingRight: 12 }}>
-              <span style={{ fontSize: 11, color: "var(--subtle)", whiteSpace: "nowrap" }}>Header</span>
-              <button type="button" className="ghost-button" onClick={() => changeHeaderSize(-1)}>-</button>
-              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 28, textAlign: "center" }}>{headerFontSize}px</div>
-              <button type="button" className="ghost-button" onClick={() => changeHeaderSize(1)}>+</button>
-            </div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <button type="button" className="ghost-button" onClick={() => setZoom(safeZoom - 10)}>-</button>
-              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 52, textAlign: "center" }}>{safeZoom}%</div>
-              <button type="button" className="ghost-button" onClick={() => setZoom(safeZoom + 10)}>+</button>
-              <button type="button" className="ghost-button" onClick={() => setZoom(100)}>Reset</button>
-            </div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <button type="button" className="ghost-button" onClick={() => setZoom(safeZoom - 10)}>-</button>
+            <div style={{ fontSize: 12, fontWeight: 700, minWidth: 52, textAlign: "center" }}>{safeZoom}%</div>
+            <button type="button" className="ghost-button" onClick={() => setZoom(safeZoom + 10)}>+</button>
+            <button type="button" className="ghost-button" onClick={() => setZoom(100)}>Reset</button>
           </div>
         </div>
 
@@ -1097,15 +1105,35 @@ function ZoomPreviewTable({
                         <tr>
                           {tableHasCompactExpandable ? (
                             <>
-                              {baseColumns.map((column) => (
-                                <th key={`${tableData.title}-${column}`} style={{ padding: "4px 6px", fontSize: 9, whiteSpace: "nowrap" }}>{column}</th>
-                              ))}
+                              {baseColumns.map((column) => {
+                                const colKey = `${tableKey}-${column}`;
+                                const w = colWidths[colKey];
+                                return (
+                                  <th key={colKey} style={{ position: "relative", padding: "4px 6px", fontSize: 9, whiteSpace: "nowrap", ...(w ? { width: w, minWidth: w } : {}) }}>
+                                    {column}
+                                    <div
+                                      onMouseDown={(e) => { e.preventDefault(); startColResize(colKey, e.clientX, e.currentTarget.parentElement.offsetWidth); }}
+                                      style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 4, cursor: "col-resize", background: "transparent" }}
+                                    />
+                                  </th>
+                                );
+                              })}
                               <th style={{ textAlign: "center", width: 28, padding: "4px 4px", fontSize: 9 }}>+</th>
                             </>
                           ) : (
-                            tableColumns.map((column) => (
-                              <th key={`${tableData.title}-${column}`} style={{ padding: "4px 6px", fontSize: 9, whiteSpace: "nowrap" }}>{column}</th>
-                            ))
+                            tableColumns.map((column) => {
+                              const colKey = `${tableKey}-${column}`;
+                              const w = colWidths[colKey];
+                              return (
+                                <th key={colKey} style={{ position: "relative", padding: "4px 6px", fontSize: 9, whiteSpace: "nowrap", ...(w ? { width: w, minWidth: w } : {}) }}>
+                                  {column}
+                                  <div
+                                    onMouseDown={(e) => { e.preventDefault(); startColResize(colKey, e.clientX, e.currentTarget.parentElement.offsetWidth); }}
+                                    style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 4, cursor: "col-resize", background: "transparent" }}
+                                  />
+                                </th>
+                              );
+                            })
                           )}
                         </tr>
                       </thead>
