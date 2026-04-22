@@ -2202,9 +2202,16 @@ select {
   min-width: 640px;
 }
 
+.preview-grid-table {
+  table-layout: fixed;
+}
+
 .preview-grid-table th,
 .preview-grid-table td {
   border-right: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .preview-grid-table th:last-child,

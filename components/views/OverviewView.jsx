@@ -901,9 +901,22 @@ function ZoomPreviewTable({
   const [hoveredLinkedAdCode, setHoveredLinkedAdCode] = useState("");
   const [colWidths, setColWidths] = useState({});
   const resizingRef = useRef(null);
+  const tableRefs = useRef({});
 
-  const startColResize = (colKey, startX, startWidth) => {
-    resizingRef.current = { colKey, startX, startWidth };
+  const startColResize = (tableKey, colKey, startClientX, thEl) => {
+    // Snapshot ALL column widths in this table so table-layout:fixed works immediately
+    const tableEl = tableRefs.current[tableKey];
+    const snapshot = {};
+    if (tableEl) {
+      for (const th of tableEl.querySelectorAll("thead tr th")) {
+        const key = th.dataset.colKey;
+        if (key) snapshot[key] = th.offsetWidth;
+      }
+    }
+    const startWidth = snapshot[colKey] ?? (thEl ? thEl.offsetWidth : 80);
+    setColWidths((prev) => ({ ...prev, ...snapshot }));
+
+    resizingRef.current = { colKey, startX: startClientX, startWidth };
     const onMove = (e) => {
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const delta = clientX - resizingRef.current.startX;
@@ -1100,7 +1113,11 @@ function ZoomPreviewTable({
                         </div>
                       ) : null}
                     </div>
-                    <table className="ops-table overview-table preview-grid-table" style={{ marginTop: 0, border: 0, width: "max-content", minWidth: tableMinWidth, fontSize: 10 }}>
+                    <table
+                      ref={(el) => { tableRefs.current[tableKey] = el; }}
+                      className="ops-table overview-table preview-grid-table"
+                      style={{ marginTop: 0, border: 0, tableLayout: "fixed", width: "max-content", minWidth: tableMinWidth, fontSize: 10 }}
+                    >
                       <thead>
                         <tr>
                           {tableHasCompactExpandable ? (
@@ -1109,10 +1126,10 @@ function ZoomPreviewTable({
                                 const colKey = `${tableKey}-${column}`;
                                 const w = colWidths[colKey];
                                 return (
-                                  <th key={colKey} style={{ position: "relative", padding: "4px 6px", fontSize: 9, whiteSpace: "nowrap", ...(w ? { width: w, minWidth: w } : {}) }}>
+                                  <th key={colKey} data-col-key={colKey} style={{ position: "relative", padding: "4px 6px", fontSize: 9, overflow: "hidden", ...(w ? { width: w } : {}) }}>
                                     {column}
                                     <div
-                                      onMouseDown={(e) => { e.preventDefault(); startColResize(colKey, e.clientX, e.currentTarget.parentElement.offsetWidth); }}
+                                      onMouseDown={(e) => { e.preventDefault(); startColResize(tableKey, colKey, e.clientX, e.currentTarget.parentElement); }}
                                       style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 4, cursor: "col-resize", background: "transparent" }}
                                     />
                                   </th>
@@ -1125,10 +1142,10 @@ function ZoomPreviewTable({
                               const colKey = `${tableKey}-${column}`;
                               const w = colWidths[colKey];
                               return (
-                                <th key={colKey} style={{ position: "relative", padding: "4px 6px", fontSize: 9, whiteSpace: "nowrap", ...(w ? { width: w, minWidth: w } : {}) }}>
+                                <th key={colKey} data-col-key={colKey} style={{ position: "relative", padding: "4px 6px", fontSize: 9, overflow: "hidden", ...(w ? { width: w } : {}) }}>
                                   {column}
                                   <div
-                                    onMouseDown={(e) => { e.preventDefault(); startColResize(colKey, e.clientX, e.currentTarget.parentElement.offsetWidth); }}
+                                    onMouseDown={(e) => { e.preventDefault(); startColResize(tableKey, colKey, e.clientX, e.currentTarget.parentElement); }}
                                     style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 4, cursor: "col-resize", background: "transparent" }}
                                   />
                                 </th>
