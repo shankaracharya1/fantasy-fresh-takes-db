@@ -900,8 +900,23 @@ function ZoomPreviewTable({
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [hoveredLinkedAdCode, setHoveredLinkedAdCode] = useState("");
   const [colWidths, setColWidths] = useState({});
+  const [panelHeight, setPanelHeight] = useState(500);
   const resizingRef = useRef(null);
   const tableRefs = useRef({});
+
+  const startPanelResize = (startClientY) => {
+    const startHeight = panelHeight;
+    const onMove = (e) => {
+      const dy = e.clientY - startClientY;
+      setPanelHeight(Math.max(200, startHeight + dy));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   const startColResize = (tableKey, colKey, startClientX, thEl) => {
     // Snapshot ALL column widths in this table so table-layout:fixed works immediately
@@ -986,6 +1001,8 @@ function ZoomPreviewTable({
           overflow: "hidden",
           background: "var(--card)",
           boxShadow: "0 10px 25px rgba(0,0,0,0.06)",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
         <div
@@ -1016,8 +1033,7 @@ function ZoomPreviewTable({
           style={{
             overflowX: "auto",
             overflowY: "auto",
-            maxHeight: 560,
-            minHeight: 460,
+            height: panelHeight,
             padding: 16,
             touchAction: "pan-x pan-y",
             width: "100%",
@@ -1264,6 +1280,21 @@ function ZoomPreviewTable({
               Tip: use Ctrl/⌘ + scroll (or pinch on touch devices) to zoom.
             </div>
           </div>
+        </div>
+        <div
+          onMouseDown={(e) => { e.preventDefault(); startPanelResize(e.clientY); }}
+          style={{
+            height: 8,
+            cursor: "ns-resize",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "var(--subtle-bg, #f0ece4)",
+            borderTop: "1px solid var(--border)",
+            userSelect: "none",
+          }}
+        >
+          <div style={{ width: 32, height: 3, borderRadius: 99, background: "var(--border)" }} />
         </div>
       </div>
     </div>
