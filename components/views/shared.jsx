@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, useRef, useState } from "react";
+import { Component, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { MIN_DASHBOARD_DATE, WEEK_VIEW_OPTIONS } from "../../lib/week-view.js";
 
@@ -324,6 +324,173 @@ export function getAcdLeaderboardDataset(metricsInput, mode, viewType) {
 
 // ─── Small Shared Components ──────────────────────────────────────────────────
 
+export function MiniBarRow({ label, value, max, color = "var(--forest)" }) {
+  const safeValue = Number(value || 0);
+  const safeMax = Math.max(1, Number(max || 0));
+  return (
+    <div className="overview-mini-bar-row">
+      <span className="overview-mini-bar-value">{formatMetricValue(safeValue)}</span>
+      <div className="overview-mini-bar-track">
+        <div
+          className="overview-mini-bar-fill"
+          style={{ width: `${Math.max(4, Math.min(100, (safeValue / safeMax) * 100))}%`, background: color }}
+        />
+      </div>
+      <span className="overview-mini-bar-label">{label}</span>
+    </div>
+  );
+}
+
+// ─── BeatsSummaryCards ────────────────────────────────────────────────────────
+// 4-card summary (Total Beats, Fresh take, Production, Hit Rate)
+// Shared between Leadership Overview and Editorial Funnel.
+
+export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
+  const overviewData = leadershipOverviewData || null;
+  const beatRows = Array.isArray(overviewData?.beatRows) ? overviewData.beatRows : [];
+  const allWorkflowRows = Array.isArray(overviewData?.allWorkflowRows) ? overviewData.allWorkflowRows : [];
+  const fullGenAiRows = Array.isArray(overviewData?.fullGenAiRows) ? overviewData.fullGenAiRows : [];
+
+  const totalBeats = beatRows.length;
+  const approvedBeats = beatRows.filter((r) => r?.statusCategory === "approved").length;
+  const reviewPendingBeats = beatRows.filter((r) => r?.statusCategory === "review_pending").length;
+  const abandonedBeats = beatRows.filter((r) => r?.statusCategory === "abandoned").length;
+  const iterateBeats = beatRows.filter((r) => r?.statusCategory === "iterate").length;
+  const toBeIdeatedBeats = beatRows.filter((r) => r?.statusCategory === "to_be_ideated").length;
+  const beatsStageMax = Math.max(approvedBeats, reviewPendingBeats, abandonedBeats, iterateBeats, toBeIdeatedBeats, 1);
+
+  const weekStart = String(overviewData?.weekStart || "").slice(0, 10);
+  const weekEnd = String(overviewData?.weekEnd || "").slice(0, 10);
+
+  const freshTakeSourceRows = useMemo(() => {
+    const allowedSources = new Set(["editorial", "ready_for_production", "production", "live"]);
+    return allWorkflowRows.filter((row) => {
+      if (!allowedSources.has(String(row?.source || ""))) return false;
+      const date = String(row?.leadSubmittedDate || "").slice(0, 10);
+      if (weekStart && date < weekStart) return false;
+      if (weekEnd && date > weekEnd) return false;
+      const rt = String(row?.reworkType || "").trim().toLowerCase();
+      return rt === "fresh take" || rt === "fresh takes";
+    });
+  }, [allWorkflowRows, weekStart, weekEnd]);
+
+  const freshTakeCount = freshTakeSourceRows.length;
+  const freshTakeRemainingCount = freshTakeSourceRows.filter((r) => r?.source === "editorial").length;
+
+  const productionStageCounts = useMemo(() => {
+    const stagePriority = { editorial: 1, ready_for_production: 2, production: 3, live: 4 };
+    const allowedStages = new Set(Object.keys(stagePriority));
+    const byAsset = new Map();
+    const cohortKeys = new Set();
+
+    for (const row of allWorkflowRows) {
+      const source = String(row?.source || "");
+      if (!allowedStages.has(source)) continue;
+      const key =
+        String(row?.assetCode || "").trim().toLowerCase() ||
+        `${String(row?.showName || "").trim().toLowerCase()}|${String(row?.beatName || "").trim().toLowerCase()}`;
+      if (!key) continue;
+      if (!byAsset.has(key)) byAsset.set(key, []);
+      byAsset.get(key).push(row);
+      const leadDate = String(row?.leadSubmittedDate || "").slice(0, 10);
+      if (weekStart && leadDate < weekStart) continue;
+      if (weekEnd && leadDate > weekEnd) continue;
+      const rt = String(row?.reworkType || "").trim().toLowerCase();
+      if (rt !== "fresh take" && rt !== "fresh takes") continue;
+      cohortKeys.add(key);
+    }
+
+    const counts = { editorial: 0, ready: 0, production: 0, live: 0 };
+    for (const key of cohortKeys) {
+      const rows = byAsset.get(key) || [];
+      let bestStage = "editorial";
+      for (const row of rows) {
+        const source = String(row?.source || "");
+        if (!allowedStages.has(source)) continue;
+        if (stagePriority[source] > stagePriority[bestStage]) bestStage = source;
+      }
+      if (bestStage === "ready_for_production") counts.ready += 1;
+      else if (bestStage === "production") counts.production += 1;
+      else if (bestStage === "live") counts.live += 1;
+      else counts.editorial += 1;
+    }
+    return { ...counts, totalCohort: cohortKeys.size };
+  }, [allWorkflowRows, weekStart, weekEnd]);
+
+  const productionStageTotal = (productionStageCounts.ready || 0) + (productionStageCounts.production || 0) + (productionStageCounts.live || 0);
+  const productionStageMax = Math.max(productionStageCounts.ready, productionStageCounts.production, productionStageCounts.live, 1);
+  const successfulAdsCount = fullGenAiRows.filter((r) => r.success).length;
+  const hitRatePercent = fullGenAiRows.length > 0 ? (successfulAdsCount / fullGenAiRows.length) * 100 : 0;
+
+  return (
+    <div className="metric-grid four-col">
+      <MetricCard
+        label="Total Beats"
+        info="Counts unique ideation rows by Beats completed date (Beats assigned date as fallback) inside the selected date range."
+        body={
+          <>
+            <div className="metric-value">{loading ? "..." : formatMetricValue(totalBeats)}</div>
+            {!loading && (
+              <div className="overview-mini-bar-stack">
+                <MiniBarRow label="Approved"       value={approvedBeats}      max={beatsStageMax} color="#2d5a3d" />
+                <MiniBarRow label="Review pending" value={reviewPendingBeats} max={beatsStageMax} color="var(--terracotta)" />
+                <MiniBarRow label="Abandoned"      value={abandonedBeats}     max={beatsStageMax} color="#7d5a3a" />
+                <MiniBarRow label="Iterate"        value={iterateBeats}       max={beatsStageMax} color="var(--red)" />
+                <MiniBarRow label="To be ideated"  value={toBeIdeatedBeats}   max={beatsStageMax} color="#7a7a7a" />
+              </div>
+            )}
+          </>
+        }
+      />
+      <MetricCard
+        label="Fresh take"
+        info='Overall count / Remaining count. "Date submitted by Lead" in range; remaining = still in Editorial.'
+        body={
+          <>
+            <div className="metric-value">
+              {loading ? "..." : `${formatMetricValue(freshTakeCount)} / ${formatMetricValue(freshTakeRemainingCount)}`}
+            </div>
+            {!loading && (
+              <div className="overview-mini-bar-stack">
+                <MiniBarRow label="Overall count"   value={freshTakeCount}          max={Math.max(freshTakeCount, 1)} color="var(--forest)" />
+                <MiniBarRow label="Remaining count" value={freshTakeRemainingCount} max={Math.max(freshTakeCount, 1)} color="var(--terracotta)" />
+              </div>
+            )}
+          </>
+        }
+      />
+      <MetricCard
+        label="Production"
+        hint="Fresh Take cohort status by stage"
+        info='Fresh Take assets whose "Date submitted by Lead" is in range, showing their current highest stage.'
+        body={
+          <>
+            <div className="metric-value">{loading ? "..." : formatMetricValue(productionStageTotal)}</div>
+            {!loading && (
+              <div className="overview-mini-bar-stack">
+                <MiniBarRow label="Ready for Production" value={productionStageCounts.ready}      max={productionStageMax} color="var(--forest)" />
+                <MiniBarRow label="Production"           value={productionStageCounts.production} max={productionStageMax} color="#3f8f83" />
+                <MiniBarRow label="Live"                 value={productionStageCounts.live}       max={productionStageMax} color="#2d5a3d" />
+              </div>
+            )}
+          </>
+        }
+      />
+      <MetricCard
+        label="Hit Rate"
+        hint={loading ? "" : `${formatMetricValue(successfulAdsCount)} of ${formatMetricValue(fullGenAiRows.length)} assets`}
+        info="Hit rate = successful ads / total GI/GA assets in selected range."
+        body={
+          <>
+            <div className="metric-value">{loading ? "..." : fullGenAiRows.length > 0 ? formatPercent(hitRatePercent) : "-"}</div>
+            {!loading && <ProgressBar value={Number(hitRatePercent || 0)} target={100} color="var(--forest)" />}
+          </>
+        }
+      />
+    </div>
+  );
+}
+
 export function MetricCard({
   label,
   value,
@@ -548,10 +715,11 @@ export class PlannerErrorBoundary extends Component {
 
 // ─── Shared ACD Collapsible Table ─────────────────────────────────────────────
 
-function buildCdAcdRows(acdMetricsData) {
+function buildCdAcdRows(acdMetricsData, timeView) {
+  const safeTimeView = timeView === "rolling14" || timeView === "rolling30" ? timeView : "rolling7";
   const trackedTeams = Array.isArray(acdMetricsData?.trackedTeams) ? acdMetricsData.trackedTeams : [];
-  const cdRowsRaw = Array.isArray(acdMetricsData?.rolling7CdRows) ? acdMetricsData.rolling7CdRows : [];
-  const acdRowsRaw = Array.isArray(acdMetricsData?.rolling7Rows) ? acdMetricsData.rolling7Rows : [];
+  const cdRowsRaw = Array.isArray(acdMetricsData?.[`${safeTimeView}CdRows`]) ? acdMetricsData[`${safeTimeView}CdRows`] : [];
+  const acdRowsRaw = Array.isArray(acdMetricsData?.[`${safeTimeView}Rows`]) ? acdMetricsData[`${safeTimeView}Rows`] : [];
   const cdMap = Object.fromEntries(cdRowsRaw.map((r) => [r.cdName, { totalMinutes: Number(r.totalMinutes || 0), totalImages: Number(r.totalImages || 0) }]));
   const acdMap = Object.fromEntries(acdRowsRaw.map((r) => [r.acdName, { totalMinutes: Number(r.totalMinutes || 0), totalImages: Number(r.totalImages || 0) }]));
   return trackedTeams
@@ -568,28 +736,38 @@ function buildCdAcdRows(acdMetricsData) {
 
 export function AcdCollapsibleTable({ acdMetricsData, acdMetricsLoading }) {
   const [expandedCds, setExpandedCds] = useState({});
+  const [timeView, setTimeView] = useState("rolling7");
   const latestWorkDateLabel = acdMetricsData?.latestWorkDate ? formatDateLabel(acdMetricsData.latestWorkDate) : "";
-  const rows = buildCdAcdRows(acdMetricsData);
+  const rows = buildCdAcdRows(acdMetricsData, timeView);
   const allExpanded = rows.length > 0 && rows.every((r) => Boolean(expandedCds[r.cdName]));
+  const timeViewLabel = getAcdTimeViewLabel(timeView);
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 600 }}>CD productivity</div>
           <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 2 }}>
-            Rolling 7D by total minutes{latestWorkDateLabel ? ` · Latest synced: ${latestWorkDateLabel}` : ""}
+            {timeViewLabel} by total minutes{latestWorkDateLabel ? ` · Latest synced: ${latestWorkDateLabel}` : ""}
           </div>
         </div>
-        {rows.length > 0 && (
-          <button
-            type="button"
-            className="ghost-button overview-section-link"
-            onClick={() => setExpandedCds(allExpanded ? {} : Object.fromEntries(rows.map((r) => [r.cdName, true])))}
-          >
-            {allExpanded ? "Collapse all" : "Expand all ACDs"}
-          </button>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <ToggleGroup
+            label="Time View"
+            options={ACD_TIME_OPTIONS}
+            value={timeView}
+            onChange={(v) => { setTimeView(v); setExpandedCds({}); }}
+          />
+          {rows.length > 0 && (
+            <button
+              type="button"
+              className="ghost-button overview-section-link"
+              onClick={() => setExpandedCds(allExpanded ? {} : Object.fromEntries(rows.map((r) => [r.cdName, true])))}
+            >
+              {allExpanded ? "Collapse all" : "Expand all ACDs"}
+            </button>
+          )}
+        </div>
       </div>
       {acdMetricsLoading ? (
         <div style={{ fontSize: 12, color: "var(--subtle)" }}>Loading production data…</div>

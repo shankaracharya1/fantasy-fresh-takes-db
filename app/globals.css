@@ -3855,3 +3855,66 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* ─── Show Wise Table ─────────────────────────────────────────────────────── */
+.show-wise-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.show-wise-table th {
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 2px solid var(--border);
+  vertical-align: bottom;
+}
+.show-wise-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.show-wise-subhead {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--subtle);
+  margin-top: 2px;
+}
+.show-wise-pod-cell {
+  vertical-align: top;
+  border-right: 2px solid var(--border);
+  min-width: 100px;
+}
+.show-wise-pod-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+.show-wise-writer-count {
+  font-style: italic;
+  font-size: 11px;
+  color: var(--subtle);
+  margin-top: 2px;
+}
+.show-wise-pod-total-row td {
+  background: var(--surface-warm, #f5f0ea);
+  font-weight: 600;
+}
+.show-wise-total-label {
+  font-weight: 700;
+  font-size: 13px;
+}
+.show-wise-total {
+  font-weight: 700;
+  font-size: 13px;
+}
+.show-wise-show-name {
+  color: var(--ink);
+}
+.show-wise-beat-list {
+  font-size: 10px;
+  color: var(--subtle);
+  margin-top: 2px;
+  line-height: 1.4;
+}

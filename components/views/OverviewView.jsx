@@ -1,8 +1,8 @@
 "use client";
-import { useState, useRef, Fragment } from "react";
+import { useState, useRef, useMemo, Fragment } from "react";
 
 import {
-  AcdCollapsibleTable,
+  BeatsSummaryCards,
   MetricCard,
   ProgressBar,
   ReadinessRow,
@@ -579,6 +579,177 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
   );
 }
 
+// ─── Beats Overview Table ────────────────────────────────────────────────────
+
+// Beat rows have monthKey ("2026-04") and weekInMonth (1-4) set by the API
+// using Math.min(4, Math.floor((day-1)/7)+1). We match on those fields directly
+// rather than date ranges so the counts stay identical to the source data.
+
+function getMonthShort(monthKey) {
+  const [y, m] = String(monthKey || "").split("-").map(Number);
+  if (!y || !m) return "";
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+}
+
+// Compute {monthKey, weekInMonth} for today, then step back n weeks.
+// Each month has exactly 4 weeks (API caps at 4), so stepping back is:
+//   weekInMonth-- ; if < 1 → weekInMonth=4, month--
+function stepBackWeeks(monthKey, weekInMonth, steps) {
+  let [y, m] = String(monthKey).split("-").map(Number);
+  let wk = weekInMonth;
+  for (let i = 0; i < steps; i++) {
+    wk--;
+    if (wk < 1) { wk = 4; m--; if (m < 1) { m = 12; y--; } }
+  }
+  return { monthKey: `${y}-${String(m).padStart(2, "0")}`, weekInMonth: wk };
+}
+
+// Current week + 3 previous weeks, newest first (index 0 = current).
+function computeFourBeatsWeeks() {
+  const now = new Date();
+  const day = now.getDate();
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
+  const monthKey = `${y}-${String(m).padStart(2, "0")}`;
+  const weekInMonth = Math.min(4, Math.floor((day - 1) / 7) + 1);
+
+  return [0, 1, 2, 3].map((offset) => {
+    const { monthKey: mk, weekInMonth: wk } = stepBackWeeks(monthKey, weekInMonth, offset);
+    return { monthKey: mk, weekInMonth: wk, label: `${getMonthShort(mk)} Week ${wk}` };
+  });
+}
+
+function BeatsOverviewTable({ allBeatRows = [], loading = false }) {
+  const [expandedPods, setExpandedPods] = useState(new Set());
+
+  // Stable for the lifetime of the session — today doesn't change mid-session
+  const weeks = useMemo(() => computeFourBeatsWeeks(), []);
+
+  const podMap = useMemo(() => {
+    if (!weeks.length) return new Map();
+    const map = new Map();
+    for (const row of allBeatRows) {
+      if (row?.statusCategory !== "approved") continue;
+      const pod = String(row?.podLeadName || "").trim() || "Unknown";
+      const writer = String(row?.writerName || "").trim() || "Unknown";
+      // Match using the same monthKey + weekInMonth fields the API already computed
+      const weekIdx = weeks.findIndex(
+        (w) => w.monthKey === row.monthKey && w.weekInMonth === row.weekInMonth
+      );
+      if (weekIdx < 0) continue;
+
+      if (!map.has(pod)) map.set(pod, { writers: new Map(), weekCounts: [0, 0, 0, 0], total: 0 });
+      const podEntry = map.get(pod);
+      podEntry.weekCounts[weekIdx]++;
+      podEntry.total++;
+
+      if (!podEntry.writers.has(writer)) podEntry.writers.set(writer, { weekCounts: [0, 0, 0, 0], total: 0 });
+      const writerEntry = podEntry.writers.get(writer);
+      writerEntry.weekCounts[weekIdx]++;
+      writerEntry.total++;
+    }
+    return map;
+  }, [allBeatRows, weeks]);
+
+  const podRows = useMemo(() =>
+    Array.from(podMap.entries())
+      .map(([pod, data]) => ({
+        podLeadName: pod,
+        total: data.total,
+        weekCounts: data.weekCounts,
+        writerRows: Array.from(data.writers.entries())
+          .map(([writer, wd]) => ({ writerName: writer, total: wd.total, weekCounts: wd.weekCounts }))
+          .sort((a, b) => b.total - a.total || a.writerName.localeCompare(b.writerName)),
+      }))
+      .sort((a, b) => b.total - a.total || a.podLeadName.localeCompare(b.podLeadName)),
+  [podMap]);
+
+  const grandTotal = podRows.reduce((s, r) => s + r.total, 0);
+  const weekTotals = weeks.map((_, i) => podRows.reduce((s, r) => s + r.weekCounts[i], 0));
+
+  const togglePod = (name) => setExpandedPods((prev) => {
+    const next = new Set(prev);
+    next.has(name) ? next.delete(name) : next.add(name);
+    return next;
+  });
+
+  const colCount = 2 + weeks.length;
+
+  return (
+    <div>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Beats Overview</div>
+      <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 8 }}>
+        Approved beats only · based on Beats completed date · current week → past 3 weeks
+      </div>
+      <div className="table-wrap">
+        <table className="ops-table overview-table">
+          <thead>
+            <tr>
+              <th>POD / Beats owner</th>
+              <th style={{ textAlign: "center" }}>Beats count</th>
+              {weeks.map((w) => (
+                <th key={w.label} style={{ textAlign: "center" }}>{w.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={colCount} style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+            ) : podRows.length === 0 ? (
+              <tr><td colSpan={colCount} style={{ color: "var(--subtle)" }}>No approved beats found for this period.</td></tr>
+            ) : (
+              <>
+                {podRows.flatMap((pod) => {
+                  const isExpanded = expandedPods.has(pod.podLeadName);
+                  return [
+                    <tr key={`pod-${pod.podLeadName}`} style={{ cursor: pod.writerRows.length ? "pointer" : undefined, userSelect: "none" }} onClick={() => pod.writerRows.length && togglePod(pod.podLeadName)}>
+                      <td style={{ fontWeight: 700 }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          {pod.writerRows.length > 0 && (
+                            <span style={{ fontSize: 10, width: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--subtle-bg, #f0ece4)", borderRadius: 3, color: "var(--subtle)", flexShrink: 0 }}>
+                              {isExpanded ? "▾" : "▸"}
+                            </span>
+                          )}
+                          {pod.podLeadName}
+                          {pod.writerRows.length > 0 && (
+                            <span style={{ fontWeight: 400, fontSize: 11, color: "var(--subtle)" }}>
+                              {pod.writerRows.length} writer{pod.writerRows.length !== 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: "center", fontWeight: 700, color: "#2d5a3d" }}>{pod.total}</td>
+                      {pod.weekCounts.map((count, i) => (
+                        <td key={i} style={{ textAlign: "center" }}>{count > 0 ? count : "—"}</td>
+                      ))}
+                    </tr>,
+                    ...(isExpanded ? pod.writerRows.map((writer) => (
+                      <tr key={`writer-${pod.podLeadName}-${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
+                        <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>• {writer.writerName}</td>
+                        <td style={{ textAlign: "center", fontSize: 12, fontWeight: 600 }}>{writer.total}</td>
+                        {writer.weekCounts.map((count, i) => (
+                          <td key={i} style={{ textAlign: "center", fontSize: 12 }}>{count > 0 ? count : "—"}</td>
+                        ))}
+                      </tr>
+                    )) : []),
+                  ];
+                })}
+                <tr style={{ borderTop: "2px solid var(--border)", background: "var(--subtle-bg, #f0ece4)", fontWeight: 700 }}>
+                  <td>Total</td>
+                  <td style={{ textAlign: "center" }}>{grandTotal}</td>
+                  {weekTotals.map((t, i) => (
+                    <td key={i} style={{ textAlign: "center" }}>{t > 0 ? t : "—"}</td>
+                  ))}
+                </tr>
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sub-views ────────────────────────────────────────────────────────────────
 
 export function OverviewCurrentWeek({ overviewData, overviewLoading, overviewError, middleSlot }) {
@@ -657,70 +828,6 @@ export function OverviewLastWeek({ overviewData, overviewLoading, overviewError,
     <div className="section-stack">
       {middleSlot}
 
-      {Array.isArray(overviewData?.beatsFunnel) && overviewData.beatsFunnel.length > 0 && (
-        <>
-          <hr className="section-divider" />
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Beats funnel</div>
-            <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 12 }}>Show and beat level breakdown for last week</div>
-            <table className="beats-funnel-table">
-              <colgroup>
-                <col className="col-show" />
-                <col className="col-beat" />
-                <col className="col-attempts" />
-                <col className="col-success" />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th>SHOW</th>
-                  <th>BEAT</th>
-                  <th className="col-right">ATTEMPTS</th>
-                  <th className="col-right">SUCCESSFUL</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  const rows = overviewData.beatsFunnel;
-                  const rendered = [];
-                  let i = 0;
-                  while (i < rows.length) {
-                    const showName = rows[i].showName;
-                    let j = i;
-                    while (j < rows.length && rows[j].showName === showName) j++;
-                    const span = j - i;
-                    for (let k = i; k < j; k++) {
-                      const row = rows[k];
-                      const isSuccess = row.successfulAttempts > 0;
-                      rendered.push(
-                        <tr key={`${row.showName}-${row.beatName}`} className={isSuccess ? "beats-funnel-success" : ""}>
-                          {k === i && (
-                            <td rowSpan={span} style={{ fontSize: 12, fontWeight: 500, color: "var(--subtle)" }}>
-                              {row.showName}
-                            </td>
-                          )}
-                          <td>{row.beatName}</td>
-                          <td className="col-right" style={{ fontWeight: 500 }}>{row.attempts}</td>
-                          <td
-                            className="col-right"
-                            style={{
-                              fontWeight: 500,
-                              color: row.successfulAttempts > 0 ? "#2d5a3d" : "var(--gray-light, #D3D1C7)",
-                            }}
-                          >
-                            {row.successfulAttempts}
-                          </td>
-                        </tr>
-                      );
-                    }
-                    i = j;
-                  }
-                  return rendered;
-                })()}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -855,52 +962,173 @@ export function OverviewNextWeek({ overviewData, overviewLoading, overviewError,
 }
 
 
-// ─── Main View ────────────────────────────────────────────────────────────────
+// ─── Show Wise Table ─────────────────────────────────────────────────────────
 
-function MiniBar({ label, value, total, color }) {
-  const pct = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
+function swNormDate(v) { return String(v || "").trim().slice(0, 10); }
+function swInRange(d, start, end) {
+  const date = swNormDate(d);
+  if (!date) return false;
+  if (start && date < start) return false;
+  if (end && date > end) return false;
+  return true;
+}
+function swIsApproved(status) {
+  return String(status || "").toLowerCase().includes("approved for production by cl");
+}
+function swDateShort(ymd) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ""))) return "";
+  const [, m, d] = String(ymd).split("-").map(Number);
+  return `${d} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m - 1]}`;
+}
+
+function ShowWiseTable({ allWorkflowRows = [], allAnalyticsRows = [], weekStart, weekEnd, loading = false }) {
+  const pods = useMemo(() => {
+    const podMap = new Map();
+
+    const getOrCreate = (map, key, factory) => { if (!map.has(key)) map.set(key, factory()); return map.get(key); };
+
+    // Workflow rows → show list + Submit to Prod + Live
+    for (const row of allWorkflowRows) {
+      const pod = String(row.podLeadName || "").trim();
+      const show = String(row.showName || "").trim();
+      if (!pod || !show) continue;
+
+      const source = String(row.source || "");
+      const podKey = pod.toLowerCase();
+      const showKey = show.toLowerCase();
+
+      if (source === "editorial" || source === "ready_for_production" || source === "production") {
+        const dateCheck = swNormDate(row.strictLeadSubmittedDate || row.leadSubmittedDate || row.stageDate);
+        if (!swInRange(dateCheck, weekStart, weekEnd)) continue;
+        // Editorial rows must also be Approved for Production by CL
+        if (source === "editorial" && !swIsApproved(row.scriptStatus || row.status)) continue;
+
+        const podEntry = getOrCreate(podMap, podKey, () => ({ podName: pod, writers: new Set(), showMap: new Map() }));
+        if (row.writerName) podEntry.writers.add(String(row.writerName).trim());
+        const showEntry = getOrCreate(podEntry.showMap, showKey, () => ({ showName: show, submitToProd: 0, live: 0, successBeats: new Set(), promisingBeats: new Set() }));
+        if (swIsApproved(row.scriptStatus || row.status)) showEntry.submitToProd++;
+      }
+
+      if (source === "live") {
+        const liveDate = swNormDate(row.finalUploadDate || row.stageDate);
+        if (!swInRange(liveDate, weekStart, weekEnd)) continue;
+
+        const podEntry = getOrCreate(podMap, podKey, () => ({ podName: pod, writers: new Set(), showMap: new Map() }));
+        if (row.writerName) podEntry.writers.add(String(row.writerName).trim());
+        const showEntry = getOrCreate(podEntry.showMap, showKey, () => ({ showName: show, submitToProd: 0, live: 0, successBeats: new Set(), promisingBeats: new Set() }));
+        showEntry.live++;
+      }
+    }
+
+    // Analytics rows → Success / Promising per show
+    for (const row of allAnalyticsRows) {
+      const show = String(row.showName || "").trim();
+      const pod = String(row.podLeadName || "").trim();
+      if (!show) continue;
+      if (!swInRange(swNormDate(row.liveDate), weekStart, weekEnd)) continue;
+      const cpi = Number(row.cpiUsd);
+      if (!Number.isFinite(cpi) || cpi <= 0) continue;
+
+      const beatLabel = String(row.beatName || row.assetCode || "").trim();
+      const showKey = show.toLowerCase();
+      const podKey = pod.toLowerCase();
+
+      let showEntry = null;
+      if (pod && podMap.has(podKey) && podMap.get(podKey).showMap.has(showKey)) {
+        showEntry = podMap.get(podKey).showMap.get(showKey);
+      } else {
+        for (const pe of podMap.values()) {
+          if (pe.showMap.has(showKey)) { showEntry = pe.showMap.get(showKey); break; }
+        }
+      }
+      if (!showEntry) continue;
+      if (cpi < 6) showEntry.successBeats.add(beatLabel);
+      if (cpi < 10) showEntry.promisingBeats.add(beatLabel);
+    }
+
+    return Array.from(podMap.values())
+      .map(({ podName, writers, showMap }) => {
+        const shows = Array.from(showMap.values())
+          .sort((a, b) => (b.submitToProd + b.live) - (a.submitToProd + a.live) || a.showName.localeCompare(b.showName));
+        const total = {
+          submitToProd: shows.reduce((s, sh) => s + sh.submitToProd, 0),
+          live: shows.reduce((s, sh) => s + sh.live, 0),
+          success: shows.reduce((s, sh) => s + sh.successBeats.size, 0),
+          promising: shows.reduce((s, sh) => s + sh.promisingBeats.size, 0),
+        };
+        return { podName, writerCount: writers.size, shows, total };
+      })
+      .sort((a, b) => (b.total.submitToProd + b.total.live) - (a.total.submitToProd + a.total.live) || a.podName.localeCompare(b.podName));
+  }, [allWorkflowRows, allAnalyticsRows, weekStart, weekEnd]);
+
+  const dateRangeLabel = (weekStart && weekEnd)
+    ? `${swDateShort(weekStart)} – ${swDateShort(weekEnd)}`
+    : "";
+
+  if (loading) return <div style={{ color: "var(--subtle)", fontSize: 13, padding: "12px 0" }}>Loading…</div>;
+  if (!pods.length) return <div style={{ color: "var(--subtle)", fontSize: 13, padding: "12px 0" }}>No show data for selected range.</div>;
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-      <span style={{ width: 26, fontSize: 11, fontWeight: 600, color: "var(--ink-secondary, #3a3530)", textAlign: "right", flexShrink: 0 }}>{value}</span>
-      <div style={{ flex: 1, height: 8, borderRadius: 4, background: "var(--surface, #ece8e1)", overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: "100%", borderRadius: 4, background: color, transition: "width 0.4s ease" }} />
-      </div>
-      <span style={{ width: 90, fontSize: 10, color: "var(--subtle)", flexShrink: 0, textAlign: "left" }}>{label}</span>
+    <div className="table-wrap">
+      <table className="ops-table show-wise-table">
+        <thead>
+          <tr>
+            <th>POD</th>
+            <th>Show</th>
+            <th>Submitted to Prod</th>
+            <th>
+              Live
+              {dateRangeLabel && <div className="show-wise-subhead">{dateRangeLabel}</div>}
+            </th>
+            <th>Success<div className="show-wise-subhead">{"< $6 CPI"}</div></th>
+            <th>Promising<div className="show-wise-subhead">{"< $10 CPI"}</div></th>
+          </tr>
+        </thead>
+        <tbody>
+          {pods.map(({ podName, writerCount, shows, total }) => (
+            <Fragment key={`pod-${podName}`}>
+              <tr className="show-wise-pod-total-row">
+                <td rowSpan={shows.length + 1} className="show-wise-pod-cell">
+                  <div className="show-wise-pod-name">{podName}</div>
+                  {writerCount > 0 && <div className="show-wise-writer-count">({writerCount} writers)</div>}
+                </td>
+                <td className="show-wise-total-label">Total</td>
+                <td className="show-wise-total">{total.submitToProd > 0 ? total.submitToProd : "—"}</td>
+                <td className="show-wise-total">{total.live > 0 ? total.live : "—"}</td>
+                <td className="show-wise-total">{total.success > 0 ? total.success : "—"}</td>
+                <td className="show-wise-total">{total.promising > 0 ? total.promising : "—"}</td>
+              </tr>
+              {shows.map((sh) => (
+                <tr key={`${podName}-${sh.showName}`} className="show-wise-show-row">
+                  <td className="show-wise-show-name">{sh.showName}</td>
+                  <td>{sh.submitToProd > 0 ? sh.submitToProd : ""}</td>
+                  <td>{sh.live > 0 ? sh.live : ""}</td>
+                  <td>
+                    {sh.successBeats.size > 0 ? (
+                      <><span>{sh.successBeats.size}</span><div className="show-wise-beat-list">{Array.from(sh.successBeats).join(" / ")}</div></>
+                    ) : ""}
+                  </td>
+                  <td>
+                    {sh.promisingBeats.size > 0 ? (
+                      <><span>{sh.promisingBeats.size}</span><div className="show-wise-beat-list">{Array.from(sh.promisingBeats).join(" / ")}</div></>
+                    ) : ""}
+                  </td>
+                </tr>
+              ))}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-
-function normalizeDateOnly(value) {
-  return String(value || "").trim().slice(0, 10);
-}
-
-function isDateInSelectedRange(value, startDate, endDate) {
-  const date = normalizeDateOnly(value);
-  if (!date) return false;
-  if (startDate && date < startDate) return false;
-  if (endDate && date > endDate) return false;
-  return true;
-}
-
-function isFreshTakeType(value) {
-  const rt = String(value || "").trim().toLowerCase();
-  return rt === "fresh take" || rt === "fresh takes";
-}
-
-function getWorkflowAssetKey(row) {
-  return (
-    String(row?.assetCode || "").trim().toLowerCase() ||
-    `${String(row?.showName || "").trim().toLowerCase()}|${String(row?.beatName || "").trim().toLowerCase()}`
-  );
-}
+// ─── Main View ────────────────────────────────────────────────────────────────
 
 export default function OverviewContent({
   overviewData,
   overviewLoading,
   overviewError,
-  acdMetricsData,
-  acdMetricsLoading,
   leadershipOverviewData,
   leadershipOverviewLoading,
   onShare,
@@ -911,124 +1139,14 @@ export default function OverviewContent({
   const notes = buildOverviewNotes({ overviewError, overviewData });
   const weekLabel = overviewData?.weekLabel || "";
   const selectionMode = String(overviewData?.selectionMode || "");
+  const weekStart = swNormDate(overviewData?.weekStart);
+  const weekEnd = swNormDate(overviewData?.weekEnd);
   const podThroughputRows = Array.isArray(leadershipOverviewData?.podThroughputRows) ? leadershipOverviewData.podThroughputRows : [];
   const editorialPodRows = Array.isArray(overviewData?.editorialPodRows) ? overviewData.editorialPodRows : [];
-  const podBreakdownRows = Array.isArray(overviewData?.podBreakdownRows) ? overviewData.podBreakdownRows : [];
-
   const allBeatRows = Array.isArray(leadershipOverviewData?.allBeatRows) ? leadershipOverviewData.allBeatRows : [];
   const allWorkflowRows = Array.isArray(leadershipOverviewData?.allWorkflowRows) ? leadershipOverviewData.allWorkflowRows : [];
-  const weekStart = normalizeDateOnly(overviewData?.weekStart);
-  const weekEnd = normalizeDateOnly(overviewData?.weekEnd);
-
-  // Beat breakdown — single filter pass
-  const weekBeatRows = allBeatRows.filter((row) =>
-    isDateInSelectedRange(normalizeDateOnly(row?.completedDate), weekStart, weekEnd)
-  );
-  const totalBeats = weekBeatRows.length;
-  const beatBreakdown = {
-    approved:      weekBeatRows.filter((r) => r.statusCategory === "approved").length,
-    abandoned:     weekBeatRows.filter((r) => r.statusCategory === "abandoned").length,
-    reviewPending: weekBeatRows.filter((r) => r.statusCategory === "review_pending").length,
-    iterate:       weekBeatRows.filter((r) => r.statusCategory === "iterate").length,
-    toBeIdeated:   weekBeatRows.filter((r) => r.statusCategory === "to_be_ideated").length,
-  };
-  const approvedBeatsCount = beatBreakdown.approved;
-
-  // Fresh Take cohort:
-  // 1) pick assets with Fresh Take + Date submitted by Lead in selected range
-  // 2) for those assets, compute current highest stage across workflow
-  const stageSources = new Set(["editorial", "ready_for_production", "production", "live"]);
-  const workflowStageRows = allWorkflowRows.filter((row) => stageSources.has(row?.source));
-  const cohortAssetKeys = new Set(
-    workflowStageRows
-      .filter((row) => isDateInSelectedRange(normalizeDateOnly(row?.strictLeadSubmittedDate), weekStart, weekEnd))
-      .filter((row) => isFreshTakeType(row?.reworkType))
-      .map((row) => getWorkflowAssetKey(row))
-      .filter(Boolean)
-  );
-  const stagePriority = {
-    editorial: 1,
-    ready_for_production: 2,
-    production: 3,
-    live: 4,
-  };
-  const stageByAsset = new Map();
-  for (const row of workflowStageRows) {
-    const key = getWorkflowAssetKey(row);
-    if (!key || !cohortAssetKeys.has(key)) continue;
-    const stage = String(row?.source || "");
-    if (!stagePriority[stage]) continue;
-    const current = stageByAsset.get(key);
-    if (!current || stagePriority[stage] > stagePriority[current]) {
-      stageByAsset.set(key, stage);
-    }
-  }
-  const ftBreakdown = { editorial: 0, readyForProduction: 0, production: 0, live: 0 };
-  for (const stage of stageByAsset.values()) {
-    if (stage === "ready_for_production") ftBreakdown.readyForProduction += 1;
-    else if (stage === "production") ftBreakdown.production += 1;
-    else if (stage === "live") ftBreakdown.live += 1;
-    else ftBreakdown.editorial += 1;
-  }
-  const freshTakeCount = cohortAssetKeys.size;
-  const freshTakeEditorialRemainingCount = new Set(
-    workflowStageRows
-      .filter((row) => row?.source === "editorial")
-      .filter((row) => isDateInSelectedRange(normalizeDateOnly(row?.strictLeadSubmittedDate), weekStart, weekEnd))
-      .filter((row) => isFreshTakeType(row?.reworkType))
-      .map((row) => getWorkflowAssetKey(row))
-      .filter(Boolean)
-  ).size;
-
+  const allAnalyticsRows = Array.isArray(leadershipOverviewData?.allAnalyticsRows) ? leadershipOverviewData.allAnalyticsRows : [];
   const podLoading = leadershipOverviewLoading || overviewLoading;
-
-  const [progressView, setProgressView] = useState("pod");
-  const [hoveredProgressKey, setHoveredProgressKey] = useState(null);
-
-  const weekWorkflowRows = workflowStageRows.filter((row) =>
-    isDateInSelectedRange(normalizeDateOnly(row?.leadSubmittedDate), weekStart, weekEnd)
-  );
-  const weekEditorialRows = weekWorkflowRows.filter((r) => r.source === "editorial");
-  const weekReadyProdRows = weekWorkflowRows.filter((r) => r.source === "ready_for_production" || r.source === "production");
-  const weekLiveRows = weekWorkflowRows.filter((r) => r.source === "live");
-  const progressGetKey = (row) => String((progressView === "writer" ? row?.writerName : row?.podLeadName) || "").trim();
-
-  const progressGroupMap = new Map();
-  for (const row of weekBeatRows) {
-    const key = progressGetKey(row);
-    if (!key) continue;
-    if (!progressGroupMap.has(key)) progressGroupMap.set(key, { label: key, approved: 0 });
-    if (row.statusCategory === "approved") progressGroupMap.get(key).approved += 1;
-  }
-  for (const row of weekWorkflowRows) {
-    const key = progressGetKey(row);
-    if (key && !progressGroupMap.has(key)) progressGroupMap.set(key, { label: key, approved: 0 });
-  }
-  const progressRows = Array.from(progressGroupMap.values())
-    .map((entry) => {
-      const { label } = entry;
-      const editorialCount = weekEditorialRows.filter((r) => progressGetKey(r) === label).length;
-      const readyProductionCount = weekReadyProdRows.filter((r) => progressGetKey(r) === label).length;
-      const liveCount = weekLiveRows.filter((r) => progressGetKey(r) === label).length;
-      const details = [
-        ...weekBeatRows
-          .filter((r) => r.statusCategory === "approved" && progressGetKey(r) === label)
-          .map((r, i) => ({ id: `approved-${r.id || i}`, beatName: r.beatName || "-", stageLabel: r.statusLabel || "Approved", etaLabel: "-", tone: "approved" })),
-        ...weekEditorialRows
-          .filter((r) => progressGetKey(r) === label)
-          .map((r, i) => ({ id: `editorial-${r.assetCode || r.scriptCode || i}`, beatName: r.beatName || r.scriptCode || "-", stageLabel: r.stageLabel || "Editorial", etaLabel: r.stageDate || "-", tone: "editorial" })),
-        ...weekReadyProdRows
-          .filter((r) => progressGetKey(r) === label)
-          .map((r, i) => ({ id: `ready-${r.assetCode || r.scriptCode || i}`, beatName: r.beatName || r.scriptCode || "-", stageLabel: r.stageLabel || "Ready+Prod", etaLabel: r.stageDate || "-", tone: "ready-production" })),
-        ...weekLiveRows
-          .filter((r) => progressGetKey(r) === label)
-          .map((r, i) => ({ id: `live-${r.assetCode || r.scriptCode || i}`, beatName: r.beatName || r.scriptCode || "-", stageLabel: r.stageLabel || "Live", etaLabel: r.stageDate || "-", tone: "live" })),
-      ];
-      const total = entry.approved + editorialCount + readyProductionCount + liveCount;
-      return { ...entry, editorial: editorialCount, readyProduction: readyProductionCount, live: liveCount, details, total };
-    })
-    .filter((entry) => entry.total > 0)
-    .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
 
   return (
     <ShareablePanel
@@ -1051,94 +1169,23 @@ export default function OverviewContent({
           <div key={note} className="warning-note">{note}</div>
         ))}
 
-        <div className="metric-grid four-col" style={{ alignItems: "stretch" }}>
-          <div>
-            <MetricCard
-              label="Total Beats"
-              body={
-                <>
-                  <div className="metric-value">{podLoading ? "..." : formatMetricValue(totalBeats)}</div>
-                  {!podLoading && totalBeats > 0 && (
-                    <div style={{ marginTop: 10 }}>
-                      <MiniBar label="Approved"       value={beatBreakdown.approved}      total={totalBeats} color="var(--forest)" />
-                      <MiniBar label="Abandoned"      value={beatBreakdown.abandoned}     total={totalBeats} color="#7d5a3a" />
-                      <MiniBar label="Review pending" value={beatBreakdown.reviewPending} total={totalBeats} color="var(--terracotta)" />
-                      <MiniBar label="Iterate"        value={beatBreakdown.iterate}       total={totalBeats} color="var(--red)" />
-                      <MiniBar label="To be ideated"  value={beatBreakdown.toBeIdeated}   total={totalBeats} color="#a39e93" />
-                    </div>
-                  )}
-                </>
-              }
-            />
-          </div>
-          <div>
-            <MetricCard
-              label="Fresh Take"
-              body={
-                <>
-                  <div className="metric-value">
-                    {podLoading
-                      ? "..."
-                      : `${formatMetricValue(freshTakeCount)} / ${formatMetricValue(freshTakeEditorialRemainingCount)}`}
-                  </div>
-                  {!podLoading && (
-                    <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 6 }}>
-                      Overall count / Remaining count
-                    </div>
-                  )}
-                </>
-              }
-            />
-          </div>
-          <div>
-            <MetricCard
-              label="Production"
-              body={
-                <>
-                  <div className="metric-value">{podLoading ? "..." : formatMetricValue(freshTakeCount)}</div>
-                  {!podLoading && freshTakeCount > 0 && (
-                    <div style={{ marginTop: 8 }}>
-                      <MiniBar label="Editorial"            value={ftBreakdown.editorial}          total={freshTakeCount} color="var(--terracotta)" />
-                      <MiniBar label="Ready for Production" value={ftBreakdown.readyForProduction} total={freshTakeCount} color="var(--forest)" />
-                      <MiniBar label="Production"           value={ftBreakdown.production}         total={freshTakeCount} color="#3f8f83" />
-                      <MiniBar label="Live"                 value={ftBreakdown.live}               total={freshTakeCount} color="var(--red)" />
-                    </div>
-                  )}
-                  {!podLoading && (
-                    <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 8 }}>
-                      Fresh Take cohort by current stage
-                    </div>
-                  )}
-                </>
-              }
-            />
-          </div>
-          <div>
-            <MetricCard
-              label="Hit Rate"
-              body={
-                <>
-                  <div className="metric-value">
-                    {overviewLoading ? "..." : (overviewData?.hitRate != null ? `${overviewData.hitRate.toFixed(1)}%` : "-")}
-                  </div>
-                  {!overviewLoading && overviewData?.hitRate != null && (
-                    <div style={{ marginTop: 8 }}>
-                      <div style={{ height: 10, borderRadius: 5, background: "var(--surface, #ece8e1)", overflow: "hidden", marginBottom: 6 }}>
-                        <div style={{ width: `${Math.min(100, overviewData.hitRate)}%`, height: "100%", borderRadius: 5, background: "var(--terracotta)", transition: "width 0.4s ease" }} />
-                      </div>
-                      {overviewData?.hitRateNumerator != null && overviewData?.hitRateDenominator != null && (
-                        <div style={{ fontSize: 11, color: "var(--subtle)" }}>
-                          {overviewData.hitRateNumerator} of {overviewData.hitRateDenominator} analytics-eligible
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              }
-            />
-          </div>
-        </div>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Lifecycle Overview</div>
+        <BeatsSummaryCards leadershipOverviewData={leadershipOverviewData} loading={podLoading} />
 
+        <hr className="section-divider" />
+
+        <BeatsOverviewTable allBeatRows={allBeatRows} loading={podLoading} />
+
+        <hr className="section-divider" />
+
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Show Wise</div>
+        <ShowWiseTable
+          allWorkflowRows={allWorkflowRows}
+          allAnalyticsRows={allAnalyticsRows}
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+          loading={podLoading}
+        />
 
         <PodThroughputRankingTable rows={podThroughputRows} loading={podLoading} />
 
@@ -1152,144 +1199,6 @@ export default function OverviewContent({
           return <OverviewLastWeek overviewData={overviewData} overviewLoading={overviewLoading} overviewError={overviewError} />;
         })()}
 
-        <hr className="section-divider" />
-
-        <div className="pod-section-header">
-          <div style={{ display: "grid", gap: 4 }}>
-            <span className="pod-section-title">Progress by Stage</span>
-            <span className="pod-section-subtitle">
-              Compare approved Ideation beats against Editorial, Ready + Production, and Live counts
-            </span>
-          </div>
-          <div className="beats-progress-toggle" role="tablist" aria-label="Progress grouping">
-            <button
-              type="button"
-              className={progressView === "pod" ? "beats-progress-toggle-button is-active" : "beats-progress-toggle-button"}
-              onClick={() => setProgressView("pod")}
-            >
-              POD
-            </button>
-            <button
-              type="button"
-              className={progressView === "writer" ? "beats-progress-toggle-button is-active" : "beats-progress-toggle-button"}
-              onClick={() => setProgressView("writer")}
-            >
-              Writer
-            </button>
-          </div>
-        </div>
-
-        <div className="beats-progress-card">
-          {progressRows.length > 0 ? (
-            <div className="beats-progress-list">
-              {progressRows.map((row) => {
-                const safeTotal = Math.max(row.total, 1);
-                const isHovered = hoveredProgressKey === `${progressView}-${row.label}`;
-                const segments = [
-                  { key: "approved", label: "Approved", value: row.approved, className: "is-approved" },
-                  { key: "editorial", label: "Editorial", value: row.editorial, className: "is-editorial" },
-                  { key: "ready-production", label: "Ready + Production", value: row.readyProduction, className: "is-ready-production" },
-                  { key: "live", label: "Live", value: row.live, className: "is-live" },
-                ];
-                return (
-                  <div
-                    key={`${progressView}-${row.label}`}
-                    className="beats-progress-entry"
-                    onMouseEnter={() => setHoveredProgressKey(`${progressView}-${row.label}`)}
-                    onMouseLeave={() => setHoveredProgressKey((current) => (current === `${progressView}-${row.label}` ? null : current))}
-                  >
-                    <div className="beats-progress-row">
-                      <div className="beats-progress-name">{row.label}</div>
-                      <div className="beats-progress-bar-wrap">
-                        <div className="beats-progress-bar">
-                          {segments.map((segment) => {
-                            if (segment.value <= 0) return null;
-                            const width = `${(segment.value / safeTotal) * 100}%`;
-                            return (
-                              <div
-                                key={`${row.label}-${segment.key}`}
-                                className={`beats-progress-segment ${segment.className}`}
-                                style={{ width }}
-                                title={`${segment.label}: ${segment.value}`}
-                              >
-                                <span>{segment.value}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="beats-progress-legend">
-                          <span className="beats-progress-legend-item"><span className="beats-progress-dot is-approved" />Approved {row.approved}</span>
-                          <span className="beats-progress-legend-item"><span className="beats-progress-dot is-editorial" />Editorial {row.editorial}</span>
-                          <span className="beats-progress-legend-item"><span className="beats-progress-dot is-ready-production" />Ready + Production {row.readyProduction}</span>
-                          <span className="beats-progress-legend-item"><span className="beats-progress-dot is-live" />Live {row.live}</span>
-                        </div>
-                      </div>
-                      <div className="beats-progress-total">{row.total}</div>
-                    </div>
-                    {isHovered ? (
-                      <div className="beats-progress-hover-card">
-                        <div className="beats-progress-hover-head">
-                          <span>{row.label}</span>
-                          <span>{row.details.length} items</span>
-                        </div>
-                        <div className="beats-progress-hover-table">
-                          <div className="beats-progress-hover-header">Angle name</div>
-                          <div className="beats-progress-hover-header">Stage where it is</div>
-                          <div className="beats-progress-hover-header">ETA for promo completion</div>
-                          {row.details.length > 0 ? (
-                            row.details.map((detail) => (
-                              <Fragment key={detail.id}>
-                                <div className={`beats-progress-hover-cell is-${detail.tone || "approved"}`}>{detail.beatName}</div>
-                                <div className={`beats-progress-hover-cell is-${detail.tone || "approved"}`}>{detail.stageLabel || ""}</div>
-                                <div className={`beats-progress-hover-cell is-${detail.tone || "approved"}`}>{detail.etaLabel}</div>
-                              </Fragment>
-                            ))
-                          ) : (
-                            <div className="beats-progress-hover-empty" style={{ gridColumn: "1 / -1" }}>
-                              No detail rows available.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="beats-progress-empty">
-              {podLoading ? "Loading…" : "No progress rows match the selected date range."}
-            </div>
-          )}
-        </div>
-
-        <hr className="section-divider" />
-
-        <div className="panel-card">
-          <div className="overview-table-toolbar" style={{ marginBottom: 10 }}>
-            <div className="overview-table-toolbar-left">
-              <div className="overview-table-toolbar-title">Fresh Take Cohort (Selected Range)</div>
-              <div className="overview-table-toolbar-note">
-                Cohort = Fresh Take assets where Date submitted by Lead is in selected range, then grouped by current highest stage.
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <MiniBar label="Editorial" value={ftBreakdown.editorial} total={freshTakeCount || 1} color="var(--terracotta)" />
-            <MiniBar label="Ready for Production" value={ftBreakdown.readyForProduction} total={freshTakeCount || 1} color="var(--forest)" />
-            <MiniBar label="Production" value={ftBreakdown.production} total={freshTakeCount || 1} color="#3f8f83" />
-            <MiniBar label="Live" value={ftBreakdown.live} total={freshTakeCount || 1} color="var(--red)" />
-          </div>
-          <div style={{ fontSize: 12, color: "var(--subtle)", marginTop: 8 }}>
-            Total cohort assets: {podLoading ? "..." : formatMetricValue(freshTakeCount)}
-          </div>
-        </div>
-
-        <hr className="section-divider" />
-
-        <div className="panel-card">
-          <AcdCollapsibleTable acdMetricsData={acdMetricsData} acdMetricsLoading={acdMetricsLoading} />
-        </div>
       </div>
     </ShareablePanel>
   );

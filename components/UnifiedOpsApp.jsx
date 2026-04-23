@@ -1459,14 +1459,6 @@ export default function UnifiedOpsApp() {
                 <div className="app-topbar-range-note">
                   {`Selected date range ${formatWeekRangeLabel(normalizedHeaderRange.startDate, normalizedHeaderRange.endDate)}`}
                 </div>
-                <label className="overview-inline-check" style={{ marginTop: 4 }}>
-                  <input
-                    type="checkbox"
-                    checked={includeGuAssets}
-                    onChange={(event) => setIncludeGuAssets(event.target.checked)}
-                  />
-                  <span>Include GU assets</span>
-                </label>
               </div>
             ) : null}
               <label className="theme-switch" aria-label="Toggle dark mode">
@@ -1503,8 +1495,6 @@ export default function UnifiedOpsApp() {
                   overviewData={overviewData}
                   overviewLoading={overviewLoading}
                   overviewError={overviewError}
-                  acdMetricsData={acdMetricsData}
-                  acdMetricsLoading={acdMetricsLoading}
                   leadershipOverviewData={leadershipOverviewData}
                   leadershipOverviewLoading={leadershipOverviewLoading}
                   onShare={copySection}

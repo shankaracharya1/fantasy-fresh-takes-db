@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 import {
   AcdLeaderboardChart,
+  BeatsSummaryCards,
   HoverInfo,
   MetricCard,
+  MiniBarRow,
   ProgressBar,
   ToggleGroup,
   formatNumber,
@@ -113,22 +115,6 @@ function ScriptTypeBadges({ ftCount = 0, rwCount = 0, compact = false }) {
   return <span>{parts}</span>;
 }
 
-function MiniBarRow({ label, value, max, color = "var(--forest)" }) {
-  const safeValue = Number(value || 0);
-  const safeMax = Math.max(1, Number(max || 0));
-  return (
-    <div className="overview-mini-bar-row">
-      <span className="overview-mini-bar-value">{formatMetricValue(safeValue)}</span>
-      <div className="overview-mini-bar-track">
-        <div
-          className="overview-mini-bar-fill"
-          style={{ width: `${Math.max(4, Math.min(100, (safeValue / safeMax) * 100))}%`, background: color }}
-        />
-      </div>
-      <span className="overview-mini-bar-label">{label}</span>
-    </div>
-  );
-}
 
 function PodStageBreakdownTable({ rows = [], loading = false, infoText = "" }) {
   const safeRows = Array.isArray(rows) ? rows : [];
@@ -583,7 +569,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
       <section className="overview-flow-section">
         <div className="overview-section-head">
           <div>
-            <div className="overview-section-title">Beats</div>
+            <div className="overview-section-title">Lifecycle Overview</div>
           </div>
         </div>
         {overviewData?.ideationSourceError && (
@@ -591,87 +577,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
             Ideation data issue: {overviewData.ideationSourceError}
           </div>
         )}
-        <div className="metric-grid four-col">
-          <MetricCard
-            label="Total Beats"
-            value={overviewLoading ? "..." : `${formatMetricValue(totalBeats)}`}
-            info="Counts unique ideation rows by Beats completed date (Beats assigned date as fallback) inside the selected date range."
-            body={
-              <>
-                <div className="metric-value">{overviewLoading ? "..." : formatMetricValue(totalBeats)}</div>
-                {!overviewLoading ? (
-                  <div className="overview-mini-bar-stack">
-                    <MiniBarRow label="Approved" value={approvedBeats} max={beatsStageMax} color="#2d5a3d" />
-                    <MiniBarRow label="Review pending" value={reviewPendingBeats} max={beatsStageMax} color="var(--terracotta)" />
-                    <MiniBarRow label="Abandoned" value={abandonedBeats} max={beatsStageMax} color="#7d5a3a" />
-                    <MiniBarRow label="Iterate" value={iterateBeats} max={beatsStageMax} color="var(--red)" />
-                    <MiniBarRow label="To be ideated" value={toBeIdeatedBeats} max={beatsStageMax} color="#7a7a7a" />
-                  </div>
-                ) : null}
-              </>
-            }
-          />
-          <MetricCard
-            label="Fresh take"
-            value={overviewLoading ? "..." : `${formatMetricValue(freshTakeCount)} / ${formatMetricValue(freshTakeRemainingCount)}`}
-            info='Overall count / Remaining count. Counts Fresh Take rows filtered by "Date submitted by Lead"; remaining count includes only rows currently in Editorial.'
-            body={
-              <>
-                <div className="metric-value">
-                  {overviewLoading ? "..." : `${formatMetricValue(freshTakeCount)} / ${formatMetricValue(freshTakeRemainingCount)}`}
-                </div>
-                {!overviewLoading ? (
-                  <div className="overview-mini-bar-stack">
-                    <MiniBarRow
-                      label="Overall count"
-                      value={freshTakeCount}
-                      max={Math.max(freshTakeCount, 1)}
-                      color="var(--forest)"
-                    />
-                    <MiniBarRow
-                      label="Remaining count"
-                      value={freshTakeRemainingCount}
-                      max={Math.max(freshTakeCount, 1)}
-                      color="var(--terracotta)"
-                    />
-                  </div>
-                ) : null}
-              </>
-            }
-          />
-          <MetricCard
-            label="Production"
-            value={overviewLoading ? "..." : formatMetricValue(productionStageTotal)}
-            hint='Fresh Take cohort status by stage'
-            info='Takes Fresh Take assets whose "Date submitted by Lead" is in selected range, then shows their current highest stage: Editorial, Ready for Production, Production, or Live.'
-            body={
-              <>
-                <div className="metric-value">{overviewLoading ? "..." : formatMetricValue(productionStageTotal)}</div>
-                {!overviewLoading ? (
-                  <div className="overview-mini-bar-stack">
-                    <MiniBarRow label="Ready for Production" value={productionStageCounts.ready} max={productionStageMax} color="var(--forest)" />
-                    <MiniBarRow label="Production" value={productionStageCounts.production} max={productionStageMax} color="#3f8f83" />
-                    <MiniBarRow label="Live" value={productionStageCounts.live} max={productionStageMax} color="#2d5a3d" />
-                  </div>
-                ) : null}
-              </>
-            }
-          />
-          <MetricCard
-            label="Hit Rate"
-            value={overviewLoading ? "..." : scopedFullGenAiRows.length > 0 ? formatPercent(hitRatePercent) : "-"}
-            hint={overviewLoading ? "" : `${formatMetricValue(successfulAdsCount)} of ${formatMetricValue(scopedFullGenAiRows.length)} assets`}
-            info="Hit rate = successful ads / total GI/GA assets in selected range."
-            body={
-              <>
-                <div className="metric-value">{overviewLoading ? "..." : scopedFullGenAiRows.length > 0 ? formatPercent(hitRatePercent) : "-"}</div>
-                {!overviewLoading ? (
-                  <ProgressBar value={Number(hitRatePercent || 0)} target={100} color="var(--forest)" />
-                ) : null}
-              </>
-            }
-          />
-        </div>
+        <BeatsSummaryCards leadershipOverviewData={overviewData} loading={overviewLoading} />
       </section>
 
       <hr className="section-divider" />

@@ -126,6 +126,38 @@ function toFiniteNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const MONTH_NAME_TO_NUM = {
+  jan: 1, january: 1,
+  feb: 2, february: 2,
+  mar: 3, march: 3,
+  apr: 4, april: 4,
+  may: 5,
+  jun: 6, june: 6,
+  jul: 7, july: 7,
+  aug: 8, august: 8,
+  sep: 9, sept: 9, september: 9,
+  oct: 10, october: 10,
+  nov: 11, november: 11,
+  dec: 12, december: 12,
+};
+
+// Parses text like "Mar week 3", "April week 2", "Apr Wk 4" into {monthKey, weekInMonth, monthLabel}
+function parseBeatsWeekLabel(rawValue) {
+  const normalized = normalizeText(rawValue || "").toLowerCase();
+  const match = normalized.match(/([a-z]+)\s+(?:week|wk)\s*([1-4])/);
+  if (!match) return null;
+  const monthNum = MONTH_NAME_TO_NUM[match[1]];
+  const weekInMonth = Number(match[2]);
+  if (!monthNum || !weekInMonth) return null;
+  // If the label month is more than 6 months ahead of today, treat it as last year
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  const year = monthNum > currentMonth + 6 ? currentYear - 1 : currentYear;
+  const monthKey = `${year}-${String(monthNum).padStart(2, "0")}`;
+  return { monthKey, weekInMonth, monthLabel: getMonthLabel(monthKey) };
+}
+
 function getMonthLabel(monthKey) {
   if (!/^\d{4}-\d{2}$/.test(String(monthKey || ""))) return "";
   const [year, month] = monthKey.split("-").map(Number);
@@ -247,11 +279,17 @@ function buildBeatRows(rows) {
       const parsedBeatsAssignedDate = parseLiveDate(row?.beatsAssignedDate);
       const parsedAssignedDate = parseLiveDate(row?.assignedDate);
       const parsedCompletedDate = parseLiveDate(row?.completedDate);
-      // Use completedDate first — this is the "Beats completed" column in the ideation sheet,
-      // which is what users count when they check a week. Fall back to assigned date for
-      // beats that haven't been completed yet so they still appear somewhere.
-      const primaryDate = parsedCompletedDate || parsedBeatsAssignedDate || parsedAssignedDate || "";
-      const timeParts = getTimeParts(primaryDate);
+      // The "Beats week" column (beatsAssignedDate after header fix) uses Mon-Sun week
+      // numbering that differs from our day-of-month formula. Trust the label directly.
+      const fromLabel = parseBeatsWeekLabel(row?.beatsAssignedDate || "");
+      let timeParts;
+      if (fromLabel) {
+        timeParts = { primaryDate: "", ...fromLabel };
+      } else {
+        // No text label — fall back to ISO date calculation
+        const primaryDate = parsedBeatsAssignedDate || parsedAssignedDate || parsedCompletedDate || "";
+        timeParts = getTimeParts(primaryDate);
+      }
       return {
         id: `beat-row-${index + 1}`,
         beatCode: normalizeText(row?.beatCode),
