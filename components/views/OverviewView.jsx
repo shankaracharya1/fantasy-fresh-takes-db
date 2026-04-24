@@ -524,9 +524,9 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
             )}
           </span>
         </td>
-        <td style={{ fontWeight: 700, textAlign: "center" }}>
-          {pod.ftCount || 0} / {pod.rwCount || 0}
-        </td>
+        <td style={{ fontWeight: 700, textAlign: "center" }}>{(pod.ftCount || 0) + (pod.rwCount || 0)}</td>
+        <td style={{ fontWeight: 700, textAlign: "center", color: "#2d5a3d" }}>{pod.ftCount || 0}</td>
+        <td style={{ fontWeight: 700, textAlign: "center", color: "#c2703e" }}>{pod.rwCount || 0}</td>
       </tr>
     );
 
@@ -535,9 +535,9 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
         tableRows.push(
           <tr key={`writer-${pod.podLeadName}-${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
             <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>• {writer.writerName}</td>
-            <td style={{ textAlign: "center", fontSize: 12 }}>
-              {writer.ftCount || 0} / {writer.rwCount || 0}
-            </td>
+            <td style={{ textAlign: "center", fontSize: 12 }}>{(writer.ftCount || 0) + (writer.rwCount || 0)}</td>
+            <td style={{ textAlign: "center", fontSize: 12, color: "#2d5a3d" }}>{writer.ftCount || 0}</td>
+            <td style={{ textAlign: "center", fontSize: 12, color: "#c2703e" }}>{writer.rwCount || 0}</td>
           </tr>
         );
       }
@@ -548,29 +548,33 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     <div style={{ marginTop: 20 }}>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>POD throughput</div>
       <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
-        FT = Fresh Take · Date submitted by Lead (all sheets) &nbsp;·&nbsp; RW = Rework · Date approved for prod (Ready for Prod / Production / Live)
+        Date submitted by Lead (all sheets) · Fresh Take = FT rows · Rework = all other typed rows
       </div>
       <div className="table-wrap">
         <table className="ops-table overview-table">
           <thead>
             <tr>
               <th>POD / Writer</th>
-              <th style={{ textAlign: "center" }}>Fresh Take / Rework</th>
+              <th style={{ textAlign: "center" }}>Total Script</th>
+              <th style={{ textAlign: "center" }}>Fresh Take</th>
+              <th style={{ textAlign: "center" }}>Rework</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="2" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+              <tr><td colSpan="4" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
             ) : tableRows.length > 0 ? (
               <>
                 {tableRows}
                 <tr style={{ borderTop: "2px solid var(--border)", background: "var(--subtle-bg, #f0ece4)" }}>
                   <td style={{ fontWeight: 700 }}>Total</td>
-                  <td style={{ fontWeight: 700, textAlign: "center" }}>{totalFt} / {totalRw}</td>
+                  <td style={{ fontWeight: 700, textAlign: "center" }}>{totalFt + totalRw}</td>
+                  <td style={{ fontWeight: 700, textAlign: "center", color: "#2d5a3d" }}>{totalFt}</td>
+                  <td style={{ fontWeight: 700, textAlign: "center", color: "#c2703e" }}>{totalRw}</td>
                 </tr>
               </>
             ) : (
-              <tr><td colSpan="2">No scripts found for the selected date range.</td></tr>
+              <tr><td colSpan="4">No scripts found for the selected date range.</td></tr>
             )}
           </tbody>
         </table>
