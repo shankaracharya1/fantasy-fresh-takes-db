@@ -1468,6 +1468,27 @@ export default function UnifiedOpsApp() {
             ) : null}
 
 
+            {activeView === "pod-wise" && performanceSubView === "cds" ? (
+              <div className="section-shell">
+                <ProductionContent
+                  acdMetricsData={acdMetricsData}
+                  acdMetricsLoading={acdMetricsLoading}
+                  acdMetricsError={acdMetricsError}
+                  productionPipelineData={productionPipelineData}
+                  productionPipelineLoading={productionPipelineLoading}
+                  acdTimeView={acdTimeView}
+                  onTimeViewChange={setAcdTimeView}
+                  acdViewType={acdViewType}
+                  onViewTypeChange={setAcdViewType}
+                  onRunSync={runAcdSync}
+                  busyAction={busyAction}
+                  onShare={copySection}
+                  copyingSection={copyingSection}
+                  productionSubView="throughput"
+                />
+              </div>
+            ) : null}
+
             {activeView === "pod-wise" && performanceSubView === "pods" ? (
               <div className="section-shell">
                 <PodWiseContent

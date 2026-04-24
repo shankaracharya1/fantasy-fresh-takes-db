@@ -402,6 +402,154 @@ export default function ProductionContent({
         </ShareablePanel>
       )}
 
+      {productionSubView === "throughput" && (
+        <>
+        <ShareablePanel
+        shareLabel="Production ACD sync"
+        onShare={onShare}
+        isSharing={copyingSection === "Production ACD sync"}
+      >
+        <div className="panel-head panel-head-tight">
+          <div>
+            <div className="panel-title">ACD Daily Sync</div>
+            <div className="panel-statline">{buildAcdSyncMeta(syncStatus)}</div>
+          </div>
+        </div>
+        <div className="panel-stack">
+          <div className="section-actions section-actions-left" data-share-ignore="true">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => void onRunSync()}
+              disabled={busyAction !== ""}
+            >
+              {busyAction === "acd-sync" ? "Running sync..." : "Run sync"}
+            </button>
+          </div>
+        </div>
+      </ShareablePanel>
+
+      <ShareablePanel
+        shareLabel="Production ACD chart"
+        onShare={onShare}
+        isSharing={copyingSection === "Production ACD chart"}
+      >
+        <div className="panel-head">
+          <div>
+            <div className="panel-title">{viewLabel} productivity chart</div>
+            <div className="panel-statline">
+              <span>{dataset.rows.length > 0 ? dataset.meta : safeAcdMetricsData.emptyStateMessage || EMPTY_ACD_MESSAGE}</span>
+              {latestWorkDateLabel ? <span>Latest synced work date: {latestWorkDateLabel}</span> : null}
+            </div>
+          </div>
+          <div className="production-toggle-wrap" data-share-ignore="true">
+            <ToggleGroup
+              label="Time View"
+              options={ACD_TIME_OPTIONS}
+              value={acdTimeView}
+              onChange={onTimeViewChange}
+              disabled={busyAction !== ""}
+            />
+            <ToggleGroup
+              label="View Type"
+              options={ACD_VIEW_OPTIONS}
+              value={acdViewType}
+              onChange={onViewTypeChange}
+              disabled={busyAction !== ""}
+            />
+          </div>
+        </div>
+        <AcdLeaderboardChart rows={dataset.rows} viewLabel={viewLabel} emptyText={EMPTY_ACD_MESSAGE} />
+      </ShareablePanel>
+
+      <ShareablePanel
+        shareLabel="Production troubleshooting"
+        onShare={onShare}
+        isSharing={copyingSection === "Production troubleshooting"}
+        className="production-troubleshooting-panel"
+      >
+        <div className="panel-head panel-head-tight">
+          <div>
+            <div className="panel-title">ACD Sync Rules and Adherence Issues</div>
+            <div className="panel-statline">{buildAcdAdherenceMeta(syncStatus)}</div>
+          </div>
+        </div>
+        <div className="rules-card">
+          <div className="rules-card-title">Image sheet rules for ACD sync</div>
+          <ol className="rules-list">
+            <li>Please ensure sheet is accessible to everyone (outside PocketFM also).</li>
+            <li>
+              Please ensure that ACD name is tagged as google chips against every image &amp; the column is named as
+              &quot;ACD Name&quot;.
+            </li>
+            <li>
+              Please ensure that Work date is tagged against every image &amp; the column is named as
+              &quot;Work Date&quot;.
+            </li>
+            <li>
+              Please ensure that the final image links are named under the column &quot;Final Image URL&quot;.
+            </li>
+            <li>Please name the tab with all images as &quot;Final image sheet&quot;.</li>
+          </ol>
+        </div>
+
+        <div className="troubleshoot-summary-grid">
+          <div className="troubleshoot-summary-card">
+            <span>Filtered non-adhering assets</span>
+            <strong>{formatNumber(filteredTotalAssets || totalFailedSheets)}</strong>
+          </div>
+          <div className="troubleshoot-summary-card">
+            <span>Filtered CDs affected</span>
+            <strong>{formatNumber(filteredCdsAffected || totalCdsAffected)}</strong>
+          </div>
+        </div>
+
+        <div className="panel-stack" data-share-ignore="true">
+          <div className="panel-title panel-title-xs">Asset Type Filter</div>
+          <div className="production-asset-filter-row">
+            {ASSET_TYPE_OPTIONS.map((type) => {
+              const isActive = selectedAssetTypes.includes(type);
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  className={isActive ? "toggle-chip is-active" : "toggle-chip"}
+                  onClick={() =>
+                    setSelectedAssetTypes((current) => {
+                      if (current.includes(type)) {
+                        const next = current.filter((item) => item !== type);
+                        return next.length > 0 ? next : current;
+                      }
+                      return [...current, type];
+                    })
+                  }
+                >
+                  {type}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {failureReasonRows.length > 0 ? (
+          <div className="failure-reason-row">
+            {failureReasonRows.map((row) => (
+              <div key={row.failureReason} className="failure-reason-pill">
+                <span>{formatFailureReasonLabel(row.failureReason)}</span>
+                <strong>{formatNumber(row.count)}</strong>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div>
+          <div className="panel-title">Image Sheet Adherence Issues</div>
+          <AcdAdherenceTable rows={filteredAdherenceIssueRows} />
+        </div>
+      </ShareablePanel>
+        </>
+      )}
+
     </div>
   );
 }
