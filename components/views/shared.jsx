@@ -473,9 +473,11 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
             info='"Date submitted by Lead" in range. Fresh Take = FT rows; Rework = all other typed rows.'
             style={borderColor ? { border: `1.5px solid ${borderColor}` } : {}}
             cornerBadge={!loading && ftPct !== null ? (
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: badgeBg, color: badgeColor, border: `1px solid ${borderColor}`, letterSpacing: "0.01em" }}>
-                FT {Math.round(ftPct)}%
-              </span>
+              <BadgeWithTooltip tooltip="Fresh takes should be 75%+… because recycled ideas belong in the trash, not your success story 😄">
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: badgeBg, color: badgeColor, border: `1px solid ${borderColor}`, letterSpacing: "0.01em" }}>
+                  FT {Math.round(ftPct)}%
+                </span>
+              </BadgeWithTooltip>
             ) : null}
             body={
               <>
@@ -507,9 +509,11 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
             info='"Date submitted by Lead" in range. Stacked bar = FT (green) + RW (terracotta) per stage.'
             style={borderColor ? { border: `1.5px solid ${borderColor}` } : {}}
             cornerBadge={!loading && prodFtPct !== null ? (
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: badgeBg, color: badgeColor, border: `1px solid ${borderColor}`, letterSpacing: "0.01em" }}>
-                FT {Math.round(prodFtPct)}%
-              </span>
+              <BadgeWithTooltip tooltip="Fresh takes should be 75%+… because recycled ideas belong in the trash, not your success story 😄">
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: badgeBg, color: badgeColor, border: `1px solid ${borderColor}`, letterSpacing: "0.01em" }}>
+                  FT {Math.round(prodFtPct)}%
+                </span>
+              </BadgeWithTooltip>
             ) : null}
             body={
               <>
@@ -586,6 +590,32 @@ export function MetricCard({
       )}
       {hint ? <div className="metric-hint">{hint}</div> : null}
     </article>
+  );
+}
+
+function BadgeWithTooltip({ children, tooltip }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span
+      style={{ position: "relative", display: "inline-block", cursor: "default" }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {children}
+      {show && (
+        <span style={{
+          position: "absolute", bottom: "calc(100% + 8px)", right: 0,
+          background: "var(--card)", border: "1px solid var(--border)",
+          borderRadius: 8, padding: "8px 12px", width: 230,
+          fontSize: 12, lineHeight: 1.5, color: "var(--fg)",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.13)",
+          pointerEvents: "none", zIndex: 99, whiteSpace: "normal",
+          display: "block",
+        }}>
+          {tooltip}
+        </span>
+      )}
+    </span>
   );
 }
 
