@@ -1159,7 +1159,7 @@ export default function UnifiedOpsApp() {
     planner: "Planner",
     planner2: "Planner",
     analytics: "Analytics",
-    production: productionSubView === "throughput" ? "Production Throughput" : "Production Pipeline",
+    production: "Production Pipeline",
     details: "Details",
   };
 
@@ -1230,7 +1230,7 @@ export default function UnifiedOpsApp() {
                 <span className={`sidebar-chevron${productionExpanded ? " is-open" : ""}`}>▾</span>
               </button>
               <div className={`sidebar-subitems${productionExpanded ? " is-open" : ""}`} aria-hidden={!productionExpanded}>
-                  {[["pipeline", "Pipeline"], ["throughput", "Throughput"]].map(([id, label]) => (
+                  {[["pipeline", "Pipeline"]].map(([id, label]) => (
                     <button
                       key={id}
                       type="button"
@@ -1467,26 +1467,6 @@ export default function UnifiedOpsApp() {
               </div>
             ) : null}
 
-            {activeView === "pod-wise" && performanceSubView === "cds" ? (
-              <div className="section-shell">
-                <ProductionContent
-                  acdMetricsData={acdMetricsData}
-                  acdMetricsLoading={acdMetricsLoading}
-                  acdMetricsError={acdMetricsError}
-                  productionPipelineData={productionPipelineData}
-                  productionPipelineLoading={productionPipelineLoading}
-                  acdTimeView={acdTimeView}
-                  onTimeViewChange={setAcdTimeView}
-                  acdViewType={acdViewType}
-                  onViewTypeChange={setAcdViewType}
-                  onRunSync={runAcdSync}
-                  busyAction={busyAction}
-                  onShare={copySection}
-                  copyingSection={copyingSection}
-                  productionSubView="throughput"
-                />
-              </div>
-            ) : null}
 
             {activeView === "pod-wise" && performanceSubView === "pods" ? (
               <div className="section-shell">
