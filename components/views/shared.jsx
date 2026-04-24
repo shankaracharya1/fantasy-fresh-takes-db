@@ -461,47 +461,79 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
           </>
         }
       />
-      <MetricCard
-        label="Total Attempt"
-        info='"Date submitted by Lead" in range. Fresh Take = FT rows; Rework = all other typed rows.'
-        body={
-          <>
-            <div className="metric-value">
-              {loading ? "..." : formatMetricValue(totalAttemptCount)}
-            </div>
-            {!loading && (
-              <div className="overview-mini-bar-stack">
-                <MiniBarRow label="Fresh Take" value={freshTakeCount} max={totalAttemptMax} color="var(--forest)" />
-                <MiniBarRow label="Rework"     value={reworkCount}    max={totalAttemptMax} color="var(--terracotta)" />
-              </div>
-            )}
-          </>
-        }
-      />
-      <MetricCard
-        label="Production"
-        info='"Date submitted by Lead" in range. Stacked bar = FT (green) + RW (terracotta) per stage.'
-        body={
-          <>
-            <div className="metric-value" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              {loading ? "..." : (
-                <>
-                  {formatMetricValue(productionStageTotal)}
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "rgba(45,90,61,0.12)", color: "#2d5a3d" }}>FT {formatMetricValue(productionStageCounts.readyFT + productionStageCounts.productionFT + productionStageCounts.liveFT)}</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "rgba(194,112,62,0.12)", color: "#c2703e" }}>RW {formatMetricValue(productionStageCounts.readyRW + productionStageCounts.productionRW + productionStageCounts.liveRW)}</span>
-                </>
-              )}
-            </div>
-            {!loading && (
-              <div className="overview-mini-bar-stack">
-                <StackedMiniBarRow label="Ready for Prod" ftValue={productionStageCounts.readyFT}      rwValue={productionStageCounts.readyRW}      max={productionStageMax} />
-                <StackedMiniBarRow label="Production"     ftValue={productionStageCounts.productionFT} rwValue={productionStageCounts.productionRW} max={productionStageMax} />
-                <StackedMiniBarRow label="Live"           ftValue={productionStageCounts.liveFT}       rwValue={productionStageCounts.liveRW}       max={productionStageMax} />
-              </div>
-            )}
-          </>
-        }
-      />
+      {(() => {
+        const ftPct = totalAttemptCount > 0 ? (freshTakeCount / totalAttemptCount) * 100 : null;
+        const isGood = ftPct !== null && ftPct >= 75;
+        const borderColor = ftPct === null ? undefined : isGood ? "#2d5a3d" : "#c0392b";
+        const badgeBg = isGood ? "rgba(45,90,61,0.15)" : "rgba(192,57,43,0.12)";
+        const badgeColor = isGood ? "#2d5a3d" : "#c0392b";
+        return (
+          <MetricCard
+            label="Total Attempt"
+            info='"Date submitted by Lead" in range. Fresh Take = FT rows; Rework = all other typed rows.'
+            style={borderColor ? { border: `1.5px solid ${borderColor}` } : {}}
+            cornerBadge={!loading && ftPct !== null ? (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: badgeBg, color: badgeColor, border: `1px solid ${borderColor}`, letterSpacing: "0.01em" }}>
+                FT {Math.round(ftPct)}%
+              </span>
+            ) : null}
+            body={
+              <>
+                <div className="metric-value">
+                  {loading ? "..." : formatMetricValue(totalAttemptCount)}
+                </div>
+                {!loading && (
+                  <div className="overview-mini-bar-stack">
+                    <MiniBarRow label="Fresh Take" value={freshTakeCount} max={totalAttemptMax} color="var(--forest)" />
+                    <MiniBarRow label="Rework"     value={reworkCount}    max={totalAttemptMax} color="var(--terracotta)" />
+                  </div>
+                )}
+              </>
+            }
+          />
+        );
+      })()}
+      {(() => {
+        const prodFT = productionStageCounts.readyFT + productionStageCounts.productionFT + productionStageCounts.liveFT;
+        const prodRW = productionStageCounts.readyRW + productionStageCounts.productionRW + productionStageCounts.liveRW;
+        const prodFtPct = productionStageTotal > 0 ? (prodFT / productionStageTotal) * 100 : null;
+        const isGood = prodFtPct !== null && prodFtPct >= 75;
+        const borderColor = prodFtPct === null ? undefined : isGood ? "#2d5a3d" : "#c0392b";
+        const badgeBg = isGood ? "rgba(45,90,61,0.15)" : "rgba(192,57,43,0.12)";
+        const badgeColor = isGood ? "#2d5a3d" : "#c0392b";
+        return (
+          <MetricCard
+            label="Production"
+            info='"Date submitted by Lead" in range. Stacked bar = FT (green) + RW (terracotta) per stage.'
+            style={borderColor ? { border: `1.5px solid ${borderColor}` } : {}}
+            cornerBadge={!loading && prodFtPct !== null ? (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 20, background: badgeBg, color: badgeColor, border: `1px solid ${borderColor}`, letterSpacing: "0.01em" }}>
+                FT {Math.round(prodFtPct)}%
+              </span>
+            ) : null}
+            body={
+              <>
+                <div className="metric-value" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  {loading ? "..." : (
+                    <>
+                      {formatMetricValue(productionStageTotal)}
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "rgba(45,90,61,0.12)", color: "#2d5a3d" }}>FT {formatMetricValue(prodFT)}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "rgba(194,112,62,0.12)", color: "#c2703e" }}>RW {formatMetricValue(prodRW)}</span>
+                    </>
+                  )}
+                </div>
+                {!loading && (
+                  <div className="overview-mini-bar-stack">
+                    <StackedMiniBarRow label="Ready for Prod" ftValue={productionStageCounts.readyFT}      rwValue={productionStageCounts.readyRW}      max={productionStageMax} />
+                    <StackedMiniBarRow label="Production"     ftValue={productionStageCounts.productionFT} rwValue={productionStageCounts.productionRW} max={productionStageMax} />
+                    <StackedMiniBarRow label="Live"           ftValue={productionStageCounts.liveFT}       rwValue={productionStageCounts.liveRW}       max={productionStageMax} />
+                  </div>
+                )}
+              </>
+            }
+          />
+        );
+      })()}
       <MetricCard
         label="Hit Rate"
         hint={loading ? "" : `${formatMetricValue(successfulAdsCount)} of ${formatMetricValue(fullGenAiRows.length)} assets`}
@@ -526,9 +558,16 @@ export function MetricCard({
   body = null,
   className = "",
   unit = "",
+  style = {},
+  cornerBadge = null,
 }) {
   return (
-    <article className={`metric-card tone-${tone} ${className}`.trim()} style={{ position: "relative" }}>
+    <article className={`metric-card tone-${tone} ${className}`.trim()} style={{ position: "relative", ...style }}>
+      {cornerBadge && (
+        <div style={{ position: "absolute", top: 10, right: 10 }}>
+          {cornerBadge}
+        </div>
+      )}
       <div className="metric-card-topline">
         <div className="metric-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {info ? (
