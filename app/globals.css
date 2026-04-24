@@ -435,6 +435,13 @@ select {
   flex-wrap: nowrap;
 }
 
+.app-topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
 /* date filter — no box, just inline controls */
 .app-topbar-range {
   display: flex;
