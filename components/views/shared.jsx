@@ -341,6 +341,32 @@ export function MiniBarRow({ label, value, max, color = "var(--forest)", badge =
   );
 }
 
+function StackedMiniBarRow({ label, ftValue, rwValue, max }) {
+  const ft = Math.max(0, Number(ftValue || 0));
+  const rw = Math.max(0, Number(rwValue || 0));
+  const total = ft + rw;
+  const safeMax = Math.max(1, Number(max || 0));
+  const totalPct = Math.min(100, (total / safeMax) * 100);
+  const ftPct = total > 0 ? (ft / total) * 100 : 0;
+  const rwPct = total > 0 ? (rw / total) * 100 : 0;
+  return (
+    <div className="overview-mini-bar-row">
+      <span className="overview-mini-bar-value">{formatMetricValue(total)}</span>
+      <div className="overview-mini-bar-track">
+        <div style={{ width: `${Math.max(totalPct, 4)}%`, height: "100%", display: "flex", borderRadius: 3, overflow: "hidden" }}>
+          {ft > 0 && <div style={{ width: `${ftPct}%`, background: "#2d5a3d", height: "100%" }} />}
+          {rw > 0 && <div style={{ width: `${rwPct}%`, background: "var(--terracotta)", height: "100%" }} />}
+        </div>
+      </div>
+      <span className="overview-mini-bar-label" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        {label}
+        {ft > 0 && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(45,90,61,0.12)", color: "#2d5a3d", lineHeight: 1.4 }}>FT {ft}</span>}
+        {rw > 0 && <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(194,112,62,0.12)", color: "#c2703e", lineHeight: 1.4 }}>RW {rw}</span>}
+      </span>
+    </div>
+  );
+}
+
 // ─── BeatsSummaryCards ────────────────────────────────────────────────────────
 // 4-card summary (Total Beats, Fresh take, Production, Hit Rate)
 // Shared between Leadership Overview and Editorial Funnel.
@@ -454,7 +480,7 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
       />
       <MetricCard
         label="Production"
-        info='"Date submitted by Lead" in range. Row count per stage with FT/RW split.'
+        info='"Date submitted by Lead" in range. Stacked bar = FT (green) + RW (terracotta) per stage.'
         body={
           <>
             <div className="metric-value" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -468,15 +494,9 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
             </div>
             {!loading && (
               <div className="overview-mini-bar-stack">
-                <MiniBarRow label="Ready for Prod" value={productionStageCounts.ready}      max={productionStageMax} color="var(--forest)"
-                  badge={<><span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(45,90,61,0.12)", color: "#2d5a3d" }}>FT {productionStageCounts.readyFT}</span>{" "}<span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(194,112,62,0.12)", color: "#c2703e" }}>RW {productionStageCounts.readyRW}</span></>}
-                />
-                <MiniBarRow label="Production"     value={productionStageCounts.production} max={productionStageMax} color="#3f8f83"
-                  badge={<><span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(45,90,61,0.12)", color: "#2d5a3d" }}>FT {productionStageCounts.productionFT}</span>{" "}<span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(194,112,62,0.12)", color: "#c2703e" }}>RW {productionStageCounts.productionRW}</span></>}
-                />
-                <MiniBarRow label="Live"           value={productionStageCounts.live}       max={productionStageMax} color="#2d5a3d"
-                  badge={<><span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(45,90,61,0.12)", color: "#2d5a3d" }}>FT {productionStageCounts.liveFT}</span>{" "}<span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(194,112,62,0.12)", color: "#c2703e" }}>RW {productionStageCounts.liveRW}</span></>}
-                />
+                <StackedMiniBarRow label="Ready for Prod" ftValue={productionStageCounts.readyFT}      rwValue={productionStageCounts.readyRW}      max={productionStageMax} />
+                <StackedMiniBarRow label="Production"     ftValue={productionStageCounts.productionFT} rwValue={productionStageCounts.productionRW} max={productionStageMax} />
+                <StackedMiniBarRow label="Live"           ftValue={productionStageCounts.liveFT}       rwValue={productionStageCounts.liveRW}       max={productionStageMax} />
               </div>
             )}
           </>
