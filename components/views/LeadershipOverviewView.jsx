@@ -391,14 +391,11 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
   const overviewLoading = Boolean(leadershipOverviewLoading);
   const overviewError = leadershipOverviewError || "";
   const [section3ViewType, setSection3ViewType] = useState("acd");
-  const [expandedAngles, setExpandedAngles] = useState({});
   const beatRows = Array.isArray(overviewData?.beatRows) ? overviewData.beatRows : [];
   const allBeatRows = Array.isArray(overviewData?.allBeatRows) ? overviewData.allBeatRows : beatRows;
   const workflowRows = Array.isArray(overviewData?.workflowRows) ? overviewData.workflowRows : [];
   const allWorkflowRows = Array.isArray(overviewData?.allWorkflowRows) ? overviewData.allWorkflowRows : workflowRows;
-  const fullGenAiRows = Array.isArray(overviewData?.fullGenAiRows) ? overviewData.fullGenAiRows : [];
   const podThroughputRows = Array.isArray(overviewData?.podThroughputRows) ? overviewData.podThroughputRows : [];
-  const scopedFullGenAiRows = fullGenAiRows;
 
   const totalBeats = beatRows.length;
   const approvedBeats = beatRows.filter((row) => row?.statusCategory === "approved").length;
@@ -491,8 +488,6 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
     productionStageCounts.live,
     1
   );
-  const successfulAdsCount = scopedFullGenAiRows.filter((r) => r.success).length;
-  const hitRatePercent = scopedFullGenAiRows.length > 0 ? (successfulAdsCount / scopedFullGenAiRows.length) * 100 : 0;
   const beatsStageMax = Math.max(approvedBeats, reviewPendingBeats, abandonedBeats, iterateBeats, toBeIdeatedBeats, 1);
 
   const overviewThroughputRows = useMemo(() => {
@@ -520,39 +515,6 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
       .sort((a, b) => b.totalMinutes - a.totalMinutes || a.name.localeCompare(b.name));
   }, [acdMetricsData, overviewData?.weekStart, overviewData?.weekEnd, section3ViewType]);
 
-  const fullGenAiByBeat = useMemo(() =>
-    Array.from(
-      scopedFullGenAiRows.reduce((map, row) => {
-      const key = `${row.showName}|${row.beatName}`;
-      if (!map.has(key)) {
-        map.set(key, {
-          showName: row.showName,
-          beatName: row.beatName,
-          attempts: 0,
-          successCount: 0,
-          ads: [],
-        });
-      }
-      const entry = map.get(key);
-      entry.attempts += 1;
-      if (row.success) entry.successCount += 1;
-      entry.ads.push({
-        assetCode: row.assetCode,
-        success: row.success,
-        cpiUsd: row.cpiUsd,
-        absoluteCompletionPct: row.absoluteCompletionPct,
-        ctrPct: row.ctrPct,
-        clickToInstall: row.clickToInstall,
-      });
-      return map;
-      }, new Map()).values()
-    )
-      .map((entry) => ({
-        ...entry,
-        hitRate: entry.attempts > 0 ? Number(((entry.successCount / entry.attempts) * 100).toFixed(1)) : null,
-      }))
-      .sort((a, b) => b.attempts - a.attempts || a.showName.localeCompare(b.showName) || a.beatName.localeCompare(b.beatName))
-  , [scopedFullGenAiRows]);
   return (
     <div className="section-stack overview-flow-shell">
       {overviewError ? <div className="warning-note">{overviewError}</div> : null}
@@ -615,137 +577,6 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
         </div>
       </section>
 
-      <hr className="section-divider" />
-
-      <section className="overview-flow-section">
-        <div className="overview-section-head">
-          <div>
-            <div className="overview-section-title">Full Gen AI</div>
-            <div className="overview-section-subtitle" style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-              Live sheet rows where Ad Code starts with GA or GI
-            </div>
-          </div>
-          <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end" }}>
-            <div className="overview-section-note">
-              {overviewLoading ? "Rows: ..." : `Rows: ${formatMetricValue(fullGenAiByBeat.length)}`}
-            </div>
-          </div>
-        </div>
-        <div className="metric-grid three-col">
-          <MetricCard label="Assets live (GI/GA)" value={overviewLoading ? "..." : formatMetricValue(scopedFullGenAiRows.length)} />
-          <MetricCard
-            label="Successful Hit Benchmark"
-            value={overviewLoading ? "..." : formatMetricValue(successfulAdsCount)}
-            hint="A successful ad passes all formula thresholds: Amount Spent ≥ 100, Q1 Completion > 10%, CTI ≥ 12%, True Completion ≥ 1.8%, CPI ≤ 12 — OR CPI < $6 regardless of other metrics."
-          />
-          <MetricCard
-            label="Overall hit rate"
-            value={
-              overviewLoading
-                ? "..."
-                : scopedFullGenAiRows.length > 0
-                  ? formatPercent((successfulAdsCount / scopedFullGenAiRows.length) * 100)
-                  : "-"
-            }
-          />
-        </div>
-        {overviewData?.fullGenAiSourceError ? (
-          <div className="warning-note" style={{ marginTop: 10 }}>
-            Full Gen AI source warning: {overviewData.fullGenAiSourceError}
-          </div>
-        ) : null}
-        <div className="table-wrap genai-table-wrap">
-          <table className="ops-table overview-table">
-            <thead>
-              <tr>
-                <th>Show</th>
-                <th>Beat</th>
-                <th style={{ textAlign: "right" }}>Ads</th>
-                <th style={{ textAlign: "right" }}>Successful</th>
-                <th style={{ textAlign: "right" }}>Hit Rate</th>
-                <th style={{ width: 40 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {fullGenAiByBeat.length > 0 ? (
-                fullGenAiByBeat.flatMap((row, idx) => {
-                  const prevRow = fullGenAiByBeat[idx - 1];
-                  const isNewShow = idx > 0 && prevRow.showName !== row.showName;
-                  const angleKey = `${row.showName}|${row.beatName}`;
-                  const isExpanded = Boolean(expandedAngles[angleKey]);
-                  return [
-                    <tr
-                      key={angleKey}
-                      className={`overview-genai-parent-row${row.successCount > 0 ? " overview-genai-success-row" : ""}${isNewShow ? " genai-show-group-start" : ""}`}
-                      data-expanded={isExpanded}
-                      style={{ cursor: "pointer" }}
-                      onClick={() => setExpandedAngles((prev) => ({ ...prev, [angleKey]: !prev[angleKey] }))}
-                    >
-                      <td className="genai-show-name">{row.showName || "-"}</td>
-                      <td className="genai-beat-name">{row.beatName || "-"}</td>
-                      <td className="genai-num-cell" style={{ textAlign: "right" }}>{formatMetricValue(row.attempts)}</td>
-                      <td className="genai-num-cell" style={{ textAlign: "right" }}>
-                        {row.successCount > 0
-                          ? <span className="genai-success-badge">{formatMetricValue(row.successCount)}</span>
-                          : <span className="genai-zero">{formatMetricValue(row.successCount)}</span>}
-                      </td>
-                      <td className="genai-num-cell" style={{ textAlign: "right" }}>
-                        <span className={`genai-hitrate${row.hitRate != null ? (row.hitRate >= 50 ? " is-high" : row.hitRate >= 20 ? " is-mid" : " is-low") : ""}`}>
-                          {row.hitRate != null ? formatPercent(row.hitRate) : "-"}
-                        </span>
-                      </td>
-                      <td className="genai-chevron-cell">
-                        <span className={`genai-chevron${isExpanded ? " is-open" : ""}`} />
-                      </td>
-                    </tr>,
-                    ...(isExpanded ? [
-                      <tr key={`${angleKey}-hdr`} className="overview-genai-expanded-hdr">
-                        <td colSpan={2} className="genai-col-asset">Asset Code</td>
-                        <td className="genai-col-metric">CPI</td>
-                        <td className="genai-col-metric">True Completion</td>
-                        <td className="genai-col-metric">CTR</td>
-                        <td className="genai-col-metric">CTI</td>
-                      </tr>,
-                      ...row.ads.map((ad) => (
-                        <tr
-                          key={`${angleKey}-${ad.assetCode}`}
-                          className={ad.success ? "overview-genai-expanded-row overview-genai-ad-success" : "overview-genai-expanded-row"}
-                        >
-                          <td colSpan={2} className="genai-asset-code-cell">
-                            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                              <span className="genai-asset-code">{ad.assetCode || "-"}</span>
-                              {ad.success && <span className="genai-hit-tag">HIT</span>}
-                            </div>
-                          </td>
-                          <td className="genai-metric-val">{ad.cpiUsd != null ? `$${ad.cpiUsd.toFixed(2)}` : "-"}</td>
-                          <td className="genai-metric-val">{ad.absoluteCompletionPct != null ? formatPercent(ad.absoluteCompletionPct) : "-"}</td>
-                          <td className="genai-metric-val">{ad.ctrPct != null ? formatPercent(ad.ctrPct) : "-"}</td>
-                          <td className="genai-metric-val">{ad.clickToInstall != null ? formatPercent(ad.clickToInstall) : "-"}</td>
-                        </tr>
-                      )),
-                    ] : []),
-                  ];
-                })
-              ) : (
-                <tr>
-                  <td colSpan="6">No Full Gen AI rows for this filter yet.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="overview-guidelines-card">
-          <div className="overview-guidelines-title">Success definition and guidelines</div>
-          <div className="overview-guidelines-line">
-            Assets live (GI/GA) = Live sheet rows where Ad Code starts with GA or GI and the Final Upload Date falls in the selected global range.
-          </div>
-          <div className="overview-guidelines-line">
-            A successful ad passes all formula thresholds: Amount Spent ≥ 100, Q1 Completion &gt; 10%, CTI ≥ 12%, True Completion ≥ 1.8%, CPI ≤ 12.
-          </div>
-          <div className="overview-guidelines-line">Hit rate = (successful ads / total ads) × 100. Click any row to see per-ad metrics.</div>
-          <div className="overview-guidelines-line">Rows shaded light green have one or more successful ads.</div>
-        </div>
-      </section>
 
     </div>
   );
