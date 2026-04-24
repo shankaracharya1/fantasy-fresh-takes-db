@@ -419,18 +419,18 @@ select {
 
 .app-topbar-left {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
-  flex: 1;
+  flex: 0 0 auto;
   justify-content: flex-start;
   flex-wrap: nowrap;
 }
 
 .app-topbar-right {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  flex: 0 0 auto;
+  flex: 1;
   justify-content: flex-end;
   flex-wrap: nowrap;
 }

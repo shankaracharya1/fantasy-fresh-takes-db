@@ -1263,7 +1263,7 @@ export default function UnifiedOpsApp() {
         <main className="ops-main">
           <div className="app-topbar">
             <div className={`topbar-progress${dashboardIsRefreshing ? " is-active" : ""}`} aria-hidden="true" />
-            <div className="app-topbar-left">
+            <div className="app-topbar-right">
               {headerSupportsDateRange ? (
                 <div className="app-topbar-range" data-share-ignore="true">
                   <div
@@ -1418,7 +1418,7 @@ export default function UnifiedOpsApp() {
               </div>
             ) : null}
             </div>
-            <div className="app-topbar-right">
+            <div className="app-topbar-left">
               <h1 className="app-topbar-title">{activeViewLabelMap[activeView] || "Dashboard"}</h1>
               <label className="theme-switch" aria-label="Toggle dark mode">
                 <input
