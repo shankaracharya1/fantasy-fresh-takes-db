@@ -1206,7 +1206,7 @@ export default function UnifiedOpsApp() {
                 className={`sidebar-link${activeView === "production" ? " active" : ""}`}
                 onClick={() => { setActiveView("production"); setProductionSubView("pipeline"); }}
               >
-                Production
+                Production Pipeline
               </button>
 
 	              {[
