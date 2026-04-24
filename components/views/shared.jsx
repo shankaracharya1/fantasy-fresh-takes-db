@@ -393,7 +393,7 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
   const freshTakeRemainingCount = freshTakeSourceRows.filter((r) => r?.source === "editorial").length;
 
   const productionStageCounts = useMemo(() => {
-    const counts = { readyFT: 0, readyRW: 0, productionFT: 0, productionRW: 0, liveFT: 0, liveRW: 0 };
+    const counts = { ready: 0, production: 0, live: 0 };
     for (const row of allWorkflowRows) {
       const source = String(row?.source || "");
       if (source !== "ready_for_production" && source !== "production" && source !== "live") continue;
@@ -401,25 +401,15 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
       if (!leadDate) continue;
       if (weekStart && leadDate < weekStart) continue;
       if (weekEnd && leadDate > weekEnd) continue;
-      const rt = String(row?.reworkType || "").trim().toLowerCase();
-      const isFT = rt === "fresh take" || rt === "fresh takes";
-      if (source === "ready_for_production") isFT ? counts.readyFT++ : counts.readyRW++;
-      else if (source === "production")      isFT ? counts.productionFT++ : counts.productionRW++;
-      else if (source === "live")            isFT ? counts.liveFT++ : counts.liveRW++;
+      if (source === "ready_for_production") counts.ready += 1;
+      else if (source === "production") counts.production += 1;
+      else if (source === "live") counts.live += 1;
     }
     return counts;
   }, [allWorkflowRows, weekStart, weekEnd]);
 
-  const productionStageTotal =
-    productionStageCounts.readyFT + productionStageCounts.readyRW +
-    productionStageCounts.productionFT + productionStageCounts.productionRW +
-    productionStageCounts.liveFT + productionStageCounts.liveRW;
-  const productionStageMax = Math.max(
-    productionStageCounts.readyFT + productionStageCounts.readyRW,
-    productionStageCounts.productionFT + productionStageCounts.productionRW,
-    productionStageCounts.liveFT + productionStageCounts.liveRW,
-    1
-  );
+  const productionStageTotal = productionStageCounts.ready + productionStageCounts.production + productionStageCounts.live;
+  const productionStageMax = Math.max(productionStageCounts.ready, productionStageCounts.production, productionStageCounts.live, 1);
   const successfulAdsCount = fullGenAiRows.filter((r) => r.success).length;
   const hitRatePercent = fullGenAiRows.length > 0 ? (successfulAdsCount / fullGenAiRows.length) * 100 : 0;
 
@@ -462,18 +452,15 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
       />
       <MetricCard
         label="Production"
-        info='"Date submitted by Lead" in range. Counts rows per stage split by Fresh Take and Rework.'
+        info='"Date submitted by Lead" in range. Row count per stage.'
         body={
           <>
             <div className="metric-value">{loading ? "..." : formatMetricValue(productionStageTotal)}</div>
             {!loading && (
               <div className="overview-mini-bar-stack">
-                <MiniBarRow label="Ready · FT" value={productionStageCounts.readyFT}      max={productionStageMax} color="var(--forest)" />
-                <MiniBarRow label="Ready · RW" value={productionStageCounts.readyRW}      max={productionStageMax} color="var(--terracotta)" />
-                <MiniBarRow label="Prod · FT"  value={productionStageCounts.productionFT} max={productionStageMax} color="#3f8f83" />
-                <MiniBarRow label="Prod · RW"  value={productionStageCounts.productionRW} max={productionStageMax} color="#c2703e" />
-                <MiniBarRow label="Live · FT"  value={productionStageCounts.liveFT}       max={productionStageMax} color="#2d5a3d" />
-                <MiniBarRow label="Live · RW"  value={productionStageCounts.liveRW}       max={productionStageMax} color="#7d5a3a" />
+                <MiniBarRow label="Ready for Production" value={productionStageCounts.ready}      max={productionStageMax} color="var(--forest)" />
+                <MiniBarRow label="Production"           value={productionStageCounts.production} max={productionStageMax} color="#3f8f83" />
+                <MiniBarRow label="Live"                 value={productionStageCounts.live}       max={productionStageMax} color="#2d5a3d" />
               </div>
             )}
           </>
