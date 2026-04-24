@@ -324,7 +324,7 @@ export function getAcdLeaderboardDataset(metricsInput, mode, viewType) {
 
 // ─── Small Shared Components ──────────────────────────────────────────────────
 
-export function MiniBarRow({ label, value, max, color = "var(--forest)" }) {
+export function MiniBarRow({ label, value, max, color = "var(--forest)", badge = null }) {
   const safeValue = Number(value || 0);
   const safeMax = Math.max(1, Number(max || 0));
   return (
@@ -336,7 +336,7 @@ export function MiniBarRow({ label, value, max, color = "var(--forest)" }) {
           style={{ width: `${Math.max(4, Math.min(100, (safeValue / safeMax) * 100))}%`, background: color }}
         />
       </div>
-      <span className="overview-mini-bar-label">{label}</span>
+      <span className="overview-mini-bar-label">{label}{badge ? <>{" "}{badge}</> : null}</span>
     </div>
   );
 }
@@ -393,7 +393,7 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
   const freshTakeRemainingCount = freshTakeSourceRows.filter((r) => r?.source === "editorial").length;
 
   const productionStageCounts = useMemo(() => {
-    const counts = { ready: 0, production: 0, live: 0 };
+    const counts = { ready: 0, readyFT: 0, readyRW: 0, production: 0, productionFT: 0, productionRW: 0, live: 0, liveFT: 0, liveRW: 0 };
     for (const row of allWorkflowRows) {
       const source = String(row?.source || "");
       if (source !== "ready_for_production" && source !== "production" && source !== "live") continue;
@@ -401,9 +401,11 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
       if (!leadDate) continue;
       if (weekStart && leadDate < weekStart) continue;
       if (weekEnd && leadDate > weekEnd) continue;
-      if (source === "ready_for_production") counts.ready += 1;
-      else if (source === "production") counts.production += 1;
-      else if (source === "live") counts.live += 1;
+      const rt = String(row?.reworkType || "").trim().toLowerCase();
+      const isFT = rt === "fresh take" || rt === "fresh takes";
+      if (source === "ready_for_production") { counts.ready++; isFT ? counts.readyFT++ : counts.readyRW++; }
+      else if (source === "production")      { counts.production++; isFT ? counts.productionFT++ : counts.productionRW++; }
+      else if (source === "live")            { counts.live++; isFT ? counts.liveFT++ : counts.liveRW++; }
     }
     return counts;
   }, [allWorkflowRows, weekStart, weekEnd]);
@@ -452,15 +454,29 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
       />
       <MetricCard
         label="Production"
-        info='"Date submitted by Lead" in range. Row count per stage.'
+        info='"Date submitted by Lead" in range. Row count per stage with FT/RW split.'
         body={
           <>
-            <div className="metric-value">{loading ? "..." : formatMetricValue(productionStageTotal)}</div>
+            <div className="metric-value" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {loading ? "..." : (
+                <>
+                  {formatMetricValue(productionStageTotal)}
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "rgba(45,90,61,0.12)", color: "#2d5a3d" }}>FT {formatMetricValue(productionStageCounts.readyFT + productionStageCounts.productionFT + productionStageCounts.liveFT)}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "rgba(194,112,62,0.12)", color: "#c2703e" }}>RW {formatMetricValue(productionStageCounts.readyRW + productionStageCounts.productionRW + productionStageCounts.liveRW)}</span>
+                </>
+              )}
+            </div>
             {!loading && (
               <div className="overview-mini-bar-stack">
-                <MiniBarRow label="Ready for Production" value={productionStageCounts.ready}      max={productionStageMax} color="var(--forest)" />
-                <MiniBarRow label="Production"           value={productionStageCounts.production} max={productionStageMax} color="#3f8f83" />
-                <MiniBarRow label="Live"                 value={productionStageCounts.live}       max={productionStageMax} color="#2d5a3d" />
+                <MiniBarRow label="Ready for Prod" value={productionStageCounts.ready}      max={productionStageMax} color="var(--forest)"
+                  badge={<><span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(45,90,61,0.12)", color: "#2d5a3d" }}>FT {productionStageCounts.readyFT}</span>{" "}<span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(194,112,62,0.12)", color: "#c2703e" }}>RW {productionStageCounts.readyRW}</span></>}
+                />
+                <MiniBarRow label="Production"     value={productionStageCounts.production} max={productionStageMax} color="#3f8f83"
+                  badge={<><span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(45,90,61,0.12)", color: "#2d5a3d" }}>FT {productionStageCounts.productionFT}</span>{" "}<span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(194,112,62,0.12)", color: "#c2703e" }}>RW {productionStageCounts.productionRW}</span></>}
+                />
+                <MiniBarRow label="Live"           value={productionStageCounts.live}       max={productionStageMax} color="#2d5a3d"
+                  badge={<><span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(45,90,61,0.12)", color: "#2d5a3d" }}>FT {productionStageCounts.liveFT}</span>{" "}<span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, background: "rgba(194,112,62,0.12)", color: "#c2703e" }}>RW {productionStageCounts.liveRW}</span></>}
+                />
               </div>
             )}
           </>
