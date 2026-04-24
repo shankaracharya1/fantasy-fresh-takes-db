@@ -366,7 +366,7 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
     const allowedSources = new Set(["editorial", "ready_for_production", "production", "live"]);
     return allWorkflowRows.filter((row) => {
       if (!allowedSources.has(String(row?.source || ""))) return false;
-      const date = String(row?.leadSubmittedDate || "").slice(0, 10);
+      const date = String(row?.dateSubmittedByLead || "").slice(0, 10);
       if (weekStart && date < weekStart) return false;
       if (weekEnd && date > weekEnd) return false;
       const rt = String(row?.reworkType || "").trim().toLowerCase();
@@ -378,7 +378,7 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
     const allowedSources = new Set(["editorial", "ready_for_production", "production", "live"]);
     return allWorkflowRows.filter((row) => {
       if (!allowedSources.has(String(row?.source || ""))) return false;
-      const date = String(row?.leadSubmittedDate || "").slice(0, 10);
+      const date = String(row?.dateSubmittedByLead || "").slice(0, 10);
       if (weekStart && date < weekStart) return false;
       if (weekEnd && date > weekEnd) return false;
       const rt = String(row?.reworkType || "").trim().toLowerCase();
@@ -407,7 +407,7 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
       if (!key) continue;
       if (!byAsset.has(key)) byAsset.set(key, []);
       byAsset.get(key).push(row);
-      const leadDate = String(row?.leadSubmittedDate || "").slice(0, 10);
+      const leadDate = String(row?.dateSubmittedByLead || "").slice(0, 10);
       if (weekStart && leadDate < weekStart) continue;
       if (weekEnd && leadDate > weekEnd) continue;
       const rt = String(row?.reworkType || "").trim().toLowerCase();
