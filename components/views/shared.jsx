@@ -393,46 +393,22 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
   const freshTakeRemainingCount = freshTakeSourceRows.filter((r) => r?.source === "editorial").length;
 
   const productionStageCounts = useMemo(() => {
-    const stagePriority = { editorial: 1, ready_for_production: 2, production: 3, live: 4 };
-    const allowedStages = new Set(Object.keys(stagePriority));
-    const byAsset = new Map();
-    const cohortKeys = new Set();
-
+    const counts = { ready: 0, production: 0, live: 0 };
     for (const row of allWorkflowRows) {
       const source = String(row?.source || "");
-      if (!allowedStages.has(source)) continue;
-      const key =
-        String(row?.assetCode || "").trim().toLowerCase() ||
-        `${String(row?.showName || "").trim().toLowerCase()}|${String(row?.beatName || "").trim().toLowerCase()}`;
-      if (!key) continue;
-      if (!byAsset.has(key)) byAsset.set(key, []);
-      byAsset.get(key).push(row);
+      if (source !== "ready_for_production" && source !== "production" && source !== "live") continue;
       const leadDate = String(row?.leadSubmittedDate || "").slice(0, 10);
+      if (!leadDate) continue;
       if (weekStart && leadDate < weekStart) continue;
       if (weekEnd && leadDate > weekEnd) continue;
-      const rt = String(row?.reworkType || "").trim().toLowerCase();
-      if (rt !== "fresh take" && rt !== "fresh takes") continue;
-      cohortKeys.add(key);
+      if (source === "ready_for_production") counts.ready += 1;
+      else if (source === "production") counts.production += 1;
+      else if (source === "live") counts.live += 1;
     }
-
-    const counts = { editorial: 0, ready: 0, production: 0, live: 0 };
-    for (const key of cohortKeys) {
-      const rows = byAsset.get(key) || [];
-      let bestStage = "editorial";
-      for (const row of rows) {
-        const source = String(row?.source || "");
-        if (!allowedStages.has(source)) continue;
-        if (stagePriority[source] > stagePriority[bestStage]) bestStage = source;
-      }
-      if (bestStage === "ready_for_production") counts.ready += 1;
-      else if (bestStage === "production") counts.production += 1;
-      else if (bestStage === "live") counts.live += 1;
-      else counts.editorial += 1;
-    }
-    return { ...counts, totalCohort: cohortKeys.size };
+    return counts;
   }, [allWorkflowRows, weekStart, weekEnd]);
 
-  const productionStageTotal = (productionStageCounts.ready || 0) + (productionStageCounts.production || 0) + (productionStageCounts.live || 0);
+  const productionStageTotal = productionStageCounts.ready + productionStageCounts.production + productionStageCounts.live;
   const productionStageMax = Math.max(productionStageCounts.ready, productionStageCounts.production, productionStageCounts.live, 1);
   const successfulAdsCount = fullGenAiRows.filter((r) => r.success).length;
   const hitRatePercent = fullGenAiRows.length > 0 ? (successfulAdsCount / fullGenAiRows.length) * 100 : 0;
