@@ -374,7 +374,22 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
     });
   }, [allWorkflowRows, weekStart, weekEnd]);
 
+  const reworkSourceRows = useMemo(() => {
+    const allowedSources = new Set(["editorial", "ready_for_production", "production", "live"]);
+    return allWorkflowRows.filter((row) => {
+      if (!allowedSources.has(String(row?.source || ""))) return false;
+      const date = String(row?.leadSubmittedDate || "").slice(0, 10);
+      if (weekStart && date < weekStart) return false;
+      if (weekEnd && date > weekEnd) return false;
+      const rt = String(row?.reworkType || "").trim().toLowerCase();
+      return rt !== "" && rt !== "fresh take" && rt !== "fresh takes";
+    });
+  }, [allWorkflowRows, weekStart, weekEnd]);
+
   const freshTakeCount = freshTakeSourceRows.length;
+  const reworkCount = reworkSourceRows.length;
+  const totalAttemptCount = freshTakeCount + reworkCount;
+  const totalAttemptMax = Math.max(freshTakeCount, reworkCount, 1);
   const freshTakeRemainingCount = freshTakeSourceRows.filter((r) => r?.source === "editorial").length;
 
   const productionStageCounts = useMemo(() => {
@@ -429,31 +444,27 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
         info="Counts unique ideation rows by Beats completed date (Beats assigned date as fallback) inside the selected date range."
         body={
           <>
-            <div className="metric-value">{loading ? "..." : formatMetricValue(totalBeats)}</div>
+            <div className="metric-value">{loading ? "..." : formatMetricValue(approvedBeats)}</div>
             {!loading && (
               <div className="overview-mini-bar-stack">
-                <MiniBarRow label="Approved"       value={approvedBeats}      max={beatsStageMax} color="#2d5a3d" />
-                <MiniBarRow label="Review pending" value={reviewPendingBeats} max={beatsStageMax} color="var(--terracotta)" />
-                <MiniBarRow label="Abandoned"      value={abandonedBeats}     max={beatsStageMax} color="#7d5a3a" />
-                <MiniBarRow label="Iterate"        value={iterateBeats}       max={beatsStageMax} color="var(--red)" />
-                <MiniBarRow label="To be ideated"  value={toBeIdeatedBeats}   max={beatsStageMax} color="#7a7a7a" />
+                <MiniBarRow label="Approved" value={approvedBeats} max={Math.max(approvedBeats, 1)} color="#2d5a3d" />
               </div>
             )}
           </>
         }
       />
       <MetricCard
-        label="Fresh take"
-        info='Overall count / Remaining count. "Date submitted by Lead" in range; remaining = still in Editorial.'
+        label="Total Attempt"
+        info='"Date submitted by Lead" in range. Fresh Take = FT rows; Rework = all other typed rows.'
         body={
           <>
             <div className="metric-value">
-              {loading ? "..." : `${formatMetricValue(freshTakeCount)} / ${formatMetricValue(freshTakeRemainingCount)}`}
+              {loading ? "..." : formatMetricValue(totalAttemptCount)}
             </div>
             {!loading && (
               <div className="overview-mini-bar-stack">
-                <MiniBarRow label="Overall count"   value={freshTakeCount}          max={Math.max(freshTakeCount, 1)} color="var(--forest)" />
-                <MiniBarRow label="Remaining count" value={freshTakeRemainingCount} max={Math.max(freshTakeCount, 1)} color="var(--terracotta)" />
+                <MiniBarRow label="Fresh Take" value={freshTakeCount} max={totalAttemptMax} color="var(--forest)" />
+                <MiniBarRow label="Rework"     value={reworkCount}    max={totalAttemptMax} color="var(--terracotta)" />
               </div>
             )}
           </>
