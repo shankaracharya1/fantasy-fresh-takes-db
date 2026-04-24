@@ -395,7 +395,7 @@ function writeClientCache(key, payload) {
 const MORE_VIEWS = new Set(["details", "planner"]);
 
 export default function UnifiedOpsApp() {
-  const [activeView, setActiveView] = useState("leadership-overview");
+  const [activeView, setActiveView] = useState("overview");
   const [moreExpanded, setMoreExpanded] = useState(false);
   const [themeMode, setThemeMode] = useState("light");
   const [dashboardDateRange, setDashboardDateRange] = useState({
@@ -1178,7 +1178,6 @@ export default function UnifiedOpsApp() {
             <div className="sidebar-section-label">VIEWS</div>
 	            <div className="sidebar-more-items">
 	              {[
-	                ["leadership-overview", "Overview"],
 	                ["overview", "Editorial Funnel"],
 	              ].map(([id, label]) => (
 	                <button
