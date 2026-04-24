@@ -447,7 +447,11 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
             <div className="metric-value">{loading ? "..." : formatMetricValue(approvedBeats)}</div>
             {!loading && (
               <div className="overview-mini-bar-stack">
-                <MiniBarRow label="Approved" value={approvedBeats} max={Math.max(approvedBeats, 1)} color="#2d5a3d" />
+                <MiniBarRow label="Approved"       value={approvedBeats}      max={beatsStageMax} color="#2d5a3d" />
+                <MiniBarRow label="Review pending" value={reviewPendingBeats} max={beatsStageMax} color="var(--terracotta)" />
+                <MiniBarRow label="Abandoned"      value={abandonedBeats}     max={beatsStageMax} color="#7d5a3a" />
+                <MiniBarRow label="Iterate"        value={iterateBeats}       max={beatsStageMax} color="var(--red)" />
+                <MiniBarRow label="To be ideated"  value={toBeIdeatedBeats}   max={beatsStageMax} color="#7a7a7a" />
               </div>
             )}
           </>
