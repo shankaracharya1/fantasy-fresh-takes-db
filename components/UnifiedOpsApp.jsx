@@ -1190,31 +1190,16 @@ export default function UnifiedOpsApp() {
                 </button>
               ))}
 
-              {/* Performance expandable group */}
-              <button
-                type="button"
-                className={`sidebar-link${activeView === "pod-wise" ? " active" : ""}`}
-                onClick={() => {
-                  if (activeView !== "pod-wise") setActiveView("pod-wise");
-                  setPerformanceExpanded((prev) => !prev);
-                }}
-              >
-                <span>Performance</span>
-                <span className={`sidebar-chevron${(performanceExpanded || activeView === "pod-wise") ? " is-open" : ""}`}>▾</span>
-              </button>
-              <div className={`sidebar-subitems${(performanceExpanded || activeView === "pod-wise") ? " is-open" : ""}`} aria-hidden={!(performanceExpanded || activeView === "pod-wise")}>
-                {[["pods", "PODs Performance"], ["cds", "CDs Performance"]].map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`sidebar-link${activeView === "pod-wise" && performanceSubView === id ? " active" : ""}`}
-                    data-subitem="performance"
-                    onClick={() => { setActiveView("pod-wise"); setPerformanceSubView(id); }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              {[["pods", "PODs Performance"], ["cds", "CDs Performance"]].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`sidebar-link${activeView === "pod-wise" && performanceSubView === id ? " active" : ""}`}
+                  onClick={() => { setActiveView("pod-wise"); setPerformanceSubView(id); }}
+                >
+                  {label}
+                </button>
+              ))}
 
               {/* Production expandable group */}
               <button
