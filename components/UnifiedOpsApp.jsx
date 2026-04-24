@@ -1201,31 +1201,13 @@ export default function UnifiedOpsApp() {
                 </button>
               ))}
 
-              {/* Production expandable group */}
               <button
                 type="button"
                 className={`sidebar-link${activeView === "production" ? " active" : ""}`}
-                onClick={() => {
-                  if (activeView !== "production") setActiveView("production");
-                  setProductionExpanded((prev) => !prev);
-                }}
+                onClick={() => { setActiveView("production"); setProductionSubView("pipeline"); }}
               >
-                <span>Production</span>
-                <span className={`sidebar-chevron${productionExpanded ? " is-open" : ""}`}>▾</span>
+                Production
               </button>
-              <div className={`sidebar-subitems${productionExpanded ? " is-open" : ""}`} aria-hidden={!productionExpanded}>
-                  {[["pipeline", "Pipeline"]].map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={`sidebar-link${activeView === "production" && productionSubView === id ? " active" : ""}`}
-                      data-subitem="production"
-                      onClick={() => { setActiveView("production"); setProductionSubView(id); }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
 
 	              {[
 	                ["planner2", "Planner"],
