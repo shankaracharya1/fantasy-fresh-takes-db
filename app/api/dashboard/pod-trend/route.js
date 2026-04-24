@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAnalyticsLiveTabRows, isTatEligibleProductionType } from "../../../../lib/live-tab.js";
+import { fetchAnalyticsLiveTabRows, isFreshTakesLabel } from "../../../../lib/live-tab.js";
 import { generateWeekKeysSince } from "../../../../lib/tracker-data.js";
 import { shiftYmd, formatWeekRangeLabel } from "../../../../lib/week-view.js";
 
@@ -48,31 +48,14 @@ function classifyRows(analyticsRows, weekStart, weekEnd, podNameMap) {
   const validRows = (Array.isArray(analyticsRows) ? analyticsRows : []).filter((row) => {
     const liveDate = String(row?.liveDate || "").trim();
     if (!liveDate || liveDate < weekStart || liveDate > weekEnd) return false;
-    if (!isTatEligibleProductionType(row?.productionType)) return false;
+    if (!isFreshTakesLabel(row?.reworkType)) return false;
     const assetCode = String(row?.assetCode || "").trim();
     return Boolean(assetCode);
   });
 
-  // Dedupe per pod+assetCode — keep best row
-  const podAssetMap = new Map();
+  const podStats = new Map();
   for (const row of validRows) {
     const podName = resolvePod(row?.podLeadName);
-    if (!podName) continue;
-    const key = `${podName}|${String(row?.assetCode || "").trim().toLowerCase()}`;
-    if (!podAssetMap.has(key)) {
-      podAssetMap.set(key, { row, podName });
-    } else {
-      const existing = podAssetMap.get(key);
-      const next = Number(row?.metricsCompletenessScore || 0);
-      const prev = Number(existing.row?.metricsCompletenessScore || 0);
-      if (next > prev || (next === prev && Number(row?.amountSpentUsd || 0) > Number(existing.row?.amountSpentUsd || 0))) {
-        podAssetMap.set(key, { row, podName });
-      }
-    }
-  }
-
-  const podStats = new Map();
-  for (const { row, podName } of podAssetMap.values()) {
     if (!podName) continue;
     if (!podStats.has(podName)) podStats.set(podName, { totalLive: 0, hits: 0 });
     const stats = podStats.get(podName);

@@ -269,7 +269,8 @@ select {
   display: flex;
 }
 
-.sidebar-link[data-subitem="production"] {
+.sidebar-link[data-subitem="production"],
+.sidebar-link[data-subitem="performance"] {
   font-size: 12px;
   padding-top: 5px;
   padding-bottom: 5px;
@@ -1549,6 +1550,11 @@ select {
 
 [data-theme="dark"] body {
   background: var(--bg);
+}
+
+/* Pod trend chart — dark mode: tone down overlapping area fills */
+[data-theme="dark"] .pod-trend-area {
+  opacity: 0.45 !important;
 }
 
 [data-theme="dark"] body::before {

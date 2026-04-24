@@ -982,6 +982,14 @@ function swDateShort(ymd) {
 }
 
 function ShowWiseTable({ allWorkflowRows = [], allAnalyticsRows = [], weekStart, weekEnd, loading = false }) {
+  const [collapsedPods, setCollapsedPods] = useState(new Set());
+  const togglePod = (podName) =>
+    setCollapsedPods((prev) => {
+      const next = new Set(prev);
+      next.has(podName) ? next.delete(podName) : next.add(podName);
+      return next;
+    });
+
   const pods = useMemo(() => {
     const podMap = new Map();
 
@@ -1082,13 +1090,16 @@ function ShowWiseTable({ allWorkflowRows = [], allAnalyticsRows = [], weekStart,
             </th>
             <th>Success<div className="show-wise-subhead">{"< $6 CPI"}</div></th>
             <th>Promising<div className="show-wise-subhead">{"< $10 CPI"}</div></th>
+            <th style={{ width: 36 }} />
           </tr>
         </thead>
         <tbody>
-          {pods.map(({ podName, writerCount, shows, total }) => (
+          {pods.map(({ podName, writerCount, shows, total }) => {
+            const isCollapsed = collapsedPods.has(podName);
+            return (
             <Fragment key={`pod-${podName}`}>
               <tr className="show-wise-pod-total-row">
-                <td rowSpan={shows.length + 1} className="show-wise-pod-cell">
+                <td rowSpan={isCollapsed ? 1 : shows.length + 1} className="show-wise-pod-cell">
                   <div className="show-wise-pod-name">{podName}</div>
                   {writerCount > 0 && <div className="show-wise-writer-count">({writerCount} writers)</div>}
                 </td>
@@ -1097,8 +1108,26 @@ function ShowWiseTable({ allWorkflowRows = [], allAnalyticsRows = [], weekStart,
                 <td className="show-wise-total">{total.live > 0 ? total.live : "—"}</td>
                 <td className="show-wise-total">{total.success > 0 ? total.success : "—"}</td>
                 <td className="show-wise-total">{total.promising > 0 ? total.promising : "—"}</td>
+                <td style={{ textAlign: "center", verticalAlign: "middle" }}>
+                  <button
+                    type="button"
+                    onClick={() => togglePod(podName)}
+                    style={{
+                      width: 22, height: 22, borderRadius: "50%",
+                      border: "1.5px solid var(--accent, #c2703e)",
+                      background: "transparent", color: "var(--accent, #c2703e)",
+                      fontSize: 15, lineHeight: 1, fontWeight: 700,
+                      cursor: "pointer", display: "inline-flex",
+                      alignItems: "center", justifyContent: "center",
+                      padding: 0, flexShrink: 0,
+                    }}
+                    aria-label={isCollapsed ? "Expand rows" : "Collapse rows"}
+                  >
+                    {isCollapsed ? "+" : "−"}
+                  </button>
+                </td>
               </tr>
-              {shows.map((sh) => (
+              {!isCollapsed && shows.map((sh) => (
                 <tr key={`${podName}-${sh.showName}`} className="show-wise-show-row">
                   <td className="show-wise-show-name">{sh.showName}</td>
                   <td>{sh.submitToProd > 0 ? sh.submitToProd : ""}</td>
@@ -1113,12 +1142,163 @@ function ShowWiseTable({ allWorkflowRows = [], allAnalyticsRows = [], weekStart,
                       <><span>{sh.promisingBeats.size}</span><div className="show-wise-beat-list">{Array.from(sh.promisingBeats).join(" / ")}</div></>
                     ) : ""}
                   </td>
+                  <td />
                 </tr>
               ))}
             </Fragment>
-          ))}
+            );
+          })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ─── Detailed Overview Table ──────────────────────────────────────────────────
+
+const PAGE_SIZE = 15;
+
+function ReworkBadge({ value }) {
+  const v = String(value || "").trim().toLowerCase();
+  const isFT = v.includes("fresh");
+  return (
+    <span style={{
+      display: "inline-block",
+      padding: "2px 8px",
+      borderRadius: 99,
+      fontSize: 10,
+      fontWeight: 700,
+      letterSpacing: "0.04em",
+      background: isFT ? "rgba(45,90,61,0.12)" : "rgba(194,112,62,0.12)",
+      color: isFT ? "#2d5a3d" : "#c2703e",
+    }}>
+      {isFT ? "FT" : "RW"}
+    </span>
+  );
+}
+
+function DetailedOverviewTable({ rows = [], loading = false }) {
+  const [expandedPods, setExpandedPods] = useState(new Set());
+  const [page, setPage] = useState(0);
+
+  const togglePod = (pod) =>
+    setExpandedPods((prev) => {
+      const next = new Set(prev);
+      next.has(pod) ? next.delete(pod) : next.add(pod);
+      return next;
+    });
+
+  // Group rows by POD
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const row of rows) {
+      const pod = row.podLeadName || "(No POD)";
+      if (!map.has(pod)) map.set(pod, []);
+      map.get(pod).push(row);
+    }
+    return Array.from(map.entries()).map(([pod, items]) => ({ pod, items }));
+  }, [rows]);
+
+  // Flatten for pagination (only expanded pods show writer rows)
+  const flatRows = useMemo(() => {
+    const result = [];
+    for (const { pod, items } of grouped) {
+      result.push({ type: "pod", pod, count: items.length });
+      if (expandedPods.has(pod)) {
+        for (const item of items) result.push({ type: "row", pod, item });
+      }
+    }
+    return result;
+  }, [grouped, expandedPods]);
+
+  const totalPages = Math.ceil(flatRows.length / PAGE_SIZE);
+  const pageRows = flatRows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Detailed Overview</div>
+      {loading ? (
+        <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>Loading…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>No records found for selected date range.</div>
+      ) : (
+        <>
+          <div style={{ overflowX: "auto" }}>
+            <table className="ops-table" style={{ width: "100%", tableLayout: "fixed" }}>
+              <colgroup>
+                <col style={{ width: "22%" }} />
+                <col style={{ width: "18%" }} />
+                <col style={{ width: "22%" }} />
+                <col style={{ width: "26%" }} />
+                <col style={{ width: "12%" }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>POD</th>
+                  <th>Writer</th>
+                  <th>Show</th>
+                  <th>Angle</th>
+                  <th style={{ textAlign: "center" }}>Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((r, idx) => {
+                  if (r.type === "pod") {
+                    const isOpen = expandedPods.has(r.pod);
+                    return (
+                      <tr key={`pod-${r.pod}-${idx}`}
+                        onClick={() => togglePod(r.pod)}
+                        style={{ cursor: "pointer", background: "var(--bg-surface)", userSelect: "none" }}
+                      >
+                        <td colSpan={5}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: 12 }}>
+                            <span style={{
+                              width: 18, height: 18, borderRadius: "50%", border: "1.5px solid var(--accent)",
+                              color: "var(--accent)", display: "inline-flex", alignItems: "center", justifyContent: "center",
+                              fontSize: 12, lineHeight: 1, flexShrink: 0,
+                            }}>{isOpen ? "−" : "+"}</span>
+                            {r.pod}
+                            <span style={{ fontWeight: 400, fontSize: 11, color: "var(--subtle)" }}>{r.count} entries</span>
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const { item } = r;
+                  return (
+                    <tr key={`row-${r.pod}-${idx}`}>
+                      <td style={{ color: "var(--subtle)", fontSize: 11 }}></td>
+                      <td style={{ fontSize: 12 }}>{item.writerName || "—"}</td>
+                      <td style={{ fontSize: 12 }}>{item.showName || "—"}</td>
+                      <td style={{ fontSize: 12 }}>{item.beatName || "—"}</td>
+                      <td style={{ textAlign: "center" }}>
+                        {item.reworkType ? <ReworkBadge value={item.reworkType} /> : <span style={{ color: "var(--subtle)", fontSize: 11 }}>—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {totalPages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
+              <span style={{ fontSize: 11, color: "var(--subtle)" }}>
+                Page {page + 1} of {totalPages} ({rows.length} total)
+              </span>
+              <button type="button" className="week-toggle-group" disabled={page === 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                style={{ opacity: page === 0 ? 0.4 : 1, cursor: page === 0 ? "default" : "pointer" }}>
+                ‹ Prev
+              </button>
+              <button type="button" className="week-toggle-group" disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                style={{ opacity: page >= totalPages - 1 ? 0.4 : 1, cursor: page >= totalPages - 1 ? "default" : "pointer" }}>
+                Next ›
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -1135,6 +1315,8 @@ export default function OverviewContent({
   copyingSection,
   includeNewShowsPod,
   onIncludeNewShowsPodChange,
+  detailRows = [],
+  detailLoading = false,
 }) {
   const notes = buildOverviewNotes({ overviewError, overviewData });
   const weekLabel = overviewData?.weekLabel || "";
@@ -1178,6 +1360,14 @@ export default function OverviewContent({
 
         <hr className="section-divider" />
 
+        <PodThroughputRankingTable rows={podThroughputRows} loading={podLoading} />
+
+        <hr className="section-divider" />
+
+        <DetailedOverviewTable rows={detailRows} loading={detailLoading} />
+
+        <hr className="section-divider" />
+
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Show Wise</div>
         <ShowWiseTable
           allWorkflowRows={allWorkflowRows}
@@ -1186,8 +1376,6 @@ export default function OverviewContent({
           weekEnd={weekEnd}
           loading={podLoading}
         />
-
-        <PodThroughputRankingTable rows={podThroughputRows} loading={podLoading} />
 
         {(() => {
           if (selectionMode === "editorial_funnel") {

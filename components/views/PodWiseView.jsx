@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
   EmptyState,
   ShareablePanel,
@@ -58,26 +58,37 @@ function HitRateTrendChart({ trendData, loading }) {
   const [granularity, setGranularity] = useState("week");
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const containerRef = useRef(null);
-  const [containerW, setContainerW] = useState(720);
+  const [containerW, setContainerW] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    // Measure synchronously before first paint so viewBox matches actual width
+    const initial = Math.floor(el.getBoundingClientRect().width);
+    if (initial > 0) setContainerW(initial);
     const ro = new ResizeObserver(([entry]) => {
-      if (entry) setContainerW(Math.floor(entry.contentRect.width) || 720);
+      if (entry) setContainerW(Math.floor(entry.contentRect.width) || initial || 720);
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
+  const allWeeks = trendData?.weeks || [];
+  // Week: last 4 weeks excluding 2 most recent
+  const slicedWeeks = allWeeks.length >= 2
+    ? allWeeks.slice(Math.max(0, allWeeks.length - 6), allWeeks.length - 2)
+    : [];
+  // Lifetime: all weeks since Mar 16 (no slicing)
   const series = granularity === "week"
-    ? (trendData?.weeks || [])
-    : (trendData?.months || []);
+    ? slicedWeeks
+    : granularity === "month"
+    ? (trendData?.months || [])
+    : allWeeks;
   const podNames = trendData?.podNames || [];
   const activePods = podNames.filter((pod) => series.some((pt) => pod in pt.pods));
 
-  const H = 260;
-  const PAD = { top: 20, right: 20, bottom: 40, left: 46 };
+  const H = 225;
+  const PAD = { top: 16, right: 20, bottom: 36, left: 42 };
   const W = Math.max(containerW, 280);
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
@@ -86,9 +97,17 @@ function HitRateTrendChart({ trendData, loading }) {
   const yTicks = [0, 25, 50, 75, 100];
 
   const xLabel = (i) => {
-    if (granularity === "week") return `Wk ${i + 1}`;
     const pt = series[i];
-    return pt.monthLabel?.slice(0, 3) || pt.monthKey?.slice(5) || "";
+    if ((granularity === "week" || granularity === "lifetime") && pt?.weekKey) {
+      const parts = pt.weekKey.split("-").map(Number);
+      const m = parts[1];
+      const d = parts[2];
+      const monthAbbr = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m - 1];
+      const weekNum = Math.floor((d - 1) / 7) + 1;
+      return `${monthAbbr} W${weekNum}`;
+    }
+    if (pt?.monthLabel) return pt.monthLabel.slice(0, 3);
+    return pt?.monthKey?.slice(5) || "";
   };
   const labelEvery = series.length <= 10 ? 1 : series.length <= 20 ? 2 : Math.ceil(series.length / 10);
 
@@ -105,7 +124,13 @@ function HitRateTrendChart({ trendData, loading }) {
     : 0;
   const tooltipData = hoveredIdx !== null ? series[hoveredIdx] : null;
   const tooltipRows = activePods
-    .map((pod, i) => ({ pod, color: POD_LINE_COLORS[i % POD_LINE_COLORS.length], val: tooltipData?.pods[pod]?.hitRate }))
+    .map((pod, i) => ({
+      pod,
+      color: POD_LINE_COLORS[i % POD_LINE_COLORS.length],
+      val: tooltipData?.pods[pod]?.hitRate,
+      totalLive: tooltipData?.pods[pod]?.totalLive,
+      hits: tooltipData?.pods[pod]?.hits,
+    }))
     .filter((r) => r.val !== undefined)
     .sort((a, b) => b.val - a.val);
 
@@ -125,11 +150,13 @@ function HitRateTrendChart({ trendData, loading }) {
         </div>
       </div>
 
+      {/* containerRef div always rendered so useLayoutEffect can measure it */}
+      <div ref={containerRef} style={{ position: "relative", userSelect: "none", width: "100%", height: H }}>
       {loading ? (
         <div style={{ color: "var(--subtle)", fontSize: 13, padding: "16px 0" }}>Loading trend data…</div>
       ) : activePods.length === 0 || series.length === 0 ? (
         <div style={{ color: "var(--subtle)", fontSize: 13, padding: "16px 0" }}>No trend data available yet.</div>
-      ) : (
+      ) : containerW === 0 ? null : (
         <>
           {/* Legend */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", marginBottom: 14 }}>
@@ -141,21 +168,34 @@ function HitRateTrendChart({ trendData, loading }) {
             ))}
           </div>
 
-          {/* Chart container — relative so tooltip can be absolute */}
-          <div ref={containerRef} style={{ position: "relative", userSelect: "none" }}>
+          {/* SVG fills the containerRef div */}
+          <div style={{ position: "relative", width: "100%", height: H }}>
             <svg
               viewBox={`0 0 ${W} ${H}`}
               width="100%"
+              height="100%"
               style={{ display: "block", overflow: "visible" }}
               onMouseMove={handleSvgMouseMove}
               onMouseLeave={() => setHoveredIdx(null)}
             >
               <defs>
+                <style>{`
+                  @keyframes fadeRiseUp {
+                    0%   { transform: translateY(22px); opacity: 0; }
+                    60%  { opacity: 1; }
+                    100% { transform: translateY(0px);  opacity: 1; }
+                  }
+                  @keyframes fadeRiseArea {
+                    0%   { transform: translateY(14px); opacity: 0; }
+                    100% { transform: translateY(0px);  opacity: 1; }
+                  }
+                `}</style>
                 {activePods.map((pod, pi) => {
                   const color = POD_LINE_COLORS[pi % POD_LINE_COLORS.length];
                   return (
                     <linearGradient key={pod} id={`pod-grad-${pi}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+                      <stop offset="0%"   stopColor={color} stopOpacity="0.22" />
+                      <stop offset="55%"  stopColor={color} stopOpacity="0.08" />
                       <stop offset="100%" stopColor={color} stopOpacity="0" />
                     </linearGradient>
                   );
@@ -164,35 +204,29 @@ function HitRateTrendChart({ trendData, loading }) {
 
               <g transform={`translate(${PAD.left},${PAD.top})`}>
                 {/* Chart background */}
-                <rect x={0} y={0} width={chartW} height={chartH} fill="white" fillOpacity="0.5" rx={4} />
+                <rect x={0} y={0} width={chartW} height={chartH} fill="var(--card)" fillOpacity="1" rx={4} />
 
-                {/* Horizontal grid lines + Y labels */}
+                {/* Horizontal grid lines + Y labels — ghost thin */}
                 {yTicks.map((tick) => (
                   <g key={tick}>
                     <line x1={0} x2={chartW} y1={yScale(tick)} y2={yScale(tick)}
-                      stroke={tick === 0 ? "#c8bfb5" : "#e8e0d8"} strokeWidth={tick === 0 ? 1 : 1}
-                      strokeDasharray={tick === 0 ? "none" : "3 4"} />
+                      stroke={tick === 0 ? "var(--border-strong)" : "var(--line)"} strokeWidth={0.5}
+                      strokeDasharray={tick === 0 ? "none" : "4 6"} strokeOpacity={0.6} />
                     <text x={-8} y={yScale(tick)} textAnchor="end" dominantBaseline="middle"
-                      fontSize={9.5} fill="#9a8e84" fontWeight="500">{tick}%</text>
+                      fontSize={8.5} fill="var(--subtle)" fontWeight="400">{tick}%</text>
                   </g>
                 ))}
 
-                {/* Vertical grid lines + X labels */}
+                {/* X labels only — no vertical grid lines */}
                 {series.map((_, i) => {
                   const x = i * xStep;
                   const showLabel = i % labelEvery === 0;
-                  return (
-                    <g key={i}>
-                      <line x1={x} x2={x} y1={0} y2={chartH}
-                        stroke="#ece6e0" strokeWidth={1} strokeDasharray="3 4" />
-                      {showLabel && (
-                        <text x={x} y={chartH + 14} textAnchor="middle"
-                          fontSize={9.5} fill="#9a8e84" fontWeight="500">
-                          {xLabel(i)}
-                        </text>
-                      )}
-                    </g>
-                  );
+                  return showLabel ? (
+                    <text key={i} x={x} y={chartH + 13} textAnchor="middle"
+                      fontSize={8.5} fill="var(--subtle)" fontWeight="400">
+                      {xLabel(i)}
+                    </text>
+                  ) : null;
                 })}
 
                 {/* Hover crosshair */}
@@ -200,27 +234,33 @@ function HitRateTrendChart({ trendData, loading }) {
                   <line
                     x1={hoveredIdx * xStep} x2={hoveredIdx * xStep}
                     y1={0} y2={chartH}
-                    stroke="#2d2420" strokeWidth={1.5} strokeOpacity={0.25}
-                    strokeDasharray="4 3"
+                    stroke="var(--ink)" strokeWidth={1} strokeOpacity={0.18}
+                    strokeDasharray="3 3"
                     style={{ pointerEvents: "none" }}
                   />
                 )}
 
-                {/* Area fills */}
+                {/* Area fills — very subtle, fade in after lines draw */}
                 {activePods.map((pod, pi) => {
                   const points = series.map((pt, i) => {
                     const val = pt.pods[pod]?.hitRate;
                     return val !== undefined ? { x: i * xStep, y: yScale(val) } : null;
                   });
                   const areaD = buildSmoothedAreaPath(points, chartH);
+                  const delay = `${0.3 + pi * 0.08}s`;
                   return areaD ? (
-                    <path key={pod} d={areaD}
+                    <path key={`${pod}-${granularity}-area`} d={areaD}
                       fill={`url(#pod-grad-${pi})`}
-                      style={{ pointerEvents: "none" }} />
+                      className="pod-trend-area"
+                      style={{
+                        pointerEvents: "none",
+                        opacity: 0,
+                        animation: `fadeRiseArea 0.7s cubic-bezier(0.22,1,0.36,1) ${delay} forwards`,
+                      }} />
                   ) : null;
                 })}
 
-                {/* Lines */}
+                {/* Lines — draw-in animation, staggered per POD */}
                 {activePods.map((pod, pi) => {
                   const color = POD_LINE_COLORS[pi % POD_LINE_COLORS.length];
                   const points = series.map((pt, i) => {
@@ -228,30 +268,57 @@ function HitRateTrendChart({ trendData, loading }) {
                     return val !== undefined ? { x: i * xStep, y: yScale(val), val } : null;
                   });
                   const lineD = buildSmoothedPath(points);
+                  const delay = `${pi * 0.08}s`;
                   return lineD ? (
-                    <path key={pod} d={lineD}
-                      fill="none" stroke={color} strokeWidth={2.5}
+                    <path key={`${pod}-${granularity}-line`} d={lineD}
+                      fill="none" stroke={color} strokeWidth={1}
                       strokeLinejoin="round" strokeLinecap="round"
-                      style={{ pointerEvents: "none" }} />
+                      style={{
+                        pointerEvents: "none",
+                        opacity: 0,
+                        animation: `fadeRiseUp 0.75s cubic-bezier(0.22,1,0.36,1) ${delay} forwards`,
+                      }} />
                   ) : null;
                 })}
 
-                {/* Dots — always small, larger at hovered column */}
+                {/* Dots — outer <g> positions, inner <g> animates scale so CSS doesn't clobber SVG translate */}
                 {activePods.map((pod, pi) => {
                   const color = POD_LINE_COLORS[pi % POD_LINE_COLORS.length];
+                  const lineDelay = pi * 0.08;
                   return series.map((pt, i) => {
                     const val = pt.pods[pod]?.hitRate;
                     if (val === undefined) return null;
                     const isHovered = hoveredIdx === i;
+                    const cx = i * xStep;
+                    const cy = yScale(val);
                     return (
-                      <circle key={`${pod}-${i}`}
-                        cx={i * xStep} cy={yScale(val)}
-                        r={isHovered ? 6 : 3.5}
-                        fill={isHovered ? color : "white"}
-                        stroke={color}
-                        strokeWidth={isHovered ? 0 : 2}
-                        style={{ transition: "r 0.15s ease, fill 0.15s ease", pointerEvents: "none" }}
-                      />
+                      <g
+                        key={`${pod}-${granularity}-dot-${i}`}
+                        transform={`translate(${cx},${cy})`}
+                        style={{ pointerEvents: "none" }}
+                      >
+                        {/* Glow ring — blurred circle, fades in slowly, never sudden */}
+                        <circle
+                          cx={0} cy={0} r={9}
+                          fill={color}
+                          style={{
+                            filter: "blur(5px)",
+                            opacity: isHovered ? 0.28 : 0,
+                            transition: "opacity 0.55s ease",
+                          }}
+                        />
+                        {/* Outline dot — card-colored fill (adapts dark/light), colored ring */}
+                        <circle
+                          cx={0} cy={0}
+                          r={isHovered ? 4.5 : 2.5}
+                          fill="var(--card)"
+                          stroke={color}
+                          strokeWidth={isHovered ? 1.8 : 1}
+                          style={{
+                            transition: "r 0.3s cubic-bezier(0.34,1.56,0.64,1), stroke-width 0.3s ease",
+                          }}
+                        />
+                      </g>
                     );
                   });
                 })}
@@ -275,7 +342,7 @@ function HitRateTrendChart({ trendData, loading }) {
                   borderRadius: 10,
                   boxShadow: "0 8px 24px -8px rgba(23,34,47,0.22), 0 2px 8px -2px rgba(23,34,47,0.10)",
                   padding: "10px 14px",
-                  minWidth: 140,
+                  minWidth: 200,
                   animation: "fadeInTooltip 0.12s ease",
                 }}
               >
@@ -285,13 +352,26 @@ function HitRateTrendChart({ trendData, loading }) {
                     ? <span style={{ fontWeight: 400, marginLeft: 4, textTransform: "none", letterSpacing: 0 }}>— {series[hoveredIdx].weekLabel}</span>
                     : null}
                 </div>
+                {/* Column headers */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4, paddingBottom: 4, borderBottom: "1px solid #ede8e2" }}>
+                  <span style={{ fontSize: 10, color: "transparent", flex: 1 }}>·</span>
+                  <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "#9a8e84", width: 28, textAlign: "right" }}>FTs</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "#9a8e84", width: 28, textAlign: "right" }}>Hits</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: "#9a8e84", width: 32, textAlign: "right" }}>Hit%</span>
+                  </span>
+                </div>
                 {tooltipRows.map((r) => (
-                  <div key={r.pod} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 4, fontSize: 12 }}>
+                  <div key={r.pod} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 4, fontSize: 12 }}>
                     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: r.color, flexShrink: 0, display: "inline-block" }} />
                       <span style={{ color: "#2d2420" }}>{r.pod}</span>
                     </span>
-                    <span style={{ fontWeight: 700, color: r.color }}>{r.val}%</span>
+                    <span style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontWeight: 600, color: "#2d2420", width: 28, textAlign: "right" }}>{r.totalLive ?? "—"}</span>
+                      <span style={{ fontWeight: 600, color: "#2d5a3d", width: 28, textAlign: "right" }}>{r.hits ?? "—"}</span>
+                      <span style={{ fontWeight: 700, color: r.color, width: 32, textAlign: "right" }}>{r.val}%</span>
+                    </span>
                   </div>
                 ))}
               </div>
@@ -299,6 +379,7 @@ function HitRateTrendChart({ trendData, loading }) {
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }
@@ -531,20 +612,6 @@ export default function PodWiseContent({
             </div>
           </div>
         ) : null}
-
-        <div className="pod-summary-grid">
-          {[
-            { label: "Total beats", value: totalBeats },
-            { label: "Total scripts", value: totalScripts },
-            { label: "Successful", value: totalSuccessful },
-            { label: "Avg conversion", value: `${avgConversion}%` },
-          ].map((card) => (
-            <div key={card.label} className="metric-card">
-              <div className="metric-label">{card.label}</div>
-              <div className="metric-value">{card.value}</div>
-            </div>
-          ))}
-        </div>
 
         <div className="pod-section-header">
           <span className="pod-section-title">POD performance</span>

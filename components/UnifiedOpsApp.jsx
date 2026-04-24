@@ -406,6 +406,8 @@ export default function UnifiedOpsApp() {
   const [overviewData, setOverviewData] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [overviewError, setOverviewError] = useState("");
+  const [overviewDetailRows, setOverviewDetailRows] = useState([]);
+  const [overviewDetailLoading, setOverviewDetailLoading] = useState(false);
   const [leadershipOverviewData, setLeadershipOverviewData] = useState(null);
   const [leadershipOverviewLoading, setLeadershipOverviewLoading] = useState(true);
   const [leadershipOverviewError, setLeadershipOverviewError] = useState("");
@@ -427,6 +429,8 @@ export default function UnifiedOpsApp() {
   const [includeNewShowsPod, setIncludeNewShowsPod] = useState(false);
   const [notice, setNotice] = useState(null);
   const [podWiseView, setPodWiseView] = useState("performance");
+  const [performanceSubView, setPerformanceSubView] = useState("pods");
+  const [performanceExpanded, setPerformanceExpanded] = useState(false);
   const [productionSubView, setProductionSubView] = useState("pipeline");
   const [productionExpanded, setProductionExpanded] = useState(false);
   const [podPerformanceRangeMode, setPodPerformanceRangeMode] = useState("selected");
@@ -457,14 +461,12 @@ export default function UnifiedOpsApp() {
     activeView === "overview" ||
     activeView === "leadership-overview" ||
     activeView === "pod-wise" ||
-    activeView === "analytics" ||
     activeView === "production" ||
     activeView === "planner2";
   const headerDateRangeDisabled =
     (activeView === "overview" && overviewLoading) ||
     (activeView === "leadership-overview" && leadershipOverviewLoading) ||
     (activeView === "pod-wise" && competitionLoading) ||
-    (activeView === "analytics" && analyticsLoading && !analyticsData) ||
     (activeView === "production" && acdMetricsLoading && !acdMetricsData) ||
     (activeView === "planner2" && planner2Loading && !planner2Data);
   const monthWeekOptions = useMemo(() => buildStaticMonthWeekOptions(MIN_DASHBOARD_DATE), []);
@@ -640,6 +642,25 @@ export default function UnifiedOpsApp() {
     }
 
     void loadOverviewSection({ forceLoading: !cachedPayload && !overviewData });
+
+    // Fetch detailed overview rows (filtered by dateSubmittedByLead)
+    async function loadOverviewDetail() {
+      setOverviewDetailLoading(true);
+      try {
+        const res = await fetch(
+          `/api/dashboard/overview-detail?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}`,
+          { cache: "no-store" }
+        );
+        const payload = await readJson(res);
+        if (!cancelled) setOverviewDetailRows(payload.rows || []);
+      } catch {
+        if (!cancelled) setOverviewDetailRows([]);
+      } finally {
+        if (!cancelled) setOverviewDetailLoading(false);
+      }
+    }
+    void loadOverviewDetail();
+
     const intervalId = window.setInterval(() => {
       void loadOverviewSection({ forceLoading: false });
     }, DASHBOARD_CLIENT_REFRESH_MS);
@@ -906,64 +927,6 @@ export default function UnifiedOpsApp() {
     };
   }, [activeView, dashboardDateRange]);
 
-  useEffect(() => {
-    if (activeView !== "analytics") {
-      return undefined;
-    }
-
-    let cancelled = false;
-    const rangeSelection = buildDateRangeSelection(dashboardDateRange);
-    const cacheKey = `analytics:${rangeSelection.startDate}:${rangeSelection.endDate}`;
-    const cachedPayload = readClientCache(cacheKey);
-    if (cachedPayload) {
-      setAnalyticsData(cachedPayload);
-      setAnalyticsLoading(false);
-      setAnalyticsError("");
-    }
-
-    async function loadAnalytics({ forceLoading = false } = {}) {
-      setDashboardLoadingMessage("Refreshing Analytics…");
-      if (forceLoading || (!analyticsData && !cachedPayload)) {
-        setAnalyticsLoading(true);
-      }
-      setAnalyticsError("");
-
-      try {
-        const analyticsUrl = `/api/dashboard/analytics?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}`;
-        const response = await fetch(analyticsUrl, { cache: "no-store" });
-        const payload = await readJson(response);
-        if (!response.ok) {
-          throw new Error(payload.error || "Unable to load Analytics dashboard.");
-        }
-
-        if (!cancelled) {
-          setAnalyticsData(payload);
-          setDashboardLoadingMessage("");
-          writeClientCache(cacheKey, payload);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          if (!analyticsData && !cachedPayload) {
-            setAnalyticsError(error.message || "Unable to load Analytics dashboard.");
-          }
-        }
-      } finally {
-        if (!cancelled) {
-          setAnalyticsLoading(false);
-          setDashboardLoadingMessage("");
-        }
-      }
-    }
-
-    void loadAnalytics({ forceLoading: !cachedPayload && !analyticsData });
-    const intervalId = window.setInterval(() => {
-      void loadAnalytics({ forceLoading: false });
-    }, DASHBOARD_CLIENT_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [activeView, dashboardDateRange]);
 
   async function requestAcdMetrics(cancelState = null) {
     if (!cancelState?.cancelled) {
@@ -1036,7 +999,8 @@ export default function UnifiedOpsApp() {
   }
 
   useEffect(() => {
-    if (activeView !== "production" && activeView !== "details" && activeView !== "overview" && activeView !== "leadership-overview") {
+    const isCdsPerformance = activeView === "pod-wise" && performanceSubView === "cds";
+    if (activeView !== "production" && activeView !== "details" && activeView !== "overview" && activeView !== "leadership-overview" && !isCdsPerformance) {
       return undefined;
     }
     if (acdMetricsData) {
@@ -1048,10 +1012,11 @@ export default function UnifiedOpsApp() {
     return () => {
       cancelState.cancelled = true;
     };
-  }, [activeView, acdMetricsData]);
+  }, [activeView, performanceSubView, acdMetricsData]);
 
   useEffect(() => {
-    if (activeView !== "production") return undefined;
+    const isCdsPerformance = activeView === "pod-wise" && performanceSubView === "cds";
+    if (activeView !== "production" && !isCdsPerformance) return undefined;
     let cancelled = false;
     setDashboardLoadingMessage("Refreshing Production…");
     setProductionPipelineLoading(true);
@@ -1061,7 +1026,7 @@ export default function UnifiedOpsApp() {
       .catch(() => {})
       .finally(() => { if (!cancelled) { setProductionPipelineLoading(false); setDashboardLoadingMessage(""); } });
     return () => { cancelled = true; };
-  }, [activeView]);
+  }, [activeView, performanceSubView]);
 
   useEffect(() => {
     if (!notice) {
@@ -1190,7 +1155,7 @@ export default function UnifiedOpsApp() {
   const activeViewLabelMap = {
     "leadership-overview": "Overview",
     overview: "Editorial Funnel",
-    "pod-wise": "PODs Performance",
+    "pod-wise": performanceSubView === "cds" ? "CDs Performance" : "PODs Performance",
     planner: "Planner",
     planner2: "Planner",
     analytics: "Analytics",
@@ -1215,7 +1180,6 @@ export default function UnifiedOpsApp() {
 	              {[
 	                ["leadership-overview", "Overview"],
 	                ["overview", "Editorial Funnel"],
-	                ["pod-wise", "PODs Performance"],
 	              ].map(([id, label]) => (
 	                <button
 	                  key={id}
@@ -1226,6 +1190,32 @@ export default function UnifiedOpsApp() {
                   {label}
                 </button>
               ))}
+
+              {/* Performance expandable group */}
+              <button
+                type="button"
+                className={`sidebar-link${activeView === "pod-wise" ? " active" : ""}`}
+                onClick={() => {
+                  if (activeView !== "pod-wise") setActiveView("pod-wise");
+                  setPerformanceExpanded((prev) => !prev);
+                }}
+              >
+                <span>Performance</span>
+                <span className={`sidebar-chevron${(performanceExpanded || activeView === "pod-wise") ? " is-open" : ""}`}>▾</span>
+              </button>
+              <div className={`sidebar-subitems${(performanceExpanded || activeView === "pod-wise") ? " is-open" : ""}`} aria-hidden={!(performanceExpanded || activeView === "pod-wise")}>
+                {[["pods", "PODs Performance"], ["cds", "CDs Performance"]].map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`sidebar-link${activeView === "pod-wise" && performanceSubView === id ? " active" : ""}`}
+                    data-subitem="performance"
+                    onClick={() => { setActiveView("pod-wise"); setPerformanceSubView(id); }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
 
               {/* Production expandable group */}
               <button
@@ -1255,7 +1245,6 @@ export default function UnifiedOpsApp() {
 
 	              {[
 	                ["planner2", "Planner"],
-	                ["analytics", "Analytics"],
 	              ].map(([id, label]) => (
                 <button
                   key={id}
@@ -1269,36 +1258,7 @@ export default function UnifiedOpsApp() {
             </div>
           </div>
 
-          <div className="sidebar-section">
-            <button
-              type="button"
-              className={`sidebar-section-label sidebar-more-toggle${MORE_VIEWS.has(activeView) ? " has-active" : ""}`}
-              onClick={() => setMoreExpanded((prev) => !prev)}
-              aria-expanded={moreExpanded || MORE_VIEWS.has(activeView)}
-            >
-              <span>MORE</span>
-              <span className="sidebar-more-chevron" style={{ transform: (moreExpanded || MORE_VIEWS.has(activeView)) ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
-            </button>
-            <div
-              className="sidebar-more-items"
-              style={{ display: moreExpanded || MORE_VIEWS.has(activeView) ? "flex" : "none" }}
-              aria-hidden={!(moreExpanded || MORE_VIEWS.has(activeView))}
-            >
-              {[
-                ["details", "Details"],
-                ["planner", "Planner"],
-              ].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`sidebar-link${activeView === id ? " active" : ""}`}
-                  onClick={() => setActiveView(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+
         </nav>
 
         <main className="ops-main">
@@ -1501,51 +1461,48 @@ export default function UnifiedOpsApp() {
                   copyingSection={copyingSection}
                   includeNewShowsPod={includeNewShowsPod}
                   onIncludeNewShowsPodChange={setIncludeNewShowsPod}
+                  detailRows={overviewDetailRows}
+                  detailLoading={overviewDetailLoading}
                 />
               </div>
             ) : null}
 
-            {activeView === "pod-wise" ? (
+            {activeView === "pod-wise" && performanceSubView === "cds" ? (
               <div className="section-shell">
-                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
-                  <div className="week-toggle-group">
-                    {[
-                      { id: "performance", label: "Performance" },
-                      { id: "tasks", label: "Tasks" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        className={podWiseView === opt.id ? "is-active" : ""}
-                        onClick={() => setPodWiseView(opt.id)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {podWiseView === "performance" ? (
-                  <PodWiseContent
-                    competitionPodRows={competitionData?.podRows}
-                    competitionLoading={competitionLoading}
-                    competitionWeekLabel={competitionData?.weekLabel}
-                    performanceRangeMode={podPerformanceRangeMode}
-                    onPerformanceRangeModeChange={setPodPerformanceRangeMode}
-                    performanceScope={podPerformanceScope}
-                    onPerformanceScopeChange={setPodPerformanceScope}
-                    podTrendData={podTrendData}
-                    podTrendLoading={podTrendLoading}
-                    onShare={copySection}
-                    copyingSection={copyingSection}
-                  />
-                ) : (
-                  <PodTasksContent
-                    podTasksData={podTasksData}
-                    podTasksLoading={podTasksLoading}
-                    onShare={copySection}
-                    copyingSection={copyingSection}
-                  />
-                )}
+                <ProductionContent
+                  acdMetricsData={acdMetricsData}
+                  acdMetricsLoading={acdMetricsLoading}
+                  acdMetricsError={acdMetricsError}
+                  productionPipelineData={productionPipelineData}
+                  productionPipelineLoading={productionPipelineLoading}
+                  acdTimeView={acdTimeView}
+                  onTimeViewChange={setAcdTimeView}
+                  acdViewType={acdViewType}
+                  onViewTypeChange={setAcdViewType}
+                  onRunSync={runAcdSync}
+                  busyAction={busyAction}
+                  onShare={copySection}
+                  copyingSection={copyingSection}
+                  productionSubView="throughput"
+                />
+              </div>
+            ) : null}
+
+            {activeView === "pod-wise" && performanceSubView === "pods" ? (
+              <div className="section-shell">
+                <PodWiseContent
+                  competitionPodRows={competitionData?.podRows}
+                  competitionLoading={competitionLoading}
+                  competitionWeekLabel={competitionData?.weekLabel}
+                  performanceRangeMode={podPerformanceRangeMode}
+                  onPerformanceRangeModeChange={setPodPerformanceRangeMode}
+                  performanceScope={podPerformanceScope}
+                  onPerformanceScopeChange={setPodPerformanceScope}
+                  podTrendData={podTrendData}
+                  podTrendLoading={podTrendLoading}
+                  onShare={copySection}
+                  copyingSection={copyingSection}
+                />
               </div>
             ) : null}
 
@@ -1571,19 +1528,7 @@ export default function UnifiedOpsApp() {
             ) : null}
 
 
-            {activeView === "analytics" ? (
-              <div className="section-shell">
-                <AnalyticsContent
-                  analyticsData={analyticsData}
-                  analyticsLoading={analyticsLoading}
-                  analyticsError={analyticsError}
-                  onShare={copySection}
-                  copyingSection={copyingSection}
-                  onToggleActioned={updateAnalyticsActioned}
-                  actionedBusyKey={analyticsActionedBusyKey}
-                />
-              </div>
-            ) : null}
+
 
             {activeView === "production" ? (
               <div className="section-shell">
