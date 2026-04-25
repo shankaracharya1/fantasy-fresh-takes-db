@@ -1494,9 +1494,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
 
                   rows.push(
                     <tr key={`pod-total-${pod.podName}`} style={{ background: "var(--subtle-bg, #f0ece4)", borderTop: "2px solid var(--border)" }}>
-                      <td style={{ fontStyle: "italic", color: "var(--subtle)", fontSize: 12, fontWeight: 600 }}>Total</td>
-                      <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalShows}</td>
-                      <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalBeats}</td>
+                      <td colSpan={3} style={{ fontStyle: "italic", color: "var(--subtle)", fontSize: 12, fontWeight: 600 }}>Total</td>
                       <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalAttempts}</td>
                       <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalSuccess}</td>
                       <td colSpan={2} />
