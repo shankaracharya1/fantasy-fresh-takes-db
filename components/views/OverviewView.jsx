@@ -1184,7 +1184,14 @@ function ReworkBadge({ value }) {
 function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loading = false, allWorkflowRows = [] }) {
   const [expandedAngles, setExpandedAngles] = useState({});
   const [sortConfig, setSortConfig] = useState({ col: "ads", dir: "desc" });
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [collapsedPods, setCollapsedPods] = useState(new Set());
+
+  const togglePodCollapse = (podName) =>
+    setCollapsedPods((prev) => {
+      const next = new Set(prev);
+      next.has(podName) ? next.delete(podName) : next.add(podName);
+      return next;
+    });
   const scopedRows = fullGenAiRows;
   const successfulAdsCount = scopedRows.filter((r) => r.success).length;
 
@@ -1308,8 +1315,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
         </div>
       </div>
 
-      {!isMinimized && (
-        <>
+      <>
           <div className="metric-grid three-col">
             <MetricCard label="Assets live (GI/GA)" value={loading ? "..." : formatMetricValue(scopedRows.length)} />
             <MetricCard
@@ -1338,25 +1344,46 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("ads")}>Ads{sortIcon("ads")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("successful")}>Successful{sortIcon("successful")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("hitRate")}>Hit Rate{sortIcon("hitRate")}</th>
-                  <th style={{ width: 36, textAlign: "center" }}>
-                    <button
-                      type="button"
-                      onClick={() => setIsMinimized((v) => !v)}
-                      title={isMinimized ? "Expand table" : "Minimise table"}
-                      style={{
-                        width: 22, height: 22, borderRadius: 5, border: "1.5px solid var(--border)",
-                        background: "var(--card)", color: "var(--fg)", fontSize: 14, fontWeight: 700,
-                        lineHeight: 1, cursor: "pointer", display: "inline-flex", alignItems: "center",
-                        justifyContent: "center", flexShrink: 0,
-                      }}
-                    >
-                      {isMinimized ? "+" : "−"}
-                    </button>
-                  </th>
+                  <th style={{ width: 36 }} />
                 </tr>
               </thead>
               <tbody>
                 {byPod.length > 0 ? byPod.flatMap((pod) => {
+                  const isPodCollapsed = collapsedPods.has(pod.podName);
+                  const podToggleBtn = (isCollapsed) => (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); togglePodCollapse(pod.podName); }}
+                      title={isCollapsed ? "Expand POD" : "Collapse POD"}
+                      style={{
+                        width: 18, height: 18, borderRadius: 4, border: "1.5px solid var(--border)",
+                        background: "var(--card)", color: "var(--fg)", fontSize: 12, fontWeight: 700,
+                        lineHeight: 1, cursor: "pointer", display: "inline-flex", alignItems: "center",
+                        justifyContent: "center", flexShrink: 0,
+                      }}
+                    >
+                      {isCollapsed ? "+" : "−"}
+                    </button>
+                  );
+
+                  if (isPodCollapsed) {
+                    return [(
+                      <tr key={`pod-collapsed-${pod.podName}`} style={{ background: "var(--subtle-bg, #f0ece4)" }}>
+                        <td style={{ fontWeight: 700, fontSize: 13, borderRight: "1px solid var(--border)", paddingTop: 8, paddingBottom: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                            <span>{pod.podName}</span>
+                            {podToggleBtn(true)}
+                          </div>
+                        </td>
+                        <td colSpan={2} style={{ fontStyle: "italic", color: "var(--subtle)", fontSize: 12, fontWeight: 600 }}>Total</td>
+                        <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalBeats}</td>
+                        <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalAttempts}</td>
+                        <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalSuccess}</td>
+                        <td colSpan={2} />
+                      </tr>
+                    )];
+                  }
+
                   const beatExtra = (writerName, beat) => {
                     const key = `${pod.podName}|${writerName}|${beat.showName}|${beat.beatName}`;
                     return expandedAngles[key] ? beat.ads.length + 1 : 0;
@@ -1392,7 +1419,10 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                           >
                             {isFirstOfPod && (
                               <td rowSpan={podRowSpan} style={{ fontWeight: 700, verticalAlign: "top", fontSize: 13, paddingTop: 10, borderRight: "1px solid var(--border)" }}>
-                                {pod.podName}
+                                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
+                                  <span>{pod.podName}</span>
+                                  {podToggleBtn(false)}
+                                </div>
                               </td>
                             )}
                             {isFirstOfWriter && (
@@ -1491,8 +1521,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
             <div className="overview-guidelines-line">Hit rate = (successful ads / total ads) × 100. Click any row to see per-ad metrics.</div>
             <div className="overview-guidelines-line">Rows shaded light green have one or more successful ads.</div>
           </div>
-        </>
-      )}
+      </>
     </section>
   );
 }
