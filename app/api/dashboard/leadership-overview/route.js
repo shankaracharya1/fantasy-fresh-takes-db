@@ -596,6 +596,7 @@ function buildFullGenAiRows(rows) {
         assetCode: normalizeText(row?.assetCode),
         showName: toTitleCase(row?.showName),
         beatName: toTitleCase(row?.beatName),
+        podLeadName: toTitleCase(row?.podLeadName || ""),
         productionType: normalizeText(row?.productionType),
         success: isFunnelSuccess(row),
         amountSpentUsd: toFiniteNumber(row?.amountSpentUsd),

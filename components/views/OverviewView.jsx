@@ -1181,26 +1181,55 @@ function ReworkBadge({ value }) {
   );
 }
 
-function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loading = false }) {
+function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loading = false, allWorkflowRows = [] }) {
   const [expandedAngles, setExpandedAngles] = useState({});
+  const [expandedPodWriters, setExpandedPodWriters] = useState({});
   const scopedRows = fullGenAiRows;
   const successfulAdsCount = scopedRows.filter((r) => r.success).length;
+
+  // Build writer lookup from workflow rows: showName|beatName → {pod, writers}
+  const showBeatInfo = useMemo(() => {
+    const map = new Map();
+    for (const row of allWorkflowRows) {
+      const show = String(row.showName || "").trim().toLowerCase();
+      const beat = String(row.beatName || "").trim().toLowerCase();
+      if (!show || !beat) continue;
+      const key = `${show}|${beat}`;
+      if (!map.has(key)) map.set(key, { pod: "", writers: new Set() });
+      const entry = map.get(key);
+      const pod = String(row.podLeadName || "").trim();
+      const writer = String(row.writerName || "").trim();
+      if (pod && !entry.pod) entry.pod = pod;
+      if (writer) entry.writers.add(writer);
+    }
+    return map;
+  }, [allWorkflowRows]);
 
   const byBeat = useMemo(() =>
     Array.from(
       scopedRows.reduce((map, row) => {
         const key = `${row.showName}|${row.beatName}`;
-        if (!map.has(key)) map.set(key, { showName: row.showName, beatName: row.beatName, attempts: 0, successCount: 0, ads: [] });
+        if (!map.has(key)) map.set(key, { showName: row.showName, beatName: row.beatName, podLeadName: row.podLeadName || "", attempts: 0, successCount: 0, ads: [] });
         const entry = map.get(key);
         entry.attempts += 1;
         if (row.success) entry.successCount += 1;
+        if (row.podLeadName && !entry.podLeadName) entry.podLeadName = row.podLeadName;
         entry.ads.push({ assetCode: row.assetCode, success: row.success, cpiUsd: row.cpiUsd, absoluteCompletionPct: row.absoluteCompletionPct, ctrPct: row.ctrPct, clickToInstall: row.clickToInstall });
         return map;
       }, new Map()).values()
     )
-    .map((e) => ({ ...e, hitRate: e.attempts > 0 ? Number(((e.successCount / e.attempts) * 100).toFixed(1)) : null }))
+    .map((e) => {
+      const wfKey = `${e.showName.toLowerCase()}|${e.beatName.toLowerCase()}`;
+      const wfEntry = showBeatInfo.get(wfKey) || {};
+      return {
+        ...e,
+        hitRate: e.attempts > 0 ? Number(((e.successCount / e.attempts) * 100).toFixed(1)) : null,
+        podLeadName: e.podLeadName || wfEntry.pod || "",
+        writerNames: Array.from(wfEntry.writers || []),
+      };
+    })
     .sort((a, b) => b.attempts - a.attempts || a.showName.localeCompare(b.showName) || a.beatName.localeCompare(b.beatName))
-  , [scopedRows]);
+  , [scopedRows, showBeatInfo]);
 
   return (
     <section className="overview-flow-section">
@@ -1238,6 +1267,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
         <table className="ops-table overview-table">
           <thead>
             <tr>
+              <th>POD / Writer</th>
               <th>Show</th>
               <th>Beat</th>
               <th style={{ textAlign: "right" }}>Ads</th>
@@ -1253,6 +1283,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                 const isNewShow = idx > 0 && prevRow.showName !== row.showName;
                 const angleKey = `${row.showName}|${row.beatName}`;
                 const isExpanded = Boolean(expandedAngles[angleKey]);
+                const isPodExpanded = Boolean(expandedPodWriters[angleKey]);
                 return [
                   <tr
                     key={angleKey}
@@ -1261,6 +1292,34 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                     style={{ cursor: "pointer" }}
                     onClick={() => setExpandedAngles((prev) => ({ ...prev, [angleKey]: !prev[angleKey] }))}
                   >
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg)" }}>
+                        {row.podLeadName || "—"}
+                      </div>
+                      {row.writerNames.length > 0 && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedPodWriters((prev) => ({ ...prev, [angleKey]: !prev[angleKey] }))}
+                            style={{
+                              background: "none", border: "none", padding: 0, cursor: "pointer",
+                              fontSize: 10, color: "var(--accent, #c2703e)", display: "inline-flex",
+                              alignItems: "center", gap: 3, marginTop: 3,
+                            }}
+                          >
+                            <span style={{ fontSize: 9 }}>{isPodExpanded ? "▾" : "▸"}</span>
+                            {row.writerNames.length} writer{row.writerNames.length !== 1 ? "s" : ""}
+                          </button>
+                          {isPodExpanded && (
+                            <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                              {row.writerNames.map((w) => (
+                                <div key={w} style={{ fontSize: 11, color: "var(--subtle)", paddingLeft: 10 }}>• {w}</div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </td>
                     <td className="genai-show-name">{row.showName || "-"}</td>
                     <td className="genai-beat-name">{row.beatName || "-"}</td>
                     <td className="genai-num-cell" style={{ textAlign: "right" }}>{formatMetricValue(row.attempts)}</td>
@@ -1280,7 +1339,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                   </tr>,
                   ...(isExpanded ? [
                     <tr key={`${angleKey}-hdr`} className="overview-genai-expanded-hdr">
-                      <td colSpan={2} className="genai-col-asset">Asset Code</td>
+                      <td colSpan={3} className="genai-col-asset">Asset Code</td>
                       <td className="genai-col-metric">CPI</td>
                       <td className="genai-col-metric">True Completion</td>
                       <td className="genai-col-metric">CTR</td>
@@ -1291,7 +1350,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                         key={`${angleKey}-${ad.assetCode}`}
                         className={ad.success ? "overview-genai-expanded-row overview-genai-ad-success" : "overview-genai-expanded-row"}
                       >
-                        <td colSpan={2} className="genai-asset-code-cell">
+                        <td colSpan={3} className="genai-asset-code-cell">
                           <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                             <span className="genai-asset-code">{ad.assetCode || "-"}</span>
                             {ad.success && <span className="genai-hit-tag">HIT</span>}
@@ -1308,7 +1367,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
               })
             ) : (
               <tr>
-                <td colSpan="6">No Full Gen AI rows for this filter yet.</td>
+                <td colSpan="7">No Full Gen AI rows for this filter yet.</td>
               </tr>
             )}
           </tbody>
@@ -1565,6 +1624,7 @@ export default function OverviewContent({
           fullGenAiRows={Array.isArray(leadershipOverviewData?.fullGenAiRows) ? leadershipOverviewData.fullGenAiRows : []}
           fullGenAiSourceError={leadershipOverviewData?.fullGenAiSourceError || null}
           loading={podLoading}
+          allWorkflowRows={allWorkflowRows}
         />
 
       </div>
