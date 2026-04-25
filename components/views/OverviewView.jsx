@@ -1370,9 +1370,9 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                     return [(
                       <tr key={`pod-collapsed-${pod.podName}`} style={{ background: "var(--subtle-bg, #f0ece4)" }}>
                         <td style={{ fontWeight: 700, fontSize: 13, borderRight: "1px solid var(--border)", paddingTop: 8, paddingBottom: 8 }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                            <span>{pod.podName}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             {podToggleBtn(true)}
+                            <span>{pod.podName}</span>
                           </div>
                         </td>
                         <td colSpan={2} style={{ fontStyle: "italic", color: "var(--subtle)", fontSize: 12, fontWeight: 600 }}>Total</td>
@@ -1419,9 +1419,9 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                           >
                             {isFirstOfPod && (
                               <td rowSpan={podRowSpan} style={{ fontWeight: 700, verticalAlign: "top", fontSize: 13, paddingTop: 10, borderRight: "1px solid var(--border)" }}>
-                                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 6 }}>
-                                  <span>{pod.podName}</span>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                   {podToggleBtn(false)}
+                                  <span>{pod.podName}</span>
                                 </div>
                               </td>
                             )}
