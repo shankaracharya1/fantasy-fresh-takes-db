@@ -14,7 +14,7 @@ import { buildDateRangeSelection, MIN_DASHBOARD_DATE, WEEK_VIEW_OPTIONS, buildMo
 
 // ─── View imports ─────────────────────────────────────────────────────────────
 import DetailsContent from "./views/DetailsView.jsx";
-import OverviewContent from "./views/OverviewView.jsx";
+import OverviewContent, { ReportsContent } from "./views/OverviewView.jsx";
 import LeadershipOverviewContent from "./views/LeadershipOverviewView.jsx";
 import AnalyticsContent from "./views/AnalyticsView.jsx";
 import PodWiseContent, { PodTasksContent } from "./views/PodWiseView.jsx";
@@ -1507,9 +1507,14 @@ export default function UnifiedOpsApp() {
 
             {activeView === "reports" ? (
               <div className="section-shell">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 320, color: "var(--fg-muted)", fontSize: 16, fontFamily: "var(--font-sans)" }}>
-                  Reports coming soon
-                </div>
+                <ReportsContent
+                  detailRows={overviewDetailRows}
+                  detailLoading={overviewDetailLoading}
+                  leadershipOverviewData={leadershipOverviewData}
+                  leadershipOverviewLoading={leadershipOverviewLoading}
+                  overviewData={overviewData}
+                  overviewLoading={overviewLoading}
+                />
               </div>
             ) : null}
 

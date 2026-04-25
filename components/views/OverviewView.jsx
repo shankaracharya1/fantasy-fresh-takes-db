@@ -985,7 +985,7 @@ function swDateShort(ymd) {
   return `${d} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m - 1]}`;
 }
 
-function ShowWiseTable({ allWorkflowRows = [], allAnalyticsRows = [], weekStart, weekEnd, loading = false }) {
+export function ShowWiseTable({ allWorkflowRows = [], allAnalyticsRows = [], weekStart, weekEnd, loading = false }) {
   const [collapsedPods, setCollapsedPods] = useState(new Set());
   const togglePod = (podName) =>
     setCollapsedPods((prev) => {
@@ -1329,7 +1329,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
   );
 }
 
-function DetailedOverviewTable({ rows = [], loading = false }) {
+export function DetailedOverviewTable({ rows = [], loading = false }) {
   const [expandedPods, setExpandedPods] = useState(new Set());
   const [page, setPage] = useState(0);
 
@@ -1455,6 +1455,41 @@ function DetailedOverviewTable({ rows = [], loading = false }) {
   );
 }
 
+// ─── Reports View ─────────────────────────────────────────────────────────────
+
+export function ReportsContent({
+  detailRows = [],
+  detailLoading = false,
+  leadershipOverviewData = null,
+  leadershipOverviewLoading = false,
+  overviewData = null,
+  overviewLoading = false,
+}) {
+  const allWorkflowRows = Array.isArray(leadershipOverviewData?.allWorkflowRows) ? leadershipOverviewData.allWorkflowRows : [];
+  const allAnalyticsRows = Array.isArray(leadershipOverviewData?.allAnalyticsRows) ? leadershipOverviewData.allAnalyticsRows : [];
+  const weekStart = swNormDate(overviewData?.weekStart);
+  const weekEnd = swNormDate(overviewData?.weekEnd);
+  const loading = leadershipOverviewLoading || overviewLoading;
+
+  return (
+    <div className="section-stack">
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Detailed Overview</div>
+      <DetailedOverviewTable rows={detailRows} loading={detailLoading} />
+
+      <hr className="section-divider" />
+
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Show Wise</div>
+      <ShowWiseTable
+        allWorkflowRows={allWorkflowRows}
+        allAnalyticsRows={allAnalyticsRows}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        loading={loading}
+      />
+    </div>
+  );
+}
+
 // ─── Main View ────────────────────────────────────────────────────────────────
 
 export default function OverviewContent({
@@ -1513,21 +1548,6 @@ export default function OverviewContent({
         <hr className="section-divider" />
 
         <PodThroughputRankingTable rows={podThroughputRows} loading={podLoading} />
-
-        <hr className="section-divider" />
-
-        <DetailedOverviewTable rows={detailRows} loading={detailLoading} />
-
-        <hr className="section-divider" />
-
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Show Wise</div>
-        <ShowWiseTable
-          allWorkflowRows={allWorkflowRows}
-          allAnalyticsRows={allAnalyticsRows}
-          weekStart={weekStart}
-          weekEnd={weekEnd}
-          loading={podLoading}
-        />
 
         {(() => {
           if (selectionMode === "editorial_funnel") {
