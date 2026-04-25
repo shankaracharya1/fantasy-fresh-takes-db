@@ -1160,6 +1160,7 @@ export default function UnifiedOpsApp() {
     planner2: "Planner",
     analytics: "Analytics",
     production: "Production Pipeline",
+    reports: "Reports",
     details: "Details",
   };
 
@@ -1207,6 +1208,14 @@ export default function UnifiedOpsApp() {
                 onClick={() => { setActiveView("production"); setProductionSubView("pipeline"); }}
               >
                 Production Pipeline
+              </button>
+
+              <button
+                type="button"
+                className={`sidebar-link${activeView === "reports" ? " active" : ""}`}
+                onClick={() => setActiveView("reports")}
+              >
+                Reports
               </button>
 
 	              {[
@@ -1493,6 +1502,14 @@ export default function UnifiedOpsApp() {
                   onShare={copySection}
                   copyingSection={copyingSection}
                 />
+              </div>
+            ) : null}
+
+            {activeView === "reports" ? (
+              <div className="section-shell">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 320, color: "var(--fg-muted)", fontSize: 16, fontFamily: "var(--font-sans)" }}>
+                  Reports coming soon
+                </div>
               </div>
             ) : null}
 
