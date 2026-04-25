@@ -1305,19 +1305,6 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
           <div className="overview-section-note">
             {loading ? "PODs: ..." : `PODs: ${formatMetricValue(byPod.length)}`}
           </div>
-          <button
-            type="button"
-            onClick={() => setIsMinimized((v) => !v)}
-            title={isMinimized ? "Expand section" : "Minimise section"}
-            style={{
-              width: 24, height: 24, borderRadius: 6, border: "1.5px solid var(--border)",
-              background: "var(--card)", color: "var(--fg)", fontSize: 16, fontWeight: 700,
-              lineHeight: 1, cursor: "pointer", display: "inline-flex", alignItems: "center",
-              justifyContent: "center", flexShrink: 0,
-            }}
-          >
-            {isMinimized ? "+" : "−"}
-          </button>
         </div>
       </div>
 
@@ -1351,7 +1338,21 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("ads")}>Ads{sortIcon("ads")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("successful")}>Successful{sortIcon("successful")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("hitRate")}>Hit Rate{sortIcon("hitRate")}</th>
-                  <th style={{ width: 36 }} />
+                  <th style={{ width: 36, textAlign: "center" }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsMinimized((v) => !v)}
+                      title={isMinimized ? "Expand table" : "Minimise table"}
+                      style={{
+                        width: 22, height: 22, borderRadius: 5, border: "1.5px solid var(--border)",
+                        background: "var(--card)", color: "var(--fg)", fontSize: 14, fontWeight: 700,
+                        lineHeight: 1, cursor: "pointer", display: "inline-flex", alignItems: "center",
+                        justifyContent: "center", flexShrink: 0,
+                      }}
+                    >
+                      {isMinimized ? "+" : "−"}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
