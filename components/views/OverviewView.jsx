@@ -1337,14 +1337,19 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
             <table className="ops-table overview-table">
               <thead>
                 <tr>
-                  <th style={{ width: 110, cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("pod")}>POD{sortIcon("pod")}</th>
-                  <th style={{ width: 120, cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("writer")}>Writer{sortIcon("writer")}</th>
-                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("show")}>Show{sortIcon("show")}</th>
-                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("beat")}>Beat{sortIcon("beat")}</th>
+                  <th rowSpan={2} style={{ width: 110, cursor: "pointer", userSelect: "none", verticalAlign: "middle" }} onClick={() => toggleSort("pod")}>POD{sortIcon("pod")}</th>
+                  <th rowSpan={2} style={{ width: 120, cursor: "pointer", userSelect: "none", verticalAlign: "middle" }} onClick={() => toggleSort("writer")}>Writer{sortIcon("writer")}</th>
+                  <th rowSpan={2} style={{ cursor: "pointer", userSelect: "none", verticalAlign: "middle" }} onClick={() => toggleSort("show")}>Show{sortIcon("show")}</th>
+                  <th rowSpan={2} style={{ cursor: "pointer", userSelect: "none", verticalAlign: "middle" }} onClick={() => toggleSort("beat")}>Beat{sortIcon("beat")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("ads")}>Ads{sortIcon("ads")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("successful")}>Successful{sortIcon("successful")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("hitRate")}>Hit Rate{sortIcon("hitRate")}</th>
-                  <th style={{ width: 36, background: "#2d5a3d" }} />
+                  <th rowSpan={2} style={{ width: 36, background: "#2d5a3d" }} />
+                </tr>
+                <tr>
+                  <th style={{ textAlign: "center", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", opacity: 0.7, paddingTop: 4, paddingBottom: 6 }}>CPI</th>
+                  <th style={{ textAlign: "center", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", opacity: 0.7, paddingTop: 4, paddingBottom: 6 }}>True Comp</th>
+                  <th style={{ textAlign: "center", fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", opacity: 0.7, paddingTop: 4, paddingBottom: 6 }}>CTR · CTI</th>
                 </tr>
               </thead>
               <tbody>
