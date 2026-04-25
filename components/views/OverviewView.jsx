@@ -1201,7 +1201,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
   const sortIcon = (col) => {
     const isActive = sortConfig.col === col;
     return (
-      <span style={{ marginLeft: 4, fontSize: 13, fontWeight: 700, opacity: isActive ? 1 : 0.45, color: isActive ? "var(--accent, #c2703e)" : "inherit" }}>
+      <span style={{ marginLeft: 4, fontSize: 13, fontWeight: 700, color: isActive ? "#fff" : "rgba(255,255,255,0.55)" }}>
         {isActive ? (sortConfig.dir === "desc" ? "↓" : "↑") : "↕"}
       </span>
     );
