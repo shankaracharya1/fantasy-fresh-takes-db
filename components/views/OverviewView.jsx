@@ -1183,7 +1183,7 @@ function ReworkBadge({ value }) {
 
 function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loading = false, allWorkflowRows = [] }) {
   const [expandedAngles, setExpandedAngles] = useState({});
-  const [expandedPodWriters, setExpandedPodWriters] = useState({});
+  const [collapsedPods, setCollapsedPods] = useState(new Set());
   const scopedRows = fullGenAiRows;
   const successfulAdsCount = scopedRows.filter((r) => r.success).length;
 
@@ -1205,31 +1205,61 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
     return map;
   }, [allWorkflowRows]);
 
-  const byBeat = useMemo(() =>
-    Array.from(
-      scopedRows.reduce((map, row) => {
-        const key = `${row.showName}|${row.beatName}`;
-        if (!map.has(key)) map.set(key, { showName: row.showName, beatName: row.beatName, podLeadName: row.podLeadName || "", attempts: 0, successCount: 0, ads: [] });
-        const entry = map.get(key);
-        entry.attempts += 1;
-        if (row.success) entry.successCount += 1;
-        if (row.podLeadName && !entry.podLeadName) entry.podLeadName = row.podLeadName;
-        entry.ads.push({ assetCode: row.assetCode, success: row.success, cpiUsd: row.cpiUsd, absoluteCompletionPct: row.absoluteCompletionPct, ctrPct: row.ctrPct, clickToInstall: row.clickToInstall });
-        return map;
-      }, new Map()).values()
-    )
-    .map((e) => {
-      const wfKey = `${e.showName.toLowerCase()}|${e.beatName.toLowerCase()}`;
+  // Group beats by POD
+  const byPod = useMemo(() => {
+    const podMap = new Map();
+    for (const row of scopedRows) {
+      const wfKey = `${row.showName.toLowerCase()}|${row.beatName.toLowerCase()}`;
       const wfEntry = showBeatInfo.get(wfKey) || {};
-      return {
-        ...e,
-        hitRate: e.attempts > 0 ? Number(((e.successCount / e.attempts) * 100).toFixed(1)) : null,
-        podLeadName: e.podLeadName || wfEntry.pod || "",
-        writerNames: Array.from(wfEntry.writers || []),
-      };
-    })
-    .sort((a, b) => b.attempts - a.attempts || a.showName.localeCompare(b.showName) || a.beatName.localeCompare(b.beatName))
-  , [scopedRows, showBeatInfo]);
+      const pod = row.podLeadName || wfEntry.pod || "Unknown";
+      const beatKey = `${row.showName}|${row.beatName}`;
+
+      if (!podMap.has(pod)) podMap.set(pod, { podName: pod, writers: new Set(), beatMap: new Map() });
+      const podEntry = podMap.get(pod);
+
+      // Collect writers for this pod
+      for (const w of (wfEntry.writers || [])) podEntry.writers.add(w);
+
+      if (!podEntry.beatMap.has(beatKey)) {
+        podEntry.beatMap.set(beatKey, {
+          showName: row.showName,
+          beatName: row.beatName,
+          attempts: 0,
+          successCount: 0,
+          ads: [],
+        });
+      }
+      const beatEntry = podEntry.beatMap.get(beatKey);
+      beatEntry.attempts += 1;
+      if (row.success) beatEntry.successCount += 1;
+      beatEntry.ads.push({
+        assetCode: row.assetCode,
+        success: row.success,
+        cpiUsd: row.cpiUsd,
+        absoluteCompletionPct: row.absoluteCompletionPct,
+        ctrPct: row.ctrPct,
+        clickToInstall: row.clickToInstall,
+      });
+    }
+
+    return Array.from(podMap.values())
+      .map(({ podName, writers, beatMap }) => {
+        const beats = Array.from(beatMap.values())
+          .map((b) => ({ ...b, hitRate: b.attempts > 0 ? Number(((b.successCount / b.attempts) * 100).toFixed(1)) : null }))
+          .sort((a, b) => b.attempts - a.attempts || a.showName.localeCompare(b.showName) || a.beatName.localeCompare(b.beatName));
+        const totalAttempts = beats.reduce((s, b) => s + b.attempts, 0);
+        const totalSuccess = beats.reduce((s, b) => s + b.successCount, 0);
+        const podHitRate = totalAttempts > 0 ? Number(((totalSuccess / totalAttempts) * 100).toFixed(1)) : null;
+        return { podName, writerNames: Array.from(writers), beats, totalAttempts, totalSuccess, podHitRate };
+      })
+      .sort((a, b) => b.totalAttempts - a.totalAttempts || a.podName.localeCompare(b.podName));
+  }, [scopedRows, showBeatInfo]);
+
+  const togglePod = (pod) => setCollapsedPods((prev) => {
+    const next = new Set(prev);
+    next.has(pod) ? next.delete(pod) : next.add(pod);
+    return next;
+  });
 
   return (
     <section className="overview-flow-section">
@@ -1242,7 +1272,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
         </div>
         <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end" }}>
           <div className="overview-section-note">
-            {loading ? "Rows: ..." : `Rows: ${formatMetricValue(byBeat.length)}`}
+            {loading ? "PODs: ..." : `PODs: ${formatMetricValue(byPod.length)}`}
           </div>
         </div>
       </div>
@@ -1267,7 +1297,6 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
         <table className="ops-table overview-table">
           <thead>
             <tr>
-              <th>POD / Writer</th>
               <th>Show</th>
               <th>Beat</th>
               <th style={{ textAlign: "right" }}>Ads</th>
@@ -1277,97 +1306,96 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
             </tr>
           </thead>
           <tbody>
-            {byBeat.length > 0 ? (
-              byBeat.flatMap((row, idx) => {
-                const prevRow = byBeat[idx - 1];
-                const isNewShow = idx > 0 && prevRow.showName !== row.showName;
-                const angleKey = `${row.showName}|${row.beatName}`;
-                const isExpanded = Boolean(expandedAngles[angleKey]);
-                const isPodExpanded = Boolean(expandedPodWriters[angleKey]);
+            {byPod.length > 0 ? (
+              byPod.flatMap((pod) => {
+                const isCollapsed = collapsedPods.has(pod.podName);
                 return [
-                  <tr
-                    key={angleKey}
-                    className={`overview-genai-parent-row${row.successCount > 0 ? " overview-genai-success-row" : ""}${isNewShow ? " genai-show-group-start" : ""}`}
-                    data-expanded={isExpanded}
-                    style={{ cursor: "pointer" }}
-                    onClick={() => setExpandedAngles((prev) => ({ ...prev, [angleKey]: !prev[angleKey] }))}
-                  >
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--fg)" }}>
-                        {row.podLeadName || "—"}
-                      </div>
-                      {row.writerNames.length > 0 && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => setExpandedPodWriters((prev) => ({ ...prev, [angleKey]: !prev[angleKey] }))}
-                            style={{
-                              background: "none", border: "none", padding: 0, cursor: "pointer",
-                              fontSize: 10, color: "var(--accent, #c2703e)", display: "inline-flex",
-                              alignItems: "center", gap: 3, marginTop: 3,
-                            }}
-                          >
-                            <span style={{ fontSize: 9 }}>{isPodExpanded ? "▾" : "▸"}</span>
-                            {row.writerNames.length} writer{row.writerNames.length !== 1 ? "s" : ""}
-                          </button>
-                          {isPodExpanded && (
-                            <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
-                              {row.writerNames.map((w) => (
-                                <div key={w} style={{ fontSize: 11, color: "var(--subtle)", paddingLeft: 10 }}>• {w}</div>
-                              ))}
-                            </div>
+                  // ── POD group header row ──
+                  <tr key={`pod-${pod.podName}`} style={{ background: "var(--subtle-bg, #f0ece4)", cursor: "pointer", userSelect: "none" }} onClick={() => togglePod(pod.podName)}>
+                    <td colSpan={6} style={{ padding: "8px 12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, color: "var(--subtle)", width: 14, flexShrink: 0 }}>{isCollapsed ? "▸" : "▾"}</span>
+                        <span style={{ fontWeight: 700, fontSize: 13, color: "var(--fg)" }}>{pod.podName}</span>
+                        {pod.writerNames.length > 0 && (
+                          <span style={{ fontSize: 11, color: "var(--subtle)", fontWeight: 400 }}>
+                            {pod.writerNames.join(", ")}
+                          </span>
+                        )}
+                        <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 16, fontSize: 12 }}>
+                          <span style={{ color: "var(--subtle)" }}>{pod.totalAttempts} ads</span>
+                          {pod.totalSuccess > 0 && (
+                            <span className="genai-success-badge">{pod.totalSuccess} hit</span>
                           )}
-                        </>
-                      )}
-                    </td>
-                    <td className="genai-show-name">{row.showName || "-"}</td>
-                    <td className="genai-beat-name">{row.beatName || "-"}</td>
-                    <td className="genai-num-cell" style={{ textAlign: "right" }}>{formatMetricValue(row.attempts)}</td>
-                    <td className="genai-num-cell" style={{ textAlign: "right" }}>
-                      {row.successCount > 0
-                        ? <span className="genai-success-badge">{formatMetricValue(row.successCount)}</span>
-                        : <span className="genai-zero">{formatMetricValue(row.successCount)}</span>}
-                    </td>
-                    <td className="genai-num-cell" style={{ textAlign: "right" }}>
-                      <span className={`genai-hitrate${row.hitRate != null ? (row.hitRate >= 50 ? " is-high" : row.hitRate >= 20 ? " is-mid" : " is-low") : ""}`}>
-                        {row.hitRate != null ? formatPercent(row.hitRate) : "-"}
-                      </span>
-                    </td>
-                    <td className="genai-chevron-cell">
-                      <span className={`genai-chevron${isExpanded ? " is-open" : ""}`} />
+                          {pod.podHitRate != null && (
+                            <span className={`genai-hitrate${pod.podHitRate >= 50 ? " is-high" : pod.podHitRate >= 20 ? " is-mid" : " is-low"}`}>
+                              {formatPercent(pod.podHitRate)}
+                            </span>
+                          )}
+                        </span>
+                      </div>
                     </td>
                   </tr>,
-                  ...(isExpanded ? [
-                    <tr key={`${angleKey}-hdr`} className="overview-genai-expanded-hdr">
-                      <td colSpan={3} className="genai-col-asset">Asset Code</td>
-                      <td className="genai-col-metric">CPI</td>
-                      <td className="genai-col-metric">True Completion</td>
-                      <td className="genai-col-metric">CTR</td>
-                      <td className="genai-col-metric">CTI</td>
-                    </tr>,
-                    ...row.ads.map((ad) => (
+                  // ── Beat rows (shown when pod is not collapsed) ──
+                  ...(isCollapsed ? [] : pod.beats.flatMap((beat) => {
+                    const angleKey = `${pod.podName}|${beat.showName}|${beat.beatName}`;
+                    const isExpanded = Boolean(expandedAngles[angleKey]);
+                    return [
                       <tr
-                        key={`${angleKey}-${ad.assetCode}`}
-                        className={ad.success ? "overview-genai-expanded-row overview-genai-ad-success" : "overview-genai-expanded-row"}
+                        key={angleKey}
+                        className={`overview-genai-parent-row${beat.successCount > 0 ? " overview-genai-success-row" : ""}`}
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setExpandedAngles((prev) => ({ ...prev, [angleKey]: !prev[angleKey] }))}
                       >
-                        <td colSpan={3} className="genai-asset-code-cell">
-                          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                            <span className="genai-asset-code">{ad.assetCode || "-"}</span>
-                            {ad.success && <span className="genai-hit-tag">HIT</span>}
-                          </div>
+                        <td className="genai-show-name" style={{ paddingLeft: 28 }}>{beat.showName || "-"}</td>
+                        <td className="genai-beat-name">{beat.beatName || "-"}</td>
+                        <td className="genai-num-cell" style={{ textAlign: "right" }}>{formatMetricValue(beat.attempts)}</td>
+                        <td className="genai-num-cell" style={{ textAlign: "right" }}>
+                          {beat.successCount > 0
+                            ? <span className="genai-success-badge">{formatMetricValue(beat.successCount)}</span>
+                            : <span className="genai-zero">{formatMetricValue(beat.successCount)}</span>}
                         </td>
-                        <td className="genai-metric-val">{ad.cpiUsd != null ? `$${ad.cpiUsd.toFixed(2)}` : "-"}</td>
-                        <td className="genai-metric-val">{ad.absoluteCompletionPct != null ? formatPercent(ad.absoluteCompletionPct) : "-"}</td>
-                        <td className="genai-metric-val">{ad.ctrPct != null ? formatPercent(ad.ctrPct) : "-"}</td>
-                        <td className="genai-metric-val">{ad.clickToInstall != null ? formatPercent(ad.clickToInstall) : "-"}</td>
-                      </tr>
-                    )),
-                  ] : []),
+                        <td className="genai-num-cell" style={{ textAlign: "right" }}>
+                          <span className={`genai-hitrate${beat.hitRate != null ? (beat.hitRate >= 50 ? " is-high" : beat.hitRate >= 20 ? " is-mid" : " is-low") : ""}`}>
+                            {beat.hitRate != null ? formatPercent(beat.hitRate) : "-"}
+                          </span>
+                        </td>
+                        <td className="genai-chevron-cell">
+                          <span className={`genai-chevron${isExpanded ? " is-open" : ""}`} />
+                        </td>
+                      </tr>,
+                      ...(isExpanded ? [
+                        <tr key={`${angleKey}-hdr`} className="overview-genai-expanded-hdr">
+                          <td colSpan={2} className="genai-col-asset" style={{ paddingLeft: 28 }}>Asset Code</td>
+                          <td className="genai-col-metric">CPI</td>
+                          <td className="genai-col-metric">True Completion</td>
+                          <td className="genai-col-metric">CTR</td>
+                          <td className="genai-col-metric">CTI</td>
+                        </tr>,
+                        ...beat.ads.map((ad) => (
+                          <tr
+                            key={`${angleKey}-${ad.assetCode}`}
+                            className={ad.success ? "overview-genai-expanded-row overview-genai-ad-success" : "overview-genai-expanded-row"}
+                          >
+                            <td colSpan={2} className="genai-asset-code-cell" style={{ paddingLeft: 28 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                <span className="genai-asset-code">{ad.assetCode || "-"}</span>
+                                {ad.success && <span className="genai-hit-tag">HIT</span>}
+                              </div>
+                            </td>
+                            <td className="genai-metric-val">{ad.cpiUsd != null ? `$${ad.cpiUsd.toFixed(2)}` : "-"}</td>
+                            <td className="genai-metric-val">{ad.absoluteCompletionPct != null ? formatPercent(ad.absoluteCompletionPct) : "-"}</td>
+                            <td className="genai-metric-val">{ad.ctrPct != null ? formatPercent(ad.ctrPct) : "-"}</td>
+                            <td className="genai-metric-val">{ad.clickToInstall != null ? formatPercent(ad.clickToInstall) : "-"}</td>
+                          </tr>
+                        )),
+                      ] : []),
+                    ];
+                  })),
                 ];
               })
             ) : (
               <tr>
-                <td colSpan="7">No Full Gen AI rows for this filter yet.</td>
+                <td colSpan="6">No Full Gen AI rows for this filter yet.</td>
               </tr>
             )}
           </tbody>
