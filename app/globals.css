@@ -2291,6 +2291,9 @@ select {
     0 0 0 1px rgba(45, 90, 61, 0.06),
     0 8px 28px -10px rgba(45, 90, 61, 0.16),
     0 20px 40px -30px rgba(23, 34, 47, 0.28) !important;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  overflow-x: auto;
 }
 
 /* Dark forest header */
