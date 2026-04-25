@@ -1344,7 +1344,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("ads")}>Ads{sortIcon("ads")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("successful")}>Successful{sortIcon("successful")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("hitRate")}>Hit Rate{sortIcon("hitRate")}</th>
-                  <th style={{ width: 36 }} />
+                  <th style={{ width: 36, background: "#2d5a3d" }} />
                 </tr>
               </thead>
               <tbody>

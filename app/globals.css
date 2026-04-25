@@ -2445,7 +2445,7 @@ select {
 }
 
 .genai-col-metric {
-  text-align: right !important;
+  text-align: center !important;
 }
 
 .overview-genai-expanded-row,
@@ -2513,7 +2513,7 @@ select {
   font-size: 12px;
   font-weight: 500;
   color: var(--ink-secondary);
-  text-align: right !important;
+  text-align: center !important;
   font-variant-numeric: tabular-nums;
 }
 
