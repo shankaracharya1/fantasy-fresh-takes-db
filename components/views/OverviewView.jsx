@@ -1460,7 +1460,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                         if (isExpanded) {
                           rows.push(
                             <tr key={`${angleKey}-hdr`} className="overview-genai-expanded-hdr">
-                              <td colSpan={3} className="genai-col-asset" style={{ paddingLeft: 16 }}>Asset Code</td>
+                              <td className="genai-col-asset" style={{ paddingLeft: 16 }}>Asset Code</td>
                               <td className="genai-col-metric">CPI</td>
                               <td className="genai-col-metric">True Comp</td>
                               <td className="genai-col-metric" style={{ fontSize: 10 }}>CTR · CTI</td>
@@ -1470,7 +1470,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                           for (const ad of beat.ads) {
                             rows.push(
                               <tr key={`${angleKey}-${ad.assetCode}`} className={ad.success ? "overview-genai-expanded-row overview-genai-ad-success" : "overview-genai-expanded-row"}>
-                                <td colSpan={3} className="genai-asset-code-cell" style={{ paddingLeft: 16 }}>
+                                <td className="genai-asset-code-cell" style={{ paddingLeft: 16 }}>
                                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                                     <span className="genai-asset-code">{ad.assetCode || "-"}</span>
                                     {ad.success && <span className="genai-hit-tag">HIT</span>}
