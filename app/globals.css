@@ -2299,6 +2299,9 @@ select {
 }
 
 .genai-table-wrap .ops-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   background: #2d5a3d;
   color: rgba(255, 255, 255, 0.85);
   border-bottom: none;
@@ -2327,6 +2330,9 @@ select {
 [data-theme="dark"] .genai-table-wrap .ops-table thead tr,
 [data-theme="dark"] .genai-table-wrap .ops-table thead th {
   background: #1e3d2a;
+  position: sticky;
+  top: 0;
+  z-index: 3;
 }
 
 /* ─── Gen AI Table: Parent rows ─── */
