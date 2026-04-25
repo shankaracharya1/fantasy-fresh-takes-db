@@ -1186,7 +1186,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
   const scopedRows = fullGenAiRows;
   const successfulAdsCount = scopedRows.filter((r) => r.success).length;
 
-  // Build writer lookup: showName|beatName → {pod, writers}
+  // Build per-beat lookup: "show|beat" → { pod, primaryWriter, allWriters }
   const showBeatInfo = useMemo(() => {
     const map = new Map();
     for (const row of allWorkflowRows) {
@@ -1194,32 +1194,39 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
       const beat = String(row.beatName || "").trim().toLowerCase();
       if (!show || !beat) continue;
       const key = `${show}|${beat}`;
-      if (!map.has(key)) map.set(key, { pod: "", writers: new Set() });
+      if (!map.has(key)) map.set(key, { pod: "", writers: new Map() }); // Map<writerName, true>
       const entry = map.get(key);
       const pod = String(row.podLeadName || "").trim();
       const writer = String(row.writerName || "").trim();
       if (pod && !entry.pod) entry.pod = pod;
-      if (writer) entry.writers.add(writer);
+      if (writer) entry.writers.set(writer, true);
     }
     return map;
   }, [allWorkflowRows]);
 
-  // Group by POD → Show → Beat
+  // Group by POD → Writer → Show → Beat
   const byPod = useMemo(() => {
     const podMap = new Map();
+
     for (const row of scopedRows) {
       const wfKey = `${row.showName.toLowerCase()}|${row.beatName.toLowerCase()}`;
       const wfEntry = showBeatInfo.get(wfKey) || {};
       const pod = row.podLeadName || wfEntry.pod || "Unknown";
+      // Primary writer = first writer found for this beat from workflow rows
+      const writer = wfEntry.writers && wfEntry.writers.size > 0
+        ? Array.from(wfEntry.writers.keys())[0]
+        : "Unknown";
       const show = row.showName;
       const beatKey = `${show}|${row.beatName}`;
 
-      if (!podMap.has(pod)) podMap.set(pod, { podName: pod, writers: new Set(), showMap: new Map() });
+      if (!podMap.has(pod)) podMap.set(pod, { podName: pod, writerMap: new Map() });
       const podEntry = podMap.get(pod);
-      for (const w of (wfEntry.writers || [])) podEntry.writers.add(w);
 
-      if (!podEntry.showMap.has(show)) podEntry.showMap.set(show, { showName: show, beatMap: new Map() });
-      const showEntry = podEntry.showMap.get(show);
+      if (!podEntry.writerMap.has(writer)) podEntry.writerMap.set(writer, { writerName: writer, showMap: new Map() });
+      const writerEntry = podEntry.writerMap.get(writer);
+
+      if (!writerEntry.showMap.has(show)) writerEntry.showMap.set(show, { showName: show, beatMap: new Map() });
+      const showEntry = writerEntry.showMap.get(show);
 
       if (!showEntry.beatMap.has(beatKey)) showEntry.beatMap.set(beatKey, { beatName: row.beatName, showName: show, attempts: 0, successCount: 0, ads: [] });
       const beatEntry = showEntry.beatMap.get(beatKey);
@@ -1228,21 +1235,31 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
       beatEntry.ads.push({ assetCode: row.assetCode, success: row.success, cpiUsd: row.cpiUsd, absoluteCompletionPct: row.absoluteCompletionPct, ctrPct: row.ctrPct, clickToInstall: row.clickToInstall });
     }
 
-    return Array.from(podMap.values()).map(({ podName, writers, showMap }) => {
-      const shows = Array.from(showMap.values()).map(({ showName, beatMap }) => {
-        const beats = Array.from(beatMap.values())
-          .map((b) => ({ ...b, hitRate: b.attempts > 0 ? Number(((b.successCount / b.attempts) * 100).toFixed(1)) : null }))
-          .sort((a, b) => b.attempts - a.attempts || a.beatName.localeCompare(b.beatName));
-        return { showName, beats };
-      }).sort((a, b) => {
-        const aTotal = a.beats.reduce((s, b) => s + b.attempts, 0);
-        const bTotal = b.beats.reduce((s, b) => s + b.attempts, 0);
-        return bTotal - aTotal || a.showName.localeCompare(b.showName);
-      });
-      const allBeats = shows.flatMap((s) => s.beats);
-      const totalAttempts = allBeats.reduce((s, b) => s + b.attempts, 0);
-      const totalSuccess = allBeats.reduce((s, b) => s + b.successCount, 0);
-      return { podName, writerNames: Array.from(writers), shows, totalAttempts, totalSuccess };
+    return Array.from(podMap.values()).map(({ podName, writerMap }) => {
+      const writers = Array.from(writerMap.values()).map(({ writerName, showMap }) => {
+        const shows = Array.from(showMap.values()).map(({ showName, beatMap }) => {
+          const beats = Array.from(beatMap.values())
+            .map((b) => ({ ...b, hitRate: b.attempts > 0 ? Number(((b.successCount / b.attempts) * 100).toFixed(1)) : null }))
+            .sort((a, b) => b.attempts - a.attempts || a.beatName.localeCompare(b.beatName));
+          return { showName, beats };
+        }).sort((a, b) => {
+          const at = a.beats.reduce((s, b) => s + b.attempts, 0);
+          const bt = b.beats.reduce((s, b) => s + b.attempts, 0);
+          return bt - at || a.showName.localeCompare(b.showName);
+        });
+        const allBeats = shows.flatMap((s) => s.beats);
+        return { writerName, shows, totalAttempts: allBeats.reduce((s, b) => s + b.attempts, 0), totalSuccess: allBeats.reduce((s, b) => s + b.successCount, 0) };
+      }).sort((a, b) => b.totalAttempts - a.totalAttempts || a.writerName.localeCompare(b.writerName));
+
+      const allBeats = writers.flatMap((w) => w.shows.flatMap((s) => s.beats));
+      return {
+        podName,
+        writers,
+        totalAttempts: allBeats.reduce((s, b) => s + b.attempts, 0),
+        totalSuccess: allBeats.reduce((s, b) => s + b.successCount, 0),
+        totalShows: new Set(allBeats.map((b) => b.showName)).size,
+        totalBeats: allBeats.length,
+      };
     }).sort((a, b) => b.totalAttempts - a.totalAttempts || a.podName.localeCompare(b.podName));
   }, [scopedRows, showBeatInfo]);
 
@@ -1282,7 +1299,8 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
         <table className="ops-table overview-table">
           <thead>
             <tr>
-              <th style={{ width: 120 }}>POD</th>
+              <th style={{ width: 110 }}>POD</th>
+              <th style={{ width: 120 }}>Writer</th>
               <th>Show</th>
               <th>Beat</th>
               <th style={{ textAlign: "right" }}>Ads</th>
@@ -1293,123 +1311,132 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
           </thead>
           <tbody>
             {byPod.length > 0 ? byPod.flatMap((pod) => {
-              const totalBeats = pod.shows.reduce((s, sh) => s + sh.beats.length, 0);
-
-              // extraRows: how many extra rows a beat contributes when expanded (header + ad rows)
-              const beatExtra = (beat) => {
-                const key = `${pod.podName}|${beat.showName}|${beat.beatName}`;
+              // extra rows a beat adds when its ads are expanded (header row + ad rows)
+              const beatExtra = (writerName, beat) => {
+                const key = `${pod.podName}|${writerName}|${beat.showName}|${beat.beatName}`;
                 return expandedAngles[key] ? beat.ads.length + 1 : 0;
               };
 
-              // POD cell spans: all beat rows + all expanded rows + 1 Total row
-              const podRowSpan = pod.shows.reduce((sum, sh) =>
-                sum + sh.beats.reduce((s, b) => s + 1 + beatExtra(b), 0), 1
+              // POD rowSpan = all beat rows + all expanded rows + 1 Total row
+              const podRowSpan = pod.writers.reduce((sum, w) =>
+                sum + w.shows.reduce((ws, sh) =>
+                  ws + sh.beats.reduce((bs, b) => bs + 1 + beatExtra(w.writerName, b), 0), 0), 1
               );
 
               const rows = [];
               let isFirstOfPod = true;
 
-              for (const show of pod.shows) {
-                // Show cell spans: all beat rows + expanded rows for this show
-                const showRowSpan = show.beats.reduce((s, b) => s + 1 + beatExtra(b), 0);
-                let isFirstOfShow = true;
+              for (const writer of pod.writers) {
+                // Writer rowSpan = all beat rows + expanded rows for this writer
+                const writerRowSpan = writer.shows.reduce((sum, sh) =>
+                  sum + sh.beats.reduce((s, b) => s + 1 + beatExtra(writer.writerName, b), 0), 0
+                );
 
-                for (const beat of show.beats) {
-                  const angleKey = `${pod.podName}|${beat.showName}|${beat.beatName}`;
-                  const isExpanded = Boolean(expandedAngles[angleKey]);
+                let isFirstOfWriter = true;
 
-                  rows.push(
-                    <tr
-                      key={angleKey}
-                      className={`overview-genai-parent-row${beat.successCount > 0 ? " overview-genai-success-row" : ""}`}
-                      style={{ cursor: "pointer" }}
-                      onClick={() => setExpandedAngles((prev) => ({ ...prev, [angleKey]: !prev[angleKey] }))}
-                    >
-                      {isFirstOfPod && (
-                        <td rowSpan={podRowSpan} style={{ fontWeight: 700, verticalAlign: "top", fontSize: 13, paddingTop: 10, borderRight: "1px solid var(--border)" }}>
-                          {pod.podName}
-                          {pod.writerNames.length > 0 && (
-                            <div style={{ fontWeight: 400, fontSize: 10, color: "var(--subtle)", marginTop: 4 }}>
-                              {pod.writerNames.join(", ")}
-                            </div>
-                          )}
-                        </td>
-                      )}
-                      {isFirstOfShow && (
-                        <td rowSpan={showRowSpan} className="genai-show-name" style={{ verticalAlign: "top", paddingTop: 10 }}>
-                          {show.showName}
-                        </td>
-                      )}
-                      <td className="genai-beat-name">{beat.beatName || "-"}</td>
-                      <td className="genai-num-cell" style={{ textAlign: "right" }}>{formatMetricValue(beat.attempts)}</td>
-                      <td className="genai-num-cell" style={{ textAlign: "right" }}>
-                        {beat.successCount > 0
-                          ? <span className="genai-success-badge">{formatMetricValue(beat.successCount)}</span>
-                          : <span className="genai-zero">0</span>}
-                      </td>
-                      <td className="genai-num-cell" style={{ textAlign: "right" }}>
-                        <span className={`genai-hitrate${beat.hitRate != null ? (beat.hitRate >= 50 ? " is-high" : beat.hitRate >= 20 ? " is-mid" : " is-low") : ""}`}>
-                          {beat.hitRate != null ? formatPercent(beat.hitRate) : "—"}
-                        </span>
-                      </td>
-                      <td className="genai-chevron-cell">
-                        <span className={`genai-chevron${isExpanded ? " is-open" : ""}`} />
-                      </td>
-                    </tr>
-                  );
+                for (const show of writer.shows) {
+                  // Show rowSpan = beat rows + expanded rows for this show under this writer
+                  const showRowSpan = show.beats.reduce((s, b) => s + 1 + beatExtra(writer.writerName, b), 0);
+                  let isFirstOfShow = true;
 
-                  isFirstOfPod = false;
-                  isFirstOfShow = false;
+                  for (const beat of show.beats) {
+                    const angleKey = `${pod.podName}|${writer.writerName}|${beat.showName}|${beat.beatName}`;
+                    const isExpanded = Boolean(expandedAngles[angleKey]);
 
-                  if (isExpanded) {
                     rows.push(
-                      <tr key={`${angleKey}-hdr`} className="overview-genai-expanded-hdr">
-                        <td colSpan={2} className="genai-col-asset" style={{ paddingLeft: 16 }}>Asset Code</td>
-                        <td className="genai-col-metric">CPI</td>
-                        <td className="genai-col-metric">True Comp</td>
-                        <td className="genai-col-metric" style={{ fontSize: 10 }}>CTR · CTI</td>
-                        <td />
+                      <tr
+                        key={angleKey}
+                        className={`overview-genai-parent-row${beat.successCount > 0 ? " overview-genai-success-row" : ""}`}
+                        style={{ cursor: "pointer" }}
+                        onClick={() => setExpandedAngles((prev) => ({ ...prev, [angleKey]: !prev[angleKey] }))}
+                      >
+                        {isFirstOfPod && (
+                          <td rowSpan={podRowSpan} style={{ fontWeight: 700, verticalAlign: "top", fontSize: 13, paddingTop: 10, borderRight: "1px solid var(--border)" }}>
+                            {pod.podName}
+                          </td>
+                        )}
+                        {isFirstOfWriter && (
+                          <td rowSpan={writerRowSpan} style={{ verticalAlign: "top", paddingTop: 10, fontSize: 12, color: "var(--fg)", borderRight: "1px solid var(--border)" }}>
+                            {writer.writerName}
+                          </td>
+                        )}
+                        {isFirstOfShow && (
+                          <td rowSpan={showRowSpan} className="genai-show-name" style={{ verticalAlign: "top", paddingTop: 10 }}>
+                            {show.showName}
+                          </td>
+                        )}
+                        <td className="genai-beat-name">{beat.beatName || "-"}</td>
+                        <td className="genai-num-cell" style={{ textAlign: "right" }}>{formatMetricValue(beat.attempts)}</td>
+                        <td className="genai-num-cell" style={{ textAlign: "right" }}>
+                          {beat.successCount > 0
+                            ? <span className="genai-success-badge">{formatMetricValue(beat.successCount)}</span>
+                            : <span className="genai-zero">0</span>}
+                        </td>
+                        <td className="genai-num-cell" style={{ textAlign: "right" }}>
+                          <span className={`genai-hitrate${beat.hitRate != null ? (beat.hitRate >= 50 ? " is-high" : beat.hitRate >= 20 ? " is-mid" : " is-low") : ""}`}>
+                            {beat.hitRate != null ? formatPercent(beat.hitRate) : "—"}
+                          </span>
+                        </td>
+                        <td className="genai-chevron-cell">
+                          <span className={`genai-chevron${isExpanded ? " is-open" : ""}`} />
+                        </td>
                       </tr>
                     );
-                    for (const ad of beat.ads) {
+
+                    isFirstOfPod = false;
+                    isFirstOfWriter = false;
+                    isFirstOfShow = false;
+
+                    if (isExpanded) {
                       rows.push(
-                        <tr key={`${angleKey}-${ad.assetCode}`} className={ad.success ? "overview-genai-expanded-row overview-genai-ad-success" : "overview-genai-expanded-row"}>
-                          <td colSpan={2} className="genai-asset-code-cell" style={{ paddingLeft: 16 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                              <span className="genai-asset-code">{ad.assetCode || "-"}</span>
-                              {ad.success && <span className="genai-hit-tag">HIT</span>}
-                            </div>
-                          </td>
-                          <td className="genai-metric-val">{ad.cpiUsd != null ? `$${ad.cpiUsd.toFixed(2)}` : "-"}</td>
-                          <td className="genai-metric-val">{ad.absoluteCompletionPct != null ? formatPercent(ad.absoluteCompletionPct) : "-"}</td>
-                          <td className="genai-metric-val" style={{ fontSize: 10 }}>
-                            {ad.ctrPct != null ? formatPercent(ad.ctrPct) : "-"}
-                            {" · "}
-                            {ad.clickToInstall != null ? formatPercent(ad.clickToInstall) : "-"}
-                          </td>
+                        <tr key={`${angleKey}-hdr`} className="overview-genai-expanded-hdr">
+                          <td colSpan={3} className="genai-col-asset" style={{ paddingLeft: 16 }}>Asset Code</td>
+                          <td className="genai-col-metric">CPI</td>
+                          <td className="genai-col-metric">True Comp</td>
+                          <td className="genai-col-metric" style={{ fontSize: 10 }}>CTR · CTI</td>
                           <td />
                         </tr>
                       );
+                      for (const ad of beat.ads) {
+                        rows.push(
+                          <tr key={`${angleKey}-${ad.assetCode}`} className={ad.success ? "overview-genai-expanded-row overview-genai-ad-success" : "overview-genai-expanded-row"}>
+                            <td colSpan={3} className="genai-asset-code-cell" style={{ paddingLeft: 16 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                <span className="genai-asset-code">{ad.assetCode || "-"}</span>
+                                {ad.success && <span className="genai-hit-tag">HIT</span>}
+                              </div>
+                            </td>
+                            <td className="genai-metric-val">{ad.cpiUsd != null ? `$${ad.cpiUsd.toFixed(2)}` : "-"}</td>
+                            <td className="genai-metric-val">{ad.absoluteCompletionPct != null ? formatPercent(ad.absoluteCompletionPct) : "-"}</td>
+                            <td className="genai-metric-val" style={{ fontSize: 10 }}>
+                              {ad.ctrPct != null ? formatPercent(ad.ctrPct) : "-"}
+                              {" · "}
+                              {ad.clickToInstall != null ? formatPercent(ad.clickToInstall) : "-"}
+                            </td>
+                            <td />
+                          </tr>
+                        );
+                      }
                     }
                   }
                 }
               }
 
-              // Total row — POD cell is covered by rowSpan
+              // Total row — POD cell covered by rowSpan
               rows.push(
                 <tr key={`pod-total-${pod.podName}`} style={{ background: "var(--subtle-bg, #f0ece4)", borderTop: "2px solid var(--border)" }}>
                   <td style={{ fontStyle: "italic", color: "var(--subtle)", fontSize: 12, fontWeight: 600 }}>Total</td>
-                  <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.shows.length}</td>
-                  <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{totalBeats}</td>
+                  <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalShows}</td>
+                  <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalBeats}</td>
                   <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalAttempts}</td>
                   <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalSuccess}</td>
-                  <td />
+                  <td colSpan={2} />
                 </tr>
               );
 
               return rows;
             }) : (
-              <tr><td colSpan="7">No Full Gen AI rows for this filter yet.</td></tr>
+              <tr><td colSpan="8">No Full Gen AI rows for this filter yet.</td></tr>
             )}
           </tbody>
         </table>
