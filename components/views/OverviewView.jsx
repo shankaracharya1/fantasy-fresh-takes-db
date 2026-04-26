@@ -2077,16 +2077,6 @@ export default function OverviewContent({
 
         <hr className="section-divider" />
 
-        <PodWriterScriptTable
-          allBeatRows={allBeatRows}
-          allWorkflowRows={allWorkflowRows}
-          weekStart={leadershipOverviewData?.weekStart || ""}
-          weekEnd={leadershipOverviewData?.weekEnd || ""}
-          loading={podLoading}
-        />
-
-        <hr className="section-divider" />
-
         <PodThroughputRankingTable rows={podThroughputRows} loading={podLoading} />
 
         {(() => {
