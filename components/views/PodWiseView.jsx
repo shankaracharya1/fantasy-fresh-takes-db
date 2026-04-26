@@ -600,62 +600,94 @@ export default function PodWiseContent({
           <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: -6 }}>{competitionWeekLabel}</div>
         ) : null}
 
-        {bestPod ? (
-          <div className="metric-card" style={{ borderLeft: "4px solid var(--accent)" }}>
-            <div className="metric-label">Best POD</div>
-            <div className="metric-value" style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-              <span>{bestPod.podLeadName}</span>
-              <span style={{ fontSize: 16, color: "var(--subtle)" }}>Score: {formatMetricValue(bestPod.throughputScore)}</span>
-            </div>
-            <div className="metric-hint">
-              POD Lead x Writers ({formatMetricValue(bestPod.writerCount)}) x Output ({formatMetricValue(bestPod.scripts)}) x Success ({formatMetricValue(bestPod.successful)})
-            </div>
+        {/* ── Leaderboard header ── */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 16 }}>
+            <span style={{ color: "#d4a017", fontSize: 18 }}>★</span>
+            POD leaderboard
           </div>
-        ) : null}
-
-        <div className="pod-section-header">
-          <span className="pod-section-title">POD performance</span>
-          <span className="pod-section-subtitle">Ranked by throughput score (successful beats/scripts)</span>
+          <span style={{ fontSize: 11, color: "var(--subtle)" }}>Ranked by script hit rate (successful / scripts)</span>
         </div>
 
-        <div className="pod-cards-stack">
-          {sorted.map((pod, i) => {
-            const rank = i + 1;
-            const tierColor = getPodTierColor(pod.conversion);
-            return (
-              <div key={pod.podLeadName} className="pod-rank-card" style={{ borderLeftColor: tierColor }}>
-                <div className="pod-rank-col">
-                  <div className="pod-rank-number" style={{ color: tierColor }}>{rank}</div>
-                  <div className="pod-rank-label">RANK</div>
+        {/* ── Podium (top 3) ── */}
+        {sorted.length > 0 && (() => {
+          const rankColor = (r) => r === 1 ? "#d4a017" : r === 2 ? "#888" : r === 3 ? "#c2703e" : "#aaa";
+          const podiumBg = (r) => r === 1 ? "#fdf6e3" : r === 2 ? "#f7f4ef" : "#fdf0ed";
+          const blocks = [
+            { pod: sorted[1], rank: 2, h: 72 },
+            { pod: sorted[0], rank: 1, h: 110 },
+            { pod: sorted[2], rank: 3, h: 55 },
+          ].filter(b => b.pod);
+          return (
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 10, padding: "8px 0 4px" }}>
+              {blocks.map(({ pod, rank, h }) => (
+                <div key={rank} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flex: 1, maxWidth: 200 }}>
+                  {rank === 1 && <span style={{ fontSize: 22 }}>👑</span>}
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{pod.podLeadName}</div>
+                  <div style={{ fontWeight: 800, fontSize: 18, color: rankColor(rank) }}>{pod.conversion}%</div>
+                  <div style={{ fontSize: 11, color: "var(--subtle)" }}>{pod.successful}/{pod.scripts} scripts</div>
+                  <div style={{
+                    width: "100%", height: h, borderRadius: "8px 8px 0 0",
+                    background: podiumBg(rank),
+                    border: `1px solid var(--border)`,
+                    borderBottom: "none",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 28, fontWeight: 800, color: rankColor(rank),
+                  }}>{rank}</div>
                 </div>
-                <div className="pod-info-col">
-                  <div className="pod-lead-name">{pod.podLeadName}</div>
-                  <div className="pod-conversion" style={{ color: tierColor }}>{pod.conversion}%</div>
-                  <div className="pod-rate-label">SCRIPT HIT RATE</div>
-                </div>
-                <div className="pod-bars-col">
-                  <PodFunnelBar label="Beats" value={pod.beats} maxValue={maxBeats} color="#2d5a3d" />
-                  <PodFunnelBar label="Scripts" value={pod.scripts} maxValue={maxScripts} color="#c2703e" />
-                  <PodFunnelBar label="Success" value={pod.successful} maxValue={maxSuccessful} color="#2d5a3d" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-
-        <div className="pod-legend">
-          {[
-            { color: "#2d5a3d", label: "Beats written" },
-            { color: "#c2703e", label: "Scripts produced" },
-            { color: "#2d5a3d", label: "Successful scripts" },
-          ].map((item) => (
-            <div key={item.label} className="pod-legend-item">
-              <span className="pod-legend-swatch" style={{ background: item.color }} />
-              <span>{item.label}</span>
+              ))}
             </div>
-          ))}
-        </div>
+          );
+        })()}
+
+        {/* ── Ranked list ── */}
+        {(() => {
+          const rankColor = (r) => r === 1 ? "#d4a017" : r === 2 ? "#888" : r === 3 ? "#c2703e" : "#bbb";
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+              {sorted.map((pod, i) => {
+                const rank = i + 1;
+                const color = rankColor(rank);
+                const pct = pod.conversion;
+                const r = 18, circ = 2 * Math.PI * r;
+                const offset = circ * (1 - Math.min(pct, 100) / 100);
+                return (
+                  <div key={pod.podLeadName} style={{
+                    display: "flex", alignItems: "center", gap: 14,
+                    background: "var(--card, #fffdf9)",
+                    border: "1px solid var(--border)",
+                    borderLeft: `4px solid ${rank <= 3 ? color : "var(--border)"}`,
+                    borderRadius: 8, padding: "10px 16px",
+                  }}>
+                    {/* Rank number */}
+                    <div style={{ width: 22, textAlign: "center", fontWeight: 700, fontSize: 15, color: rank <= 3 ? color : "var(--subtle)", flexShrink: 0 }}>{rank}</div>
+                    {/* Circular progress ring */}
+                    <div style={{ position: "relative", width: 46, height: 46, flexShrink: 0 }}>
+                      <svg width={46} height={46} style={{ transform: "rotate(-90deg)" }}>
+                        <circle cx={23} cy={23} r={r} fill="none" stroke="var(--border)" strokeWidth={3} />
+                        <circle cx={23} cy={23} r={r} fill="none" stroke={color} strokeWidth={3}
+                          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
+                      </svg>
+                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color }}>{pct}%</div>
+                    </div>
+                    {/* Name + stats */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{pod.podLeadName}</div>
+                      <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 2 }}>
+                        Scripts {pod.scripts} · Success {pod.successful} · Beats {pod.beats}
+                      </div>
+                    </div>
+                    {/* Hit rate + trophy */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                      <span style={{ fontWeight: 700, fontSize: 16, color: rank <= 3 ? color : "var(--subtle)" }}>{pct}%</span>
+                      {rank === 1 && <span style={{ fontSize: 18 }}>🏆</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         <HitRateTrendChart trendData={podTrendData} loading={podTrendLoading} />
       </div>
