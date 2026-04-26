@@ -626,7 +626,14 @@ function computeFourBeatsWeeks() {
 function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", loading = false }) {
   const filtered = useMemo(() => {
     return allBeatRows.filter((row) => {
-      const d = String(row.primaryDate || "").slice(0, 10);
+      let d = String(row.primaryDate || "").slice(0, 10);
+      // Rows with label-based beatsAssignedDate (e.g. "Apr Week 3") have primaryDate=""
+      // but monthKey ("2026-04") and weekInMonth (1-4) are set — compute an approx date
+      if (!d && row.monthKey && row.weekInMonth) {
+        const [y, mo] = String(row.monthKey).split("-").map(Number);
+        const day = (Number(row.weekInMonth) - 1) * 7 + 1;
+        d = `${String(y).padStart(4, "0")}-${String(mo).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      }
       if (!d) return false;
       if (weekStart && d < weekStart) return false;
       if (weekEnd && d > weekEnd) return false;
