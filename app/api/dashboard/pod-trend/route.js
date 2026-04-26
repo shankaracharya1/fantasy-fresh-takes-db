@@ -49,8 +49,8 @@ function classifyRows(analyticsRows, weekStart, weekEnd, podNameMap) {
     const liveDate = String(row?.liveDate || "").trim();
     if (!liveDate || liveDate < weekStart || liveDate > weekEnd) return false;
     if (!isFreshTakesLabel(row?.reworkType)) return false;
-    const assetCode = String(row?.assetCode || "").trim();
-    return Boolean(assetCode);
+    const assetCode = String(row?.assetCode || "").trim().toUpperCase();
+    return assetCode.startsWith("GA") || assetCode.startsWith("GI");
   });
 
   const podStats = new Map();
