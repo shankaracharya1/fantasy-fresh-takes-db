@@ -624,21 +624,37 @@ function computeFourBeatsWeeks() {
 }
 
 function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", loading = false }) {
-  // Build a Set of the last 4 week-bucket keys ("YYYY-MM-WN") anchored to weekEnd.
-  // Using weekEnd (server-provided date) avoids new Date() hydration mismatches.
+  // Build a Set of week-bucket keys that fall WITHIN weekStart..weekEnd.
+  // 1-week selection → 1 bucket; 2-week selection → 2 buckets; etc.
   const recentWeekKeys = useMemo(() => {
-    const refDate = weekEnd || weekStart;
-    if (!refDate) return null; // no anchor — show all weeks
-    const [y, mo, d] = String(refDate).split("-").map(Number);
-    const mk0 = `${y}-${String(mo).padStart(2, "0")}`;
-    const wk0 = Math.min(4, Math.floor((d - 1) / 7) + 1);
+    const refStart = weekStart || weekEnd;
+    const refEnd = weekEnd || weekStart;
+    if (!refStart || !refEnd) return null; // no range — show all weeks
+
+    const toBucket = (dateStr) => {
+      const [y, mo, d] = String(dateStr).split("-").map(Number);
+      return {
+        mk: `${y}-${String(mo).padStart(2, "0")}`,
+        wk: Math.min(4, Math.floor((d - 1) / 7) + 1),
+      };
+    };
+
+    const start = toBucket(refStart);
+    const end = toBucket(refEnd);
     const set = new Set();
-    let mk = mk0, wk = wk0;
-    for (let i = 0; i < 4; i++) {
+    let { mk, wk } = start;
+
+    for (let i = 0; i < 52; i++) { // cap at 1 year of weeks
       set.add(`${mk}-W${wk}`);
-      const prev = stepBackWeeks(mk, wk, 1);
-      mk = prev.monthKey;
-      wk = prev.weekInMonth;
+      if (mk === end.mk && wk === end.wk) break;
+      // step forward 1 week-bucket
+      wk++;
+      if (wk > 4) {
+        wk = 1;
+        const [y, m] = mk.split("-").map(Number);
+        const nm = m + 1;
+        mk = nm > 12 ? `${y + 1}-01` : `${y}-${String(nm).padStart(2, "0")}`;
+      }
     }
     return set;
   }, [weekEnd, weekStart]);
