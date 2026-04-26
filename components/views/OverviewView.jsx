@@ -624,22 +624,34 @@ function computeFourBeatsWeeks() {
 }
 
 function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", loading = false }) {
+  // Build a Set of the last 4 week-bucket keys ("YYYY-MM-WN") anchored to weekEnd.
+  // Using weekEnd (server-provided date) avoids new Date() hydration mismatches.
+  const recentWeekKeys = useMemo(() => {
+    const refDate = weekEnd || weekStart;
+    if (!refDate) return null; // no anchor — show all weeks
+    const [y, mo, d] = String(refDate).split("-").map(Number);
+    const mk0 = `${y}-${String(mo).padStart(2, "0")}`;
+    const wk0 = Math.min(4, Math.floor((d - 1) / 7) + 1);
+    const set = new Set();
+    let mk = mk0, wk = wk0;
+    for (let i = 0; i < 4; i++) {
+      set.add(`${mk}-W${wk}`);
+      const prev = stepBackWeeks(mk, wk, 1);
+      mk = prev.monthKey;
+      wk = prev.weekInMonth;
+    }
+    return set;
+  }, [weekEnd, weekStart]);
+
+  // Filter by monthKey+weekInMonth directly — handles both ISO-date rows and
+  // label-based rows (e.g. beatsAssignedDate="Apr Week 3") that have primaryDate=""
   const filtered = useMemo(() => {
     return allBeatRows.filter((row) => {
-      let d = String(row.primaryDate || "").slice(0, 10);
-      // Rows with label-based beatsAssignedDate (e.g. "Apr Week 3") have primaryDate=""
-      // but monthKey ("2026-04") and weekInMonth (1-4) are set — compute an approx date
-      if (!d && row.monthKey && row.weekInMonth) {
-        const [y, mo] = String(row.monthKey).split("-").map(Number);
-        const day = (Number(row.weekInMonth) - 1) * 7 + 1;
-        d = `${String(y).padStart(4, "0")}-${String(mo).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      }
-      if (!d) return false;
-      if (weekStart && d < weekStart) return false;
-      if (weekEnd && d > weekEnd) return false;
-      return true;
+      if (!row.monthKey || !row.weekInMonth) return false;
+      if (recentWeekKeys === null) return true;
+      return recentWeekKeys.has(`${row.monthKey}-W${row.weekInMonth}`);
     });
-  }, [allBeatRows, weekStart, weekEnd]);
+  }, [allBeatRows, recentWeekKeys]);
 
   const weeks = useMemo(() => {
     const weekMap = new Map();
