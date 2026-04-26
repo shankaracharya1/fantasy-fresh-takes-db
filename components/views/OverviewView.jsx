@@ -735,7 +735,7 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
 
   return (
     <div style={{ marginTop: 8 }}>
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Ideation Weekly Breakdown</div>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Beats Overview</div>
       <div className="table-wrap" style={{ overflowX: "auto" }}>
         <table className="ops-table" style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
