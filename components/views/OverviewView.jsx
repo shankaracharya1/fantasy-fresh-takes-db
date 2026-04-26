@@ -623,6 +623,155 @@ function computeFourBeatsWeeks() {
   });
 }
 
+function PodWriterScriptTable({ allBeatRows = [], allWorkflowRows = [], weekStart = "", weekEnd = "", loading = false }) {
+  const [collapsedPods, setCollapsedPods] = useState(new Set());
+
+  const togglePod = (podName) =>
+    setCollapsedPods((prev) => {
+      const next = new Set(prev);
+      next.has(podName) ? next.delete(podName) : next.add(podName);
+      return next;
+    });
+
+  const rows = useMemo(() => {
+    // --- Approved Beats: ideation tracker, statusCategory === "approved", no date filter ---
+    const approvedMap = new Map(); // pod → Map(writer → count)
+    for (const row of allBeatRows) {
+      if (row.statusCategory !== "approved") continue;
+      const pod = row.podLeadName || "Unknown";
+      const writer = row.writerName || "Unknown";
+      if (!approvedMap.has(pod)) approvedMap.set(pod, new Map());
+      const wm = approvedMap.get(pod);
+      wm.set(writer, (wm.get(writer) || 0) + 1);
+    }
+
+    // --- Filter workflow rows by dateSubmittedByLead ---
+    const dateFiltered = allWorkflowRows.filter((row) => {
+      const d = String(row.strictLeadSubmittedDate || "").slice(0, 10);
+      if (!d) return false;
+      if (weekStart && d < weekStart) return false;
+      if (weekEnd && d > weekEnd) return false;
+      return true;
+    });
+
+    const submittedMap = new Map(); // pod → Map(writer → count) — all 4 sheets
+    const completedMap = new Map(); // pod → Map(writer → count) — live only
+
+    for (const row of dateFiltered) {
+      const pod = row.podLeadName || "Unknown";
+      const writer = row.writerName || "Unknown";
+      if (!submittedMap.has(pod)) submittedMap.set(pod, new Map());
+      const sm = submittedMap.get(pod);
+      sm.set(writer, (sm.get(writer) || 0) + 1);
+      if (row.source === "live") {
+        if (!completedMap.has(pod)) completedMap.set(pod, new Map());
+        const cm = completedMap.get(pod);
+        cm.set(writer, (cm.get(writer) || 0) + 1);
+      }
+    }
+
+    // --- Merge into POD → writers structure ---
+    const allPods = new Set([...approvedMap.keys(), ...submittedMap.keys(), ...completedMap.keys()]);
+
+    return Array.from(allPods)
+      .map((pod) => {
+        const aw = approvedMap.get(pod) || new Map();
+        const sw = submittedMap.get(pod) || new Map();
+        const cw = completedMap.get(pod) || new Map();
+        const allWriters = new Set([...aw.keys(), ...sw.keys(), ...cw.keys()]);
+
+        const writers = Array.from(allWriters)
+          .map((writer) => ({
+            writerName: writer,
+            approvedBeats: aw.get(writer) || 0,
+            submitted: sw.get(writer) || 0,
+            completed: cw.get(writer) || 0,
+          }))
+          .sort((a, b) => b.submitted - a.submitted || a.writerName.localeCompare(b.writerName));
+
+        return {
+          podName: pod,
+          writers,
+          totalApproved: writers.reduce((s, w) => s + w.approvedBeats, 0),
+          totalSubmitted: writers.reduce((s, w) => s + w.submitted, 0),
+          totalCompleted: writers.reduce((s, w) => s + w.completed, 0),
+        };
+      })
+      .sort((a, b) => b.totalSubmitted - a.totalSubmitted || a.podName.localeCompare(b.podName));
+  }, [allBeatRows, allWorkflowRows, weekStart, weekEnd]);
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>POD / Writer Script Pipeline</div>
+      {loading ? (
+        <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>Loading…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>No data for selected range.</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="ops-table" style={{ width: "100%", tableLayout: "fixed" }}>
+            <thead>
+              <tr>
+                <th style={{ width: "30%" }}>POD / Writer</th>
+                <th style={{ textAlign: "right", width: "20%" }}>Approved Beats</th>
+                <th style={{ textAlign: "right", width: "25%" }}>Scripts Submitted to Prod</th>
+                <th style={{ textAlign: "right", width: "25%" }}>Total Completed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.flatMap((pod) => {
+                const isCollapsed = collapsedPods.has(pod.podName);
+                const toggleBtn = (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); togglePod(pod.podName); }}
+                    style={{
+                      width: 18, height: 18, borderRadius: 4, border: "1.5px solid var(--border)",
+                      background: "var(--card)", color: "var(--fg)", fontSize: 12, fontWeight: 700,
+                      lineHeight: 1, cursor: "pointer", display: "inline-flex", alignItems: "center",
+                      justifyContent: "center", flexShrink: 0,
+                    }}
+                  >
+                    {isCollapsed ? "+" : "−"}
+                  </button>
+                );
+
+                const podRow = (
+                  <tr key={`pod-${pod.podName}`} style={{ background: "var(--card-alt, #f7f4ee)" }}>
+                    <td style={{ fontWeight: 700, fontSize: 13 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {toggleBtn}
+                        {pod.podName}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: "right", fontWeight: 700 }}>{pod.totalApproved || "—"}</td>
+                    <td style={{ textAlign: "right", fontWeight: 700 }}>{pod.totalSubmitted || "—"}</td>
+                    <td style={{ textAlign: "right", fontWeight: 700 }}>{pod.totalCompleted || "—"}</td>
+                  </tr>
+                );
+
+                if (isCollapsed) return [podRow];
+
+                return [
+                  podRow,
+                  ...pod.writers.map((writer) => (
+                    <tr key={`writer-${pod.podName}-${writer.writerName}`}>
+                      <td style={{ paddingLeft: 34, fontSize: 12, color: "var(--fg)" }}>{writer.writerName}</td>
+                      <td style={{ textAlign: "right", fontSize: 12 }}>{writer.approvedBeats || "—"}</td>
+                      <td style={{ textAlign: "right", fontSize: 12 }}>{writer.submitted || "—"}</td>
+                      <td style={{ textAlign: "right", fontSize: 12 }}>{writer.completed || "—"}</td>
+                    </tr>
+                  )),
+                ];
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BeatsOverviewTable({ allBeatRows = [], loading = false }) {
   const [expandedPods, setExpandedPods] = useState(new Set());
 
@@ -1739,6 +1888,16 @@ export default function OverviewContent({
         <hr className="section-divider" />
 
         <BeatsOverviewTable allBeatRows={allBeatRows} loading={podLoading} />
+
+        <hr className="section-divider" />
+
+        <PodWriterScriptTable
+          allBeatRows={allBeatRows}
+          allWorkflowRows={allWorkflowRows}
+          weekStart={leadershipOverviewData?.weekStart || ""}
+          weekEnd={leadershipOverviewData?.weekEnd || ""}
+          loading={podLoading}
+        />
 
         <hr className="section-divider" />
 
