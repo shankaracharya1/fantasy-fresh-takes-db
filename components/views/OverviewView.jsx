@@ -2064,10 +2064,6 @@ export default function OverviewContent({
 
         <hr className="section-divider" />
 
-        <BeatsOverviewTable allBeatRows={allBeatRows} loading={podLoading} />
-
-        <hr className="section-divider" />
-
         <IdeationWeeklyTable
           allBeatRows={allBeatRows}
           weekStart={leadershipOverviewData?.weekStart || ""}
