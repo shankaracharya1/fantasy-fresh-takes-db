@@ -685,27 +685,42 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
       }
       const week = weekMap.get(weekKey);
       const pod = row.podLeadName || "Unknown";
+      const writer = row.writerName || "Unknown";
+
       if (!week.pods.has(pod)) {
-        week.pods.set(pod, { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0 });
+        week.pods.set(pod, { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0, writers: new Map() });
       }
-      const c = week.pods.get(pod);
+      const podEntry = week.pods.get(pod);
+      if (!podEntry.writers.has(writer)) {
+        podEntry.writers.set(writer, { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0 });
+      }
+      const wc = podEntry.writers.get(writer);
+
       const sc = String(row.statusCategory || "");
       const ss = String(row.scriptStatus || "").toLowerCase().trim();
 
-      if (sc === "approved") c.approved += 1;
-      if (sc === "iterate") c.iterate += 1;
-      if (sc === "review_pending") c.reviewPending += 1;
-      if (ss === "uploaded") c.uploaded += 1;
-      if (ss.includes("visual") || ss.includes("sound editing")) c.inProd += 1;
-      if (ss.includes("approved for production")) c.approvedForProd += 1;
-      if (ss.includes("completed by writer")) c.completedByWriter += 1;
+      // accumulate into both pod and writer buckets
+      for (const c of [podEntry, wc]) {
+        if (sc === "approved") c.approved += 1;
+        if (sc === "iterate") c.iterate += 1;
+        if (sc === "review_pending") c.reviewPending += 1;
+        if (ss === "uploaded") c.uploaded += 1;
+        if (ss.includes("visual") || ss.includes("sound editing")) c.inProd += 1;
+        if (ss.includes("approved for production")) c.approvedForProd += 1;
+        if (ss.includes("completed by writer")) c.completedByWriter += 1;
+      }
     }
 
     return Array.from(weekMap.values())
       .sort((a, b) => a.monthKey !== b.monthKey ? a.monthKey.localeCompare(b.monthKey) : a.weekInMonth - b.weekInMonth)
       .map((week) => {
         const pods = Array.from(week.pods.entries())
-          .map(([podName, c]) => ({ podName, ...c, writing: c.approved - (c.uploaded + c.completedByWriter) }))
+          .map(([podName, entry]) => {
+            const writers = Array.from(entry.writers.entries())
+              .map(([writerName, c]) => ({ writerName, ...c, writing: c.approved - (c.uploaded + c.completedByWriter) }))
+              .sort((a, b) => b.approved - a.approved || a.writerName.localeCompare(b.writerName));
+            return { podName, ...entry, writing: entry.approved - (entry.uploaded + entry.completedByWriter), writers };
+          })
           .sort((a, b) => b.approved - a.approved || a.podName.localeCompare(b.podName));
         const total = pods.reduce(
           (acc, p) => ({
@@ -724,6 +739,12 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
       });
   }, [filtered]);
 
+  const [collapsedPods, setCollapsedPods] = useState(new Set());
+  const togglePod = (weekKey, podName) => {
+    const key = `${weekKey}::${podName}`;
+    setCollapsedPods(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  };
+
   const isSingleWeek = weeks.length <= 1;
 
   const numCell = (v, bold = false) => (
@@ -741,7 +762,7 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
           <thead>
             <tr>
               {!isSingleWeek && <th style={{ textAlign: "center", width: 110 }}>Ideation date</th>}
-              <th style={{ width: 120 }}>POD</th>
+              <th style={{ width: 150 }}>POD / Writer</th>
               <th style={{ textAlign: "center", fontWeight: 700 }}>Approved</th>
               <th style={{ textAlign: "center", fontWeight: 700 }}>Iterate</th>
               <th style={{ textAlign: "center", fontWeight: 700 }}>Review pending</th>
@@ -754,26 +775,61 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
           </thead>
           <tbody>
             {weeks.flatMap((week, wi) => {
-              const rowCount = week.pods.length + 1; // pods + total row
-              const weekRows = week.pods.map((pod, pi) => (
-                <tr key={`${week.weekKey}-${pod.podName}`}>
-                  {!isSingleWeek && pi === 0 && (
-                    <td rowSpan={rowCount} style={{ textAlign: "center", fontWeight: 600, fontSize: 12, verticalAlign: "middle", background: "var(--card-alt, #f7f4ee)", borderRight: "1px solid var(--border)" }}>
-                      {week.label}
+              const isCollapsed = (pod) => collapsedPods.has(`${week.weekKey}::${pod.podName}`);
+              const totalRowCount = 1 + week.pods.reduce((s, pod) => s + 1 + (isCollapsed(pod) ? 0 : pod.writers.length), 0);
+
+              const rows = [];
+              week.pods.forEach((pod, pi) => {
+                const collapsed = isCollapsed(pod);
+                // POD row
+                rows.push(
+                  <tr key={`${week.weekKey}-${pod.podName}`}>
+                    {!isSingleWeek && pi === 0 && (
+                      <td rowSpan={totalRowCount} style={{ textAlign: "center", fontWeight: 600, fontSize: 12, verticalAlign: "middle", background: "var(--card-alt, #f7f4ee)", borderRight: "1px solid var(--border)" }}>
+                        {week.label}
+                      </td>
+                    )}
+                    <td style={{ fontSize: 12, padding: "6px 10px", fontWeight: 600 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <button
+                          onClick={() => togglePod(week.weekKey, pod.podName)}
+                          style={{ fontSize: 11, lineHeight: 1, width: 18, height: 18, borderRadius: 3, border: "1px solid var(--border)", background: "var(--card-alt, #f0ece4)", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                        >{collapsed ? "+" : "−"}</button>
+                        {pod.podName}
+                      </div>
                     </td>
-                  )}
-                  <td style={{ fontSize: 12, padding: "8px 10px" }}>{pod.podName}</td>
-                  {numCell(pod.approved, true)}
-                  {numCell(pod.iterate, true)}
-                  {numCell(pod.reviewPending, true)}
-                  {numCell(pod.uploaded)}
-                  {numCell(pod.inProd)}
-                  {numCell(pod.approvedForProd)}
-                  {numCell(pod.completedByWriter)}
-                  {numCell(pod.writing)}
-                </tr>
-              ));
-              const totalRow = (
+                    {numCell(pod.approved, true)}
+                    {numCell(pod.iterate, true)}
+                    {numCell(pod.reviewPending, true)}
+                    {numCell(pod.uploaded)}
+                    {numCell(pod.inProd)}
+                    {numCell(pod.approvedForProd)}
+                    {numCell(pod.completedByWriter)}
+                    {numCell(pod.writing)}
+                  </tr>
+                );
+                // Writer rows (when expanded)
+                if (!collapsed) {
+                  pod.writers.forEach((writer) => {
+                    rows.push(
+                      <tr key={`${week.weekKey}-${pod.podName}-${writer.writerName}`} style={{ background: "var(--row-alt, #faf8f4)" }}>
+                        <td style={{ fontSize: 11, padding: "5px 10px 5px 32px", color: "var(--subtle-text, #666)" }}>{writer.writerName}</td>
+                        {numCell(writer.approved)}
+                        {numCell(writer.iterate)}
+                        {numCell(writer.reviewPending)}
+                        {numCell(writer.uploaded)}
+                        {numCell(writer.inProd)}
+                        {numCell(writer.approvedForProd)}
+                        {numCell(writer.completedByWriter)}
+                        {numCell(writer.writing)}
+                      </tr>
+                    );
+                  });
+                }
+              });
+
+              // Total row
+              rows.push(
                 <tr key={`${week.weekKey}-total`} style={{ background: "var(--subtle-bg, #f0ece4)", borderTop: "2px solid var(--border)" }}>
                   <td style={{ fontStyle: "italic", fontWeight: 600, fontSize: 12, padding: "8px 10px" }}>Total</td>
                   {numCell(week.total.approved, true)}
@@ -786,12 +842,15 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
                   {numCell(week.total.writing)}
                 </tr>
               );
-              const spacer = wi < weeks.length - 1 ? (
-                <tr key={`spacer-${week.weekKey}`} style={{ height: 12, background: "transparent" }}>
-                  <td colSpan={isSingleWeek ? 9 : 10} style={{ border: "none", padding: 0 }} />
-                </tr>
-              ) : null;
-              return spacer ? [...weekRows, totalRow, spacer] : [...weekRows, totalRow];
+
+              if (wi < weeks.length - 1) {
+                rows.push(
+                  <tr key={`spacer-${week.weekKey}`} style={{ height: 12, background: "transparent" }}>
+                    <td colSpan={isSingleWeek ? 10 : 11} style={{ border: "none", padding: 0 }} />
+                  </tr>
+                );
+              }
+              return rows;
             })}
           </tbody>
         </table>
