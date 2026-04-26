@@ -623,6 +623,148 @@ function computeFourBeatsWeeks() {
   });
 }
 
+function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", loading = false }) {
+  const filtered = useMemo(() => {
+    return allBeatRows.filter((row) => {
+      const d = String(row.primaryDate || "").slice(0, 10);
+      if (!d) return false;
+      if (weekStart && d < weekStart) return false;
+      if (weekEnd && d > weekEnd) return false;
+      return true;
+    });
+  }, [allBeatRows, weekStart, weekEnd]);
+
+  const weeks = useMemo(() => {
+    const weekMap = new Map();
+    for (const row of filtered) {
+      if (!row.monthKey || !row.weekInMonth) continue;
+      const weekKey = `${row.monthKey}-W${row.weekInMonth}`;
+      if (!weekMap.has(weekKey)) {
+        weekMap.set(weekKey, {
+          weekKey,
+          monthKey: row.monthKey,
+          weekInMonth: row.weekInMonth,
+          label: `${getMonthShort(row.monthKey)} Week ${row.weekInMonth}`,
+          pods: new Map(),
+        });
+      }
+      const week = weekMap.get(weekKey);
+      const pod = row.podLeadName || "Unknown";
+      if (!week.pods.has(pod)) {
+        week.pods.set(pod, { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0 });
+      }
+      const c = week.pods.get(pod);
+      const sc = String(row.statusCategory || "");
+      const ss = String(row.scriptStatus || "").toLowerCase().trim();
+
+      if (sc === "approved") c.approved += 1;
+      if (sc === "iterate") c.iterate += 1;
+      if (sc === "review_pending") c.reviewPending += 1;
+      if (ss === "uploaded") c.uploaded += 1;
+      if (ss.includes("visual") || ss.includes("sound editing")) c.inProd += 1;
+      if (ss.includes("approved for production")) c.approvedForProd += 1;
+      if (ss.includes("completed by writer")) c.completedByWriter += 1;
+    }
+
+    return Array.from(weekMap.values())
+      .sort((a, b) => a.monthKey !== b.monthKey ? a.monthKey.localeCompare(b.monthKey) : a.weekInMonth - b.weekInMonth)
+      .map((week) => {
+        const pods = Array.from(week.pods.entries())
+          .map(([podName, c]) => ({ podName, ...c, writing: c.approved - (c.uploaded + c.completedByWriter) }))
+          .sort((a, b) => b.approved - a.approved || a.podName.localeCompare(b.podName));
+        const total = pods.reduce(
+          (acc, p) => ({
+            approved: acc.approved + p.approved,
+            iterate: acc.iterate + p.iterate,
+            reviewPending: acc.reviewPending + p.reviewPending,
+            uploaded: acc.uploaded + p.uploaded,
+            inProd: acc.inProd + p.inProd,
+            approvedForProd: acc.approvedForProd + p.approvedForProd,
+            completedByWriter: acc.completedByWriter + p.completedByWriter,
+            writing: acc.writing + p.writing,
+          }),
+          { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0, writing: 0 }
+        );
+        return { ...week, pods, total };
+      });
+  }, [filtered]);
+
+  const isSingleWeek = weeks.length <= 1;
+
+  const numCell = (v, bold = false) => (
+    <td style={{ textAlign: "center", fontWeight: bold ? 700 : 400, fontSize: 13, padding: "8px 10px" }}>{v}</td>
+  );
+
+  if (loading) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>Loading…</div>;
+  if (!weeks.length) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>No ideation data for selected range.</div>;
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Ideation Weekly Breakdown</div>
+      <div className="table-wrap" style={{ overflowX: "auto" }}>
+        <table className="ops-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              {!isSingleWeek && <th style={{ textAlign: "center", width: 110 }}>Ideation date</th>}
+              <th style={{ width: 120 }}>POD</th>
+              <th style={{ textAlign: "center", fontWeight: 700 }}>Approved</th>
+              <th style={{ textAlign: "center", fontWeight: 700 }}>Iterate</th>
+              <th style={{ textAlign: "center", fontWeight: 700 }}>Review pending</th>
+              <th style={{ textAlign: "center" }}>Uploaded</th>
+              <th style={{ textAlign: "center" }}>In prod</th>
+              <th style={{ textAlign: "center" }}>Approved for prod</th>
+              <th style={{ textAlign: "center" }}>Completed by writer</th>
+              <th style={{ textAlign: "center" }}>Writing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {weeks.flatMap((week, wi) => {
+              const rowCount = week.pods.length + 1; // pods + total row
+              const weekRows = week.pods.map((pod, pi) => (
+                <tr key={`${week.weekKey}-${pod.podName}`}>
+                  {!isSingleWeek && pi === 0 && (
+                    <td rowSpan={rowCount} style={{ textAlign: "center", fontWeight: 600, fontSize: 12, verticalAlign: "middle", background: "var(--card-alt, #f7f4ee)", borderRight: "1px solid var(--border)" }}>
+                      {week.label}
+                    </td>
+                  )}
+                  <td style={{ fontSize: 12, padding: "8px 10px" }}>{pod.podName}</td>
+                  {numCell(pod.approved, true)}
+                  {numCell(pod.iterate, true)}
+                  {numCell(pod.reviewPending, true)}
+                  {numCell(pod.uploaded)}
+                  {numCell(pod.inProd)}
+                  {numCell(pod.approvedForProd)}
+                  {numCell(pod.completedByWriter)}
+                  {numCell(pod.writing)}
+                </tr>
+              ));
+              const totalRow = (
+                <tr key={`${week.weekKey}-total`} style={{ background: "var(--subtle-bg, #f0ece4)", borderTop: "2px solid var(--border)" }}>
+                  <td style={{ fontStyle: "italic", fontWeight: 600, fontSize: 12, padding: "8px 10px" }}>Total</td>
+                  {numCell(week.total.approved, true)}
+                  {numCell(week.total.iterate, true)}
+                  {numCell(week.total.reviewPending, true)}
+                  {numCell(week.total.uploaded)}
+                  {numCell(week.total.inProd)}
+                  {numCell(week.total.approvedForProd)}
+                  {numCell(week.total.completedByWriter)}
+                  {numCell(week.total.writing)}
+                </tr>
+              );
+              const spacer = wi < weeks.length - 1 ? (
+                <tr key={`spacer-${week.weekKey}`} style={{ height: 12, background: "transparent" }}>
+                  <td colSpan={isSingleWeek ? 9 : 10} style={{ border: "none", padding: 0 }} />
+                </tr>
+              ) : null;
+              return spacer ? [...weekRows, totalRow, spacer] : [...weekRows, totalRow];
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function PodWriterScriptTable({ allBeatRows = [], allWorkflowRows = [], weekStart = "", weekEnd = "", loading = false }) {
   const [collapsedPods, setCollapsedPods] = useState(new Set());
 
@@ -1888,6 +2030,15 @@ export default function OverviewContent({
         <hr className="section-divider" />
 
         <BeatsOverviewTable allBeatRows={allBeatRows} loading={podLoading} />
+
+        <hr className="section-divider" />
+
+        <IdeationWeeklyTable
+          allBeatRows={allBeatRows}
+          weekStart={leadershipOverviewData?.weekStart || ""}
+          weekEnd={leadershipOverviewData?.weekEnd || ""}
+          loading={podLoading}
+        />
 
         <hr className="section-divider" />
 
