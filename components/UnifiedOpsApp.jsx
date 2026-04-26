@@ -1266,7 +1266,7 @@ export default function UnifiedOpsApp() {
                         <circle cx="8" cy="9.5" r="0.8" fill="currentColor"/>
                         <circle cx="10.5" cy="9.5" r="0.8" fill="currentColor"/>
                       </svg>
-                      <span className="week-picker-label">
+                      <span className="week-picker-label" suppressHydrationWarning>
                         {selectedMonthWeekOption ? selectedMonthWeekOption.label : "Select week"}
                       </span>
                       <svg className="week-picker-chevron" viewBox="0 0 10 6" fill="none" aria-hidden="true">
