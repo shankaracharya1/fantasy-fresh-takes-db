@@ -1335,7 +1335,7 @@ export default function UnifiedOpsApp() {
                       <path d="M1.5 6h13" stroke="currentColor" strokeWidth="1.25"/>
                       <path d="M5 1.5v2M11 1.5v2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
                     </svg>
-                    <span className="date-field-display">{formatDisplayDate(normalizedHeaderRange.startDate)}</span>
+                    <span className="date-field-display" suppressHydrationWarning>{formatDisplayDate(normalizedHeaderRange.startDate)}</span>
                   </button>
                   <input
                     ref={startDateRef}
@@ -1371,7 +1371,7 @@ export default function UnifiedOpsApp() {
                       <path d="M1.5 6h13" stroke="currentColor" strokeWidth="1.25"/>
                       <path d="M5 1.5v2M11 1.5v2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/>
                     </svg>
-                    <span className="date-field-display">{formatDisplayDate(normalizedHeaderRange.endDate)}</span>
+                    <span className="date-field-display" suppressHydrationWarning>{formatDisplayDate(normalizedHeaderRange.endDate)}</span>
                   </button>
                   <input
                     ref={endDateRef}
@@ -1391,7 +1391,7 @@ export default function UnifiedOpsApp() {
                     }}
                   />
                 </div>
-                <div className="app-topbar-range-note">
+                <div className="app-topbar-range-note" suppressHydrationWarning>
                   {`Selected date range ${formatWeekRangeLabel(normalizedHeaderRange.startDate, normalizedHeaderRange.endDate)}`}
                 </div>
               </div>
