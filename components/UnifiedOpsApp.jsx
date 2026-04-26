@@ -31,6 +31,213 @@ import {
   getAcdViewLabel,
 } from "./views/shared.jsx";
 
+// ─── Suggestions form ────────────────────────────────────────────────────────
+
+const PRIORITY_OPTIONS = [
+  { id: "low",      label: "Low",      color: "#6b7f95", bg: "#edf2f7" },
+  { id: "medium",   label: "Medium",   color: "#b8622c", bg: "#fdf0e6" },
+  { id: "high",     label: "High",     color: "#e09b10", bg: "#fdf3d8" },
+  { id: "critical", label: "Critical", color: "#9f2e2e", bg: "#fdf0f0" },
+];
+
+const DASHBOARD_SECTIONS = [
+  "Editorial Funnel",
+  "PODs Performance",
+  "CDs Performance",
+  "Production Pipeline",
+  "WIP",
+  "Planner",
+  "Analytics",
+  "Overview / Leadership",
+  "Other",
+];
+
+function SuggestionsContent() {
+  const EMPTY_FORM = { name: "", section: "", suggestion: "", whyMatters: "", priority: "" };
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [flash, setFlash] = useState(false);
+  const [entries, setEntries] = useState([]);
+
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  const setPriority = (id) => setForm((f) => ({ ...f, priority: id }));
+  const isValid = form.name.trim() && form.section && form.suggestion.trim() && form.priority;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!isValid) return;
+    setSubmitting(true);
+    await new Promise((r) => setTimeout(r, 600));
+    setEntries((prev) => [{ ...form, id: Date.now(), submittedAt: new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) }, ...prev]);
+    setSubmitting(false);
+    setFlash(true);
+    setForm(EMPTY_FORM);
+    setTimeout(() => setFlash(false), 2000);
+  };
+
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box",
+    padding: "10px 14px", borderRadius: 8,
+    border: "1.5px solid var(--border)", background: "var(--card, #fffdf9)",
+    fontSize: 14, color: "var(--ink)", outline: "none",
+    fontFamily: "inherit", transition: "border-color 0.15s",
+  };
+  const labelStyle = {
+    fontSize: 11, fontWeight: 700, color: "var(--subtle)",
+    letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 6, display: "block",
+  };
+
+  const priorityMeta = Object.fromEntries(PRIORITY_OPTIONS.map((p) => [p.id, p]));
+
+  return (
+    <div style={{ display: "flex", gap: 0, height: "100%", minHeight: 0, overflow: "hidden" }}>
+
+      {/* ── LEFT: Form ── */}
+      <div style={{
+        width: 400, flexShrink: 0, borderRight: "1px solid var(--border)",
+        overflowY: "auto", padding: "32px 28px",
+      }}>
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>💡 Suggest an improvement</div>
+          <div style={{ fontSize: 13, color: "var(--subtle)" }}>Have an idea to make the dashboard better?</div>
+        </div>
+
+        {flash && (
+          <div style={{
+            marginBottom: 20, padding: "10px 16px", borderRadius: 8,
+            background: "#edf7f1", border: "1px solid #a8d5b8",
+            color: "#2d5a3d", fontSize: 13, fontWeight: 600,
+          }}>
+            ✅ Suggestion submitted!
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+          <div>
+            <label style={labelStyle}>Your Name <span style={{ color: "#c2703e" }}>*</span></label>
+            <input type="text" placeholder="e.g. Shankar" value={form.name} onChange={set("name")} style={inputStyle} required />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Dashboard Section <span style={{ color: "#c2703e" }}>*</span></label>
+            <select value={form.section} onChange={set("section")} required style={{
+              ...inputStyle, appearance: "none",
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`,
+              backgroundRepeat: "no-repeat", backgroundPosition: "right 14px center", paddingRight: 36,
+            }}>
+              <option value="">Select a section…</option>
+              {DASHBOARD_SECTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Suggestion <span style={{ color: "#c2703e" }}>*</span></label>
+            <textarea placeholder="Describe your idea clearly…" value={form.suggestion} onChange={set("suggestion")} rows={4} required style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Why this matters</label>
+            <textarea placeholder="What problem does this solve? Who benefits?" value={form.whyMatters} onChange={set("whyMatters")} rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Priority <span style={{ color: "#c2703e" }}>*</span></label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {PRIORITY_OPTIONS.map(({ id, label, color, bg }) => {
+                const selected = form.priority === id;
+                return (
+                  <button key={id} type="button" onClick={() => setPriority(id)} style={{
+                    padding: "7px 16px", borderRadius: 20,
+                    border: `2px solid ${selected ? color : "var(--border)"}`,
+                    background: selected ? bg : "var(--card, #fffdf9)",
+                    color: selected ? color : "var(--subtle)",
+                    fontWeight: selected ? 700 : 500, fontSize: 12, cursor: "pointer",
+                    transition: "all 0.15s",
+                  }}>{label}</button>
+                );
+              })}
+            </div>
+          </div>
+
+          <button type="submit" disabled={!isValid || submitting} style={{
+            width: "100%", padding: "12px 0", borderRadius: 10, marginTop: 4,
+            background: isValid ? "#2d5a3d" : "var(--border)",
+            color: isValid ? "#fff" : "var(--subtle)",
+            fontWeight: 700, fontSize: 14, border: "none",
+            cursor: isValid ? "pointer" : "not-allowed",
+            transition: "background 0.2s, color 0.2s",
+          }}>
+            {submitting ? "Submitting…" : "Submit suggestion"}
+          </button>
+
+        </form>
+      </div>
+
+      {/* ── RIGHT: Submissions table ── */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "32px 28px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>Submitted suggestions</div>
+          {entries.length > 0 && (
+            <span style={{ fontSize: 12, background: "#2d5a3d", color: "#fff", borderRadius: 20, padding: "2px 10px", fontWeight: 600 }}>
+              {entries.length}
+            </span>
+          )}
+        </div>
+
+        {entries.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "60px 0", color: "var(--subtle)", fontSize: 13 }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>📭</div>
+            No suggestions yet. Be the first!
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: "2px solid var(--border)" }}>
+                  {["#", "Name", "Section", "Suggestion", "Why it matters", "Priority", "Submitted"].map((h) => (
+                    <th key={h} style={{
+                      padding: "8px 12px", textAlign: "left", fontWeight: 700,
+                      fontSize: 11, color: "var(--subtle)", textTransform: "uppercase",
+                      letterSpacing: "0.05em", whiteSpace: "nowrap",
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((e, i) => {
+                  const p = priorityMeta[e.priority];
+                  return (
+                    <tr key={e.id} style={{ borderBottom: "1px solid var(--border)", verticalAlign: "top", background: i % 2 === 0 ? "transparent" : "var(--surface, #f9f6f1)" }}>
+                      <td style={{ padding: "12px 12px", color: "var(--subtle)", fontWeight: 600 }}>{entries.length - i}</td>
+                      <td style={{ padding: "12px 12px", fontWeight: 600, whiteSpace: "nowrap" }}>{e.name}</td>
+                      <td style={{ padding: "12px 12px", whiteSpace: "nowrap" }}>
+                        <span style={{ background: "var(--surface, #f5f0e8)", border: "1px solid var(--border)", borderRadius: 6, padding: "2px 8px", fontSize: 12 }}>{e.section}</span>
+                      </td>
+                      <td style={{ padding: "12px 12px", maxWidth: 260 }}>{e.suggestion}</td>
+                      <td style={{ padding: "12px 12px", maxWidth: 200, color: "var(--subtle)" }}>{e.whyMatters || "—"}</td>
+                      <td style={{ padding: "12px 12px", whiteSpace: "nowrap" }}>
+                        {p && (
+                          <span style={{
+                            background: p.bg, color: p.color, border: `1px solid ${p.color}`,
+                            borderRadius: 20, padding: "2px 10px", fontSize: 12, fontWeight: 700,
+                          }}>{p.label}</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "12px 12px", color: "var(--subtle)", whiteSpace: "nowrap", fontSize: 12 }}>{e.submittedAt}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+    </div>
+  );
+}
+
 // ─── Shell-only constants ─────────────────────────────────────────────────────
 
 const THEME_STORAGE_KEY = "fresh-takes-theme-mode";
@@ -1160,7 +1367,8 @@ export default function UnifiedOpsApp() {
     planner2: "Planner",
     analytics: "Analytics",
     production: "Production Pipeline",
-    reports: "Reports",
+    suggestions: "Suggestions",
+    reports: "WIP",
     details: "Details",
   };
 
@@ -1212,24 +1420,48 @@ export default function UnifiedOpsApp() {
 
               <button
                 type="button"
-                className={`sidebar-link${activeView === "reports" ? " active" : ""}`}
-                onClick={() => setActiveView("reports")}
+                className={`sidebar-link${activeView === "suggestions" ? " active" : ""}`}
+                onClick={() => setActiveView("suggestions")}
               >
-                Reports
+                Suggestions
               </button>
 
-	              {[
-	                ["planner2", "Planner"],
-	              ].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`sidebar-link${activeView === id ? " active" : ""}`}
-                  onClick={() => setActiveView(id)}
-                >
-                  {label}
-                </button>
-              ))}
+              {/* More toggle */}
+              <button
+                type="button"
+                onClick={() => setMoreExpanded((v) => !v)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "none", border: "none", cursor: "pointer",
+                  fontSize: 11, fontWeight: 600, color: "var(--subtle)",
+                  padding: "4px 0", letterSpacing: "0.04em", textTransform: "uppercase",
+                  marginTop: 4,
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" style={{ transform: moreExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
+                  <path d="M1 3l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {moreExpanded ? "Hide" : "More"}
+              </button>
+
+              {moreExpanded && (
+                <>
+                  <button
+                    type="button"
+                    className={`sidebar-link${activeView === "reports" ? " active" : ""}`}
+                    onClick={() => setActiveView("reports")}
+                  >
+                    WIP
+                  </button>
+                  <button
+                    type="button"
+                    className={`sidebar-link${activeView === "planner2" ? " active" : ""}`}
+                    onClick={() => setActiveView("planner2")}
+                  >
+                    Planner
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -1502,6 +1734,12 @@ export default function UnifiedOpsApp() {
                   onShare={copySection}
                   copyingSection={copyingSection}
                 />
+              </div>
+            ) : null}
+
+            {activeView === "suggestions" ? (
+              <div className="section-shell" style={{ display: "flex", flexDirection: "column", overflow: "hidden", padding: 0, height: "100%" }}>
+                <SuggestionsContent />
               </div>
             ) : null}
 

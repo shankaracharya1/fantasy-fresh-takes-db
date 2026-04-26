@@ -87,7 +87,7 @@ function HitRateTrendChart({ trendData, loading }) {
   const podNames = trendData?.podNames || [];
   const activePods = podNames.filter((pod) => series.some((pt) => pod in pt.pods));
 
-  const H = 225;
+  const H = 320;
   const PAD = { top: 16, right: 20, bottom: 36, left: 42 };
   const W = Math.max(containerW, 280);
   const chartW = W - PAD.left - PAD.right;
@@ -603,7 +603,7 @@ export default function PodWiseContent({
         {/* ── Leaderboard header ── */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)", paddingBottom: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, fontSize: 16 }}>
-            <span style={{ color: "#d4a017", fontSize: 18 }}>★</span>
+            <span style={{ color: "#e09b10", fontSize: 18 }}>★</span>
             POD leaderboard
           </div>
           <span style={{ fontSize: 11, color: "var(--subtle)" }}>Ranked by script hit rate (successful / scripts)</span>
@@ -611,28 +611,28 @@ export default function PodWiseContent({
 
         {/* ── Podium (top 3) ── */}
         {sorted.length > 0 && (() => {
-          const rankColor = (r) => r === 1 ? "#d4a017" : r === 2 ? "#888" : r === 3 ? "#c2703e" : "#aaa";
-          const podiumBg = (r) => r === 1 ? "#fdf6e3" : r === 2 ? "#f7f4ef" : "#fdf0ed";
+          const rankColor = (r) => r === 1 ? "#e09b10" : r === 2 ? "#6b7f95" : r === 3 ? "#b8622c" : "#a0a0a0";
+          const podiumBg = (r) => r === 1 ? "#fdf3d8" : r === 2 ? "#edf2f7" : "#fdf0e6";
           const blocks = [
-            { pod: sorted[1], rank: 2, h: 72 },
-            { pod: sorted[0], rank: 1, h: 110 },
-            { pod: sorted[2], rank: 3, h: 55 },
+            { pod: sorted[1], rank: 2, h: 110 },
+            { pod: sorted[0], rank: 1, h: 160 },
+            { pod: sorted[2], rank: 3, h: 80 },
           ].filter(b => b.pod);
           return (
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 10, padding: "8px 0 4px" }}>
               {blocks.map(({ pod, rank, h }) => (
-                <div key={rank} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flex: 1, maxWidth: 200 }}>
-                  {rank === 1 && <span style={{ fontSize: 22 }}>👑</span>}
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{pod.podLeadName}</div>
-                  <div style={{ fontWeight: 800, fontSize: 18, color: rankColor(rank) }}>{pod.conversion}%</div>
-                  <div style={{ fontSize: 11, color: "var(--subtle)" }}>{pod.successful}/{pod.scripts} scripts</div>
+                <div key={rank} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flex: 1, maxWidth: 200 }}>
+                  {rank === 1 && <span style={{ fontSize: 28 }}>👑</span>}
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>{pod.podLeadName}</div>
+                  <div style={{ fontWeight: 800, fontSize: 22, color: rankColor(rank) }}>{pod.conversion}%</div>
+                  <div style={{ fontSize: 12, color: "var(--subtle)" }}>{pod.successful}/{pod.scripts} scripts</div>
                   <div style={{
                     width: "100%", height: h, borderRadius: "8px 8px 0 0",
                     background: podiumBg(rank),
                     border: `1px solid var(--border)`,
                     borderBottom: "none",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 28, fontWeight: 800, color: rankColor(rank),
+                    fontSize: 36, fontWeight: 800, color: rankColor(rank),
                   }}>{rank}</div>
                 </div>
               ))}
@@ -642,45 +642,60 @@ export default function PodWiseContent({
 
         {/* ── Ranked list ── */}
         {(() => {
-          const rankColor = (r) => r === 1 ? "#d4a017" : r === 2 ? "#888" : r === 3 ? "#c2703e" : "#bbb";
+          const rankColor = (r) => r === 1 ? "#e09b10" : r === 2 ? "#6b7f95" : r === 3 ? "#b8622c" : "#a0a0a0";
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
               {sorted.map((pod, i) => {
                 const rank = i + 1;
                 const color = rankColor(rank);
                 const pct = pod.conversion;
-                const r = 18, circ = 2 * Math.PI * r;
+                const r = 22, circ = 2 * Math.PI * r;
                 const offset = circ * (1 - Math.min(pct, 100) / 100);
                 return (
                   <div key={pod.podLeadName} style={{
-                    display: "flex", alignItems: "center", gap: 14,
+                    display: "flex", alignItems: "center", gap: 18,
                     background: "var(--card, #fffdf9)",
                     border: "1px solid var(--border)",
-                    borderLeft: `4px solid ${rank <= 3 ? color : "var(--border)"}`,
-                    borderRadius: 8, padding: "10px 16px",
+                    borderLeft: `5px solid ${rank <= 3 ? color : "var(--border)"}`,
+                    borderRadius: 10, padding: "14px 20px",
                   }}>
                     {/* Rank number */}
-                    <div style={{ width: 22, textAlign: "center", fontWeight: 700, fontSize: 15, color: rank <= 3 ? color : "var(--subtle)", flexShrink: 0 }}>{rank}</div>
+                    <div style={{ width: 28, textAlign: "center", fontWeight: 700, fontSize: 18, color: rank <= 3 ? color : "var(--subtle)", flexShrink: 0 }}>{rank}</div>
                     {/* Circular progress ring */}
-                    <div style={{ position: "relative", width: 46, height: 46, flexShrink: 0 }}>
-                      <svg width={46} height={46} style={{ transform: "rotate(-90deg)" }}>
-                        <circle cx={23} cy={23} r={r} fill="none" stroke="var(--border)" strokeWidth={3} />
-                        <circle cx={23} cy={23} r={r} fill="none" stroke={color} strokeWidth={3}
+                    <div style={{ position: "relative", width: 58, height: 58, flexShrink: 0 }}>
+                      <svg width={58} height={58} style={{ transform: "rotate(-90deg)" }}>
+                        <circle cx={29} cy={29} r={r} fill="none" stroke="var(--border)" strokeWidth={4} />
+                        <circle cx={29} cy={29} r={r} fill="none" stroke={color} strokeWidth={4}
                           strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
                       </svg>
-                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color }}>{pct}%</div>
+                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color }}>{pct}%</div>
                     </div>
                     {/* Name + stats */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14 }}>{pod.podLeadName}</div>
-                      <div style={{ fontSize: 11, color: "var(--subtle)", marginTop: 2 }}>
-                        Scripts {pod.scripts} · Success {pod.successful} · Beats {pod.beats}
+                      <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>{pod.podLeadName}</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {[
+                          { label: "Beats", value: pod.beats, dot: "#5b9bd5" },
+                          { label: "Scripts", value: pod.scripts, dot: "#e09b10" },
+                          { label: "Success", value: pod.successful, dot: "#5aab6e" },
+                        ].map(({ label, value, dot }) => (
+                          <span key={label} style={{
+                            display: "inline-flex", alignItems: "center", gap: 5,
+                            background: "var(--surface, #f5f0e8)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 20, padding: "3px 10px",
+                            fontSize: 12, fontWeight: 600, color: "var(--text)",
+                          }}>
+                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+                            {label} {value}
+                          </span>
+                        ))}
                       </div>
                     </div>
                     {/* Hit rate + trophy */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                      <span style={{ fontWeight: 700, fontSize: 16, color: rank <= 3 ? color : "var(--subtle)" }}>{pct}%</span>
-                      {rank === 1 && <span style={{ fontSize: 18 }}>🏆</span>}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontWeight: 700, fontSize: 20, color: rank <= 3 ? color : "var(--subtle)" }}>{pct}%</span>
+                      {rank === 1 && <span style={{ fontSize: 22 }}>🏆</span>}
                     </div>
                   </div>
                 );
