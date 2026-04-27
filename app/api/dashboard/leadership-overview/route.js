@@ -312,7 +312,7 @@ function buildBeatRows(rows) {
       statusLabel: normalizeText(row?.status || row?.beatsStatus),
       statusCategory: categorizeIdeationStatus(row?.status || row?.beatsStatus),
       scriptStatus: normalizeText(row?.scriptStatus || ""),
-        beatsAssignedDate: parsedBeatsAssignedDate,
+        beatsAssignedDate: parsedAssignedDate,
         assignedDate: parsedAssignedDate,
         completedDate: parsedCompletedDate,
         ...timeParts,
