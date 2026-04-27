@@ -442,6 +442,36 @@ select {
   flex: 0 0 auto;
 }
 
+.topbar-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms, background 150ms;
+}
+.topbar-refresh-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.topbar-refresh-btn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.topbar-refresh-btn.is-spinning svg {
+  animation: topbarRefreshSpin 0.8s linear infinite;
+}
+@keyframes topbarRefreshSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* date filter — no box, just inline controls */
 .app-topbar-range {
   display: flex;

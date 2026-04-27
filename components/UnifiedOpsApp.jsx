@@ -815,6 +815,8 @@ export default function UnifiedOpsApp() {
   const [podTrendData, setPodTrendData] = useState(null);
   const [podTrendLoading, setPodTrendLoading] = useState(false);
   const [dashboardLoadingMessage, setDashboardLoadingMessage] = useState("");
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const [cacheRefreshing, setCacheRefreshing] = useState(false);
   const [planner2Data, setPlanner2Data] = useState(null);
   const [planner2Loading, setPlanner2Loading] = useState(false);
   const [planner2Error, setPlanner2Error] = useState("");
@@ -964,9 +966,23 @@ export default function UnifiedOpsApp() {
   const analyticsSubtitle = useMemo(() => buildAnalyticsSubtitle(analyticsData), [analyticsData]);
   const dashboardIsRefreshing =
     Boolean(dashboardLoadingMessage) ||
+    cacheRefreshing ||
     (activeView === "overview" && (overviewLoading || leadershipOverviewLoading)) ||
     (activeView === "leadership-overview" && leadershipOverviewLoading);
 
+  const handleRefreshCache = useCallback(async () => {
+    if (cacheRefreshing) return;
+    setCacheRefreshing(true);
+    try {
+      await fetch("/api/dashboard/refresh-cache", { method: "POST", cache: "no-store" });
+      // Bump nonce → triggers all data-fetching useEffects to re-run with empty caches
+      setRefreshNonce((n) => n + 1);
+    } catch {
+      // Ignore — data will still load on next natural expiry
+    } finally {
+      setCacheRefreshing(false);
+    }
+  }, [cacheRefreshing]);
 
   useEffect(() => {
     if (activeView !== "overview") {
@@ -1045,7 +1061,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange, includeNewShowsPod]);
+  }, [activeView, dashboardDateRange, includeNewShowsPod, refreshNonce]);
 
   useEffect(() => {
     if (activeView !== "leadership-overview" && activeView !== "overview") {
@@ -1104,7 +1120,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange, includeGuAssets]);
+  }, [activeView, dashboardDateRange, includeGuAssets, refreshNonce]);
 
 
   useEffect(() => {
@@ -1165,7 +1181,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, podWiseView, dashboardDateRange, podPerformanceRangeMode, podPerformanceScope]);
+  }, [activeView, podWiseView, dashboardDateRange, podPerformanceRangeMode, podPerformanceScope, refreshNonce]);
 
 
   useEffect(() => {
@@ -1302,7 +1318,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange]);
+  }, [activeView, dashboardDateRange, refreshNonce]);
 
 
   async function requestAcdMetrics(cancelState = null) {
@@ -1403,7 +1419,7 @@ export default function UnifiedOpsApp() {
       .catch(() => {})
       .finally(() => { if (!cancelled) { setProductionPipelineLoading(false); setDashboardLoadingMessage(""); } });
     return () => { cancelled = true; };
-  }, [activeView, performanceSubView]);
+  }, [activeView, performanceSubView, refreshNonce]);
 
   useEffect(() => {
     if (!notice) {
@@ -1808,6 +1824,18 @@ export default function UnifiedOpsApp() {
             ) : null}
             </div>
             <div className="app-topbar-end">
+              <button
+                type="button"
+                className={`topbar-refresh-btn${cacheRefreshing ? " is-spinning" : ""}`}
+                onClick={handleRefreshCache}
+                disabled={cacheRefreshing}
+                title="Force refresh — fetches latest data from Google Sheets, bypassing the cache"
+                aria-label="Force refresh data"
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.76-4.24L9 6h6V0l-1.35 2.35Z" fill="currentColor"/>
+                </svg>
+              </button>
               <label className="theme-switch" aria-label="Toggle dark mode">
                 <input
                   type="checkbox"
