@@ -625,8 +625,9 @@ function buildFullGenAiRows(workflowRows, analyticsRows, startDate, endDate) {
       if (seenCodes.has(code)) return false;
       seenCodes.add(code);
     }
-    // Filter by finalUploadDate (stageDate for live rows)
-    const d = String(row?.stageDate || "").slice(0, 10);
+    // Filter by strictLeadSubmittedDate — same field the Live tab filters by ("Date submitted by Lead")
+    // This ensures the count matches what users see in the Live tab for the selected date range.
+    const d = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
     return d && (!startDate || d >= startDate) && (!endDate || d <= endDate);
   });
 
@@ -635,7 +636,7 @@ function buildFullGenAiRows(workflowRows, analyticsRows, startDate, endDate) {
     const aRow = analyticsMap.get(code) || {};
     const hasAnalytics = Object.keys(aRow).length > 0;
     const isFt = classifyFtRw(row?.reworkType) === "ft";
-    const dateForBucket = String(row?.stageDate || "").slice(0, 10);
+    const dateForBucket = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
     const timeParts = getTimeParts(dateForBucket);
     return {
       id: `full-gen-ai-${index + 1}`,
