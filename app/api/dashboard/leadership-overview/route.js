@@ -297,24 +297,11 @@ function buildFilterOptions(beatRows) {
 function buildBeatRows(rows) {
   return (Array.isArray(rows) ? rows : [])
     .map((row, index) => {
-      const parsedBeatsAssignedDate = parseLiveDate(row?.beatsAssignedDate);
       const parsedAssignedDate = parseLiveDate(row?.assignedDate);
       const parsedCompletedDate = parseLiveDate(row?.completedDate);
-      // Priority: "Beats completed" ISO date first (most accurate for filtering),
-      // then text label from "Beats week/assigned" column (fallback for older rows),
-      // then other date columns as last resort.
-      const fromLabel = parseBeatsWeekLabel(row?.beatsAssignedDate || "");
-      let timeParts;
-      if (parsedCompletedDate) {
-        // "Beats completed" date drives the primary date filter
-        timeParts = getTimeParts(parsedCompletedDate);
-      } else if (fromLabel) {
-        // Text label like "Apr week 3" — no ISO primaryDate but has monthKey/weekInMonth
-        timeParts = { primaryDate: "", ...fromLabel };
-      } else {
-        const primaryDate = parsedBeatsAssignedDate || parsedAssignedDate || "";
-        timeParts = getTimeParts(primaryDate);
-      }
+      // Use ONLY "Beats completed" date for filtering. "Beats week" column is ignored entirely.
+      const primaryDate = parsedCompletedDate || parsedAssignedDate || "";
+      const timeParts = getTimeParts(primaryDate);
       return {
         id: `beat-row-${index + 1}`,
         beatCode: normalizeText(row?.beatCode),
