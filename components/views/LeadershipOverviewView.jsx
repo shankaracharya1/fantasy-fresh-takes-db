@@ -264,6 +264,11 @@ function PodStageBreakdownTable({ rows = [], loading = false, infoText = "" }) {
   );
 }
 
+function getWriterLastName(name) {
+  const parts = String(name || "").trim().split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1] : name;
+}
+
 function PodThroughputRankingTable({ rows = [], loading = false }) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const [expandedPods, setExpandedPods] = useState(new Set());
@@ -335,7 +340,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
       for (const writer of writerRows) {
         tableRows.push(
           <tr key={`writer-${pod.podLeadName}-${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
-            <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>• {writer.writerName}</td>
+            <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>• {getWriterLastName(writer.writerName)}</td>
             <td style={{ textAlign: "center", fontSize: 12 }}>{formatMetricValue(writer.totalScripts)}</td>
             <td>
               <ScriptTypeBadges
@@ -386,6 +391,94 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     </div>
   );
 }
+function PodThroughputDetailTable({ rows = [], loading = false }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const [expanded, setExpanded] = useState(false);
+
+  const detailRows = [];
+  for (const pod of safeRows) {
+    for (const writer of Array.isArray(pod.writerRows) ? pod.writerRows : []) {
+      for (const script of Array.isArray(writer.scripts) ? writer.scripts : []) {
+        detailRows.push({
+          pod: pod.podLeadName,
+          writer: writer.writerName,
+          assetCode: script.assetCode || "—",
+          showName: script.showName || "—",
+          beatName: script.beatName || "—",
+          type: script.type,
+          date: script.date || "—",
+        });
+      }
+    }
+  }
+
+  if (!loading && detailRows.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", marginBottom: 4 }}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span style={{
+          fontSize: 10, width: 16, height: 16, display: "inline-flex", alignItems: "center",
+          justifyContent: "center", background: "var(--subtle-bg, #f0ece4)", borderRadius: 3,
+          color: "var(--subtle)", flexShrink: 0,
+        }}>
+          {expanded ? "▾" : "▸"}
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>Detailed POD Overview</span>
+        {!loading && (
+          <span style={{ fontSize: 11, color: "var(--subtle)", fontWeight: 400 }}>
+            {detailRows.length} script{detailRows.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+      {expanded && (
+        <div className="table-wrap" style={{ marginTop: 6 }}>
+          <table className="ops-table overview-table" style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th>POD</th>
+                <th>Writer</th>
+                <th>Code</th>
+                <th>Show</th>
+                <th>Beat / Angle</th>
+                <th style={{ textAlign: "center" }}>Type</th>
+                <th style={{ textAlign: "center" }}>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan="7" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+              ) : detailRows.map((r, i) => (
+                <tr key={i} style={{ background: i % 2 === 0 ? undefined : "var(--bg-deep, #f7f4ef)" }}>
+                  <td style={{ fontWeight: 600 }}>{r.pod}</td>
+                  <td>{getWriterLastName(r.writer)}</td>
+                  <td style={{ fontFamily: "monospace", fontSize: 11 }}>{r.assetCode}</td>
+                  <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.showName}</td>
+                  <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.beatName}</td>
+                  <td style={{ textAlign: "center" }}>
+                    <span style={{
+                      display: "inline-block", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                      background: r.type === "ft" ? "rgba(45,90,61,0.12)" : "rgba(194,112,62,0.12)",
+                      color: r.type === "ft" ? "#2d5a3d" : "#c2703e",
+                      letterSpacing: "0.04em",
+                    }}>
+                      {r.type === "ft" ? "FT" : "RW"}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: "center", color: "var(--subtle)", fontSize: 11 }}>{r.date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LeadershipOverviewContent({ leadershipOverviewData, leadershipOverviewLoading, leadershipOverviewError, onNavigate, acdMetricsData, acdMetricsLoading }) {
   const overviewData = leadershipOverviewData || null;
   const overviewLoading = Boolean(leadershipOverviewLoading);
@@ -546,6 +639,7 @@ export default function LeadershipOverviewContent({ leadershipOverviewData, lead
 
       <section className="overview-flow-section">
         <PodThroughputRankingTable rows={podThroughputRows} loading={overviewLoading} />
+        <PodThroughputDetailTable rows={podThroughputRows} loading={overviewLoading} />
       </section>
 
       <hr className="section-divider" />

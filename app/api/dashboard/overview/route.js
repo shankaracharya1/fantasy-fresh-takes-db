@@ -340,12 +340,29 @@ function getLatestAssetStage(asset) {
 
 function buildPodThroughputForRange({ editorialRows = [], readyRows = [], productionRows = [], liveRows = [] } = {}, startDate, endDate) {
   const podMap = new Map();
-  const allRows = [
-    ...(Array.isArray(editorialRows) ? editorialRows : []),
-    ...(Array.isArray(readyRows) ? readyRows : []),
-    ...(Array.isArray(productionRows) ? productionRows : []),
-    ...(Array.isArray(liveRows) ? liveRows : []),
-  ];
+
+  // Deduplicate rows by assetCode across all tabs — a script that hasn't been removed from
+  // an earlier tab after advancing will otherwise be counted multiple times.
+  // Priority: live (3) > production (2) > rfp (1) > editorial (0).
+  // Rows with no assetCode are kept as-is (can't deduplicate them).
+  const STAGE = { edit: 0, rfp: 1, prod: 2, live: 3 };
+  const dedupMap = new Map();
+  const noCodeRows = [];
+  const mergeRows = (rows, stage) => {
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const code = String(row?.assetCode || "").trim().toLowerCase();
+      if (!code) { noCodeRows.push(row); continue; }
+      if (!dedupMap.has(code) || dedupMap.get(code).stage < stage) {
+        dedupMap.set(code, { row, stage });
+      }
+    }
+  };
+  mergeRows(editorialRows, STAGE.edit);
+  mergeRows(readyRows, STAGE.rfp);
+  mergeRows(productionRows, STAGE.prod);
+  mergeRows(liveRows, STAGE.live);
+  const allRows = [...Array.from(dedupMap.values()).map(({ row }) => row), ...noCodeRows];
+
   const writerResolver = (() => {
     const exactMap = new Map();
     const tokenMap = new Map();
@@ -386,30 +403,27 @@ function buildPodThroughputForRange({ editorialRows = [], readyRows = [], produc
     return pod.writers.get(writer);
   };
 
-  const countRows = (rows) => {
-    for (const row of Array.isArray(rows) ? rows : []) {
-      const leadDate = String(row?.dateSubmittedByLead || "").slice(0, 10);
-      if (!leadDate || leadDate < startDate || leadDate > endDate) continue;
-      const pod = ensurePod(row?.podLeadName || row?.podLeadRaw);
-      pod.totalScripts += 1;
-      const writer = ensureWriter(pod, row?.writerName);
-      writer.totalScripts += 1;
+  for (const row of allRows) {
+    // Use dateSubmittedByLead as the primary date; fall back to etaToStartProd for rows
+    // in production/rfp stages where dateSubmittedByLead is often not filled in.
+    const leadDate =
+      String(row?.dateSubmittedByLead || "").slice(0, 10) ||
+      String(row?.etaToStartProd || "").slice(0, 10);
+    if (!leadDate || leadDate < startDate || leadDate > endDate) continue;
+    const pod = ensurePod(row?.podLeadName || row?.podLeadRaw);
+    pod.totalScripts += 1;
+    const writer = ensureWriter(pod, row?.writerName);
+    writer.totalScripts += 1;
 
-      const scriptType = classifyScriptType(row?.reworkType);
-      if (scriptType === "FT") {
-        pod.ftCount += 1;
-        writer.ftCount += 1;
-      } else {
-        pod.rwCount += 1;
-        writer.rwCount += 1;
-      }
+    const scriptType = classifyScriptType(row?.reworkType);
+    if (scriptType === "FT") {
+      pod.ftCount += 1;
+      writer.ftCount += 1;
+    } else {
+      pod.rwCount += 1;
+      writer.rwCount += 1;
     }
-  };
-
-  countRows(editorialRows);
-  countRows(readyRows);
-  countRows(productionRows);
-  countRows(liveRows);
+  }
 
   return Array.from(podMap.values())
     .sort((a, b) => b.totalScripts - a.totalScripts || a.podLeadName.localeCompare(b.podLeadName))
@@ -418,7 +432,9 @@ function buildPodThroughputForRange({ editorialRows = [], readyRows = [], produc
       totalScripts: pod.totalScripts,
       ftCount: pod.ftCount,
       rwCount: pod.rwCount,
-      writerRows: Array.from(pod.writers.values()).sort((a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName)),
+      writerRows: Array.from(pod.writers.values())
+        .filter((w) => normalizePodLeadName(w.writerName) !== pod.podLeadName)
+        .sort((a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName)),
     }));
 }
 
