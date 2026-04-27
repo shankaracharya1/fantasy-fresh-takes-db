@@ -588,76 +588,6 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
   );
 }
 
-// ─── POD Throughput Detail Table ─────────────────────────────────────────────
-
-function PodThroughputDetailTable({ rows = [], loading = false }) {
-  const safeRows = Array.isArray(rows) ? rows : [];
-
-  // Flatten all scripts from all pods/writers, preserving pod+writer grouping order
-  const detailRows = [];
-  for (const pod of safeRows) {
-    for (const writer of Array.isArray(pod.writerRows) ? pod.writerRows : []) {
-      for (const script of Array.isArray(writer.scripts) ? writer.scripts : []) {
-        detailRows.push({
-          pod: pod.podLeadName,
-          writer: writer.writerName,
-          assetCode: script.assetCode || "—",
-          showName: script.showName || "—",
-          beatName: script.beatName || "—",
-          type: script.type,
-          date: script.date || "—",
-          source: script.source || "",
-        });
-      }
-    }
-  }
-
-  if (!loading && detailRows.length === 0) return null;
-
-  return (
-    <div style={{ marginTop: 20 }}>
-      <div className="table-wrap" style={{ marginTop: 6 }}>
-        <table className="ops-table overview-table" style={{ fontSize: 12 }}>
-          <thead>
-            <tr>
-              <th>POD</th>
-              <th>Writer</th>
-              <th>Code</th>
-              <th>Show</th>
-              <th>Beat / Angle</th>
-              <th style={{ textAlign: "center" }}>Type</th>
-              <th style={{ textAlign: "center" }}>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="7" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
-            ) : detailRows.map((r, i) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? undefined : "var(--bg-deep, #f7f4ef)" }}>
-                <td style={{ fontWeight: 600 }}>{r.pod}</td>
-                <td>{getWriterLastName(r.writer)}</td>
-                <td style={{ fontFamily: "monospace", fontSize: 11 }}>{r.assetCode}</td>
-                <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.showName}</td>
-                <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.beatName}</td>
-                <td style={{ textAlign: "center" }}>
-                  <span style={{
-                    display: "inline-block", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700,
-                    background: r.type === "ft" ? "rgba(45,90,61,0.12)" : "rgba(194,112,62,0.12)",
-                    color: r.type === "ft" ? "#2d5a3d" : "#c2703e",
-                    letterSpacing: "0.04em",
-                  }}>
-                    {r.type === "ft" ? "FT" : "RW"}
-                  </span>
-                </td>
-                <td style={{ textAlign: "center", color: "var(--subtle)", fontSize: 11 }}>{r.date}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 // ─── Beats Overview Table ────────────────────────────────────────────────────
 
@@ -2082,7 +2012,6 @@ export default function OverviewContent({
         <hr className="section-divider" />
 
         <PodThroughputRankingTable rows={podThroughputRows} loading={podLoading} />
-        <PodThroughputDetailTable rows={podThroughputRows} loading={podLoading} />
 
         {(() => {
           if (selectionMode === "editorial_funnel") {
