@@ -476,6 +476,11 @@ function BeatStatusPodTable({ beatRows = [], workflowRows = [], loading = false 
   );
 }
 
+function getWriterLastName(name) {
+  const parts = String(name || "").trim().split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1] : name;
+}
+
 function PodThroughputRankingTable({ rows = [], loading = false }) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const [expandedPods, setExpandedPods] = useState(new Set());
@@ -534,7 +539,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
       for (const writer of writerRows) {
         tableRows.push(
           <tr key={`writer-${pod.podLeadName}-${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
-            <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>• {writer.writerName}</td>
+            <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>• {getWriterLastName(writer.writerName)}</td>
             <td style={{ textAlign: "center", fontSize: 12 }}>{(writer.ftCount || 0) + (writer.rwCount || 0)}</td>
             <td style={{ textAlign: "center", fontSize: 12, color: "#2d5a3d" }}>{writer.ftCount || 0}</td>
             <td style={{ textAlign: "center", fontSize: 12, color: "#c2703e" }}>{writer.rwCount || 0}</td>
@@ -548,7 +553,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     <div style={{ marginTop: 20 }}>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>POD throughput</div>
       <div style={{ fontSize: 11, color: "var(--subtle)", marginBottom: 10 }}>
-        Date submitted by Lead (all sheets) · Fresh Take = FT rows · Rework = all other typed rows
+        Date submitted by Lead (all sheets) · Fresh Take = FT rows · Rework = all other typed rows · etaToStartProd used as fallback when Lead date is blank
       </div>
       <div className="table-wrap">
         <table className="ops-table overview-table">
@@ -579,6 +584,100 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ─── POD Throughput Detail Table ─────────────────────────────────────────────
+
+function PodThroughputDetailTable({ rows = [], loading = false }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const [expanded, setExpanded] = useState(false);
+
+  // Flatten all scripts from all pods/writers, preserving pod+writer grouping order
+  const detailRows = [];
+  for (const pod of safeRows) {
+    for (const writer of Array.isArray(pod.writerRows) ? pod.writerRows : []) {
+      for (const script of Array.isArray(writer.scripts) ? writer.scripts : []) {
+        detailRows.push({
+          pod: pod.podLeadName,
+          writer: writer.writerName,
+          assetCode: script.assetCode || "—",
+          showName: script.showName || "—",
+          beatName: script.beatName || "—",
+          type: script.type,
+          date: script.date || "—",
+          source: script.source || "",
+        });
+      }
+    }
+  }
+
+  if (!loading && detailRows.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", marginBottom: 4 }}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span style={{
+          fontSize: 10, width: 16, height: 16, display: "inline-flex", alignItems: "center",
+          justifyContent: "center", background: "var(--subtle-bg, #f0ece4)", borderRadius: 3,
+          color: "var(--subtle)", flexShrink: 0,
+        }}>
+          {expanded ? "▾" : "▸"}
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>
+          Detailed POD Overview
+        </span>
+        {!loading && (
+          <span style={{ fontSize: 11, color: "var(--subtle)", fontWeight: 400 }}>
+            {detailRows.length} script{detailRows.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+      {expanded && (
+        <div className="table-wrap" style={{ marginTop: 6 }}>
+          <table className="ops-table overview-table" style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th>POD</th>
+                <th>Writer</th>
+                <th>Code</th>
+                <th>Show</th>
+                <th>Beat / Angle</th>
+                <th style={{ textAlign: "center" }}>Type</th>
+                <th style={{ textAlign: "center" }}>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan="7" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+              ) : detailRows.map((r, i) => (
+                <tr key={i} style={{ background: i % 2 === 0 ? undefined : "var(--bg-deep, #f7f4ef)" }}>
+                  <td style={{ fontWeight: 600 }}>{r.pod}</td>
+                  <td>{getWriterLastName(r.writer)}</td>
+                  <td style={{ fontFamily: "monospace", fontSize: 11 }}>{r.assetCode}</td>
+                  <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.showName}</td>
+                  <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.beatName}</td>
+                  <td style={{ textAlign: "center" }}>
+                    <span style={{
+                      display: "inline-block", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                      background: r.type === "ft" ? "rgba(45,90,61,0.12)" : "rgba(194,112,62,0.12)",
+                      color: r.type === "ft" ? "#2d5a3d" : "#c2703e",
+                      letterSpacing: "0.04em",
+                    }}>
+                      {r.type === "ft" ? "FT" : "RW"}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: "center", color: "var(--subtle)", fontSize: 11 }}>{r.date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1553,7 +1652,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
         <div>
           <div className="overview-section-title">Detailed POD Overview</div>
           <div className="overview-section-subtitle" style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-            GA/GI workflow rows · same filter as POD Throughput · success metrics from analytics
+            GA/GI scripts · Live tab only · filtered by upload date · success metrics from analytics
           </div>
         </div>
         <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end", display: "flex", alignItems: "center", gap: 10 }}>
@@ -1568,8 +1667,19 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
             <MetricCard label="Assets live (GI/GA)" value={loading ? "..." : formatMetricValue(scopedRows.length)} />
             <MetricCard
               label="Successful Hit Benchmark"
-              value={loading ? "..." : formatMetricValue(successfulAdsCount)}
-              hint="A successful ad passes all formula thresholds: Amount Spent ≥ 100, Q1 Completion > 10%, CTI ≥ 12%, True Completion ≥ 1.8%, CPI ≤ 12 — OR CPI < $6 regardless of other metrics."
+              body={
+                <>
+                  <div className="metric-value">{loading ? "..." : formatMetricValue(successfulAdsCount)}</div>
+                  <ul style={{ margin: "8px 0 0", padding: "0 0 0 16px", fontSize: 11, color: "var(--subtle)", lineHeight: 1.7 }}>
+                    <li>Amount Spent ≥ $100</li>
+                    <li>Q1 Completion &gt; 10%</li>
+                    <li>CTI ≥ 12%</li>
+                    <li>True Completion ≥ 1.8%</li>
+                    <li>CPI ≤ $12</li>
+                    <li>OR CPI &lt; $6 regardless of other metrics</li>
+                  </ul>
+                </>
+              }
             />
             <MetricCard
               label="Overall hit rate"
@@ -1995,6 +2105,7 @@ export default function OverviewContent({
         <hr className="section-divider" />
 
         <PodThroughputRankingTable rows={podThroughputRows} loading={podLoading} />
+        <PodThroughputDetailTable rows={podThroughputRows} loading={podLoading} />
 
         {(() => {
           if (selectionMode === "editorial_funnel") {

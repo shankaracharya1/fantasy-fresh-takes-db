@@ -598,8 +598,9 @@ function isFunnelSuccess(row) {
   return passesAllThresholds || passesCpiOnly;
 }
 
-// Build Full Gen AI detail rows using the EXACT same filter logic as POD Throughput.
-// Each row = one script entry (no deduplication), so counts match POD Throughput exactly.
+// Build Full Gen AI detail rows — LIVE TAB ONLY.
+// Only scripts that have reached the Live tab are shown here, filtered by finalUploadDate.
+// This ensures counts match what users see in the Live tab view.
 // Success/hit-rate metrics are joined from the analytics sheet by asset code.
 function buildFullGenAiRows(workflowRows, analyticsRows, startDate, endDate) {
   // Analytics lookup by asset code — for success metrics only
@@ -611,20 +612,22 @@ function buildFullGenAiRows(workflowRows, analyticsRows, startDate, endDate) {
     }
   }
 
-  // Same filter as buildPodThroughputRowsForRange: FT → strictLeadSubmittedDate, RW → etaToStartProd
+  // Only include scripts from the Live tab, deduplicated by assetCode.
+  // Date is filtered by finalUploadDate (= stageDate for live rows) so the count
+  // matches exactly what is visible in the Live tab for the selected date range.
+  const seenCodes = new Set();
   const filtered = (Array.isArray(workflowRows) ? workflowRows : []).filter((row) => {
-    const source = String(row?.source || "");
-    if (!["editorial", "ready_for_production", "production", "live"].includes(source)) return false;
+    if (String(row?.source || "") !== "live") return false;
     if (!isFullGenAiAssetCode(row?.assetCode)) return false;
-    const isFt = classifyFtRw(row?.reworkType) === "ft";
-    if (isFt) {
-      const d = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
-      return d && (!startDate || d >= startDate) && (!endDate || d <= endDate);
-    } else {
-      if (!["ready_for_production", "production", "live"].includes(source)) return false;
-      const d = String(row?.etaToStartProd || "").slice(0, 10);
-      return d && (!startDate || d >= startDate) && (!endDate || d <= endDate);
+    // Deduplicate by assetCode
+    const code = String(row?.assetCode || "").trim().toLowerCase();
+    if (code) {
+      if (seenCodes.has(code)) return false;
+      seenCodes.add(code);
     }
+    // Filter by finalUploadDate (stageDate for live rows)
+    const d = String(row?.stageDate || "").slice(0, 10);
+    return d && (!startDate || d >= startDate) && (!endDate || d <= endDate);
   });
 
   return filtered.map((row, index) => {
@@ -632,9 +635,7 @@ function buildFullGenAiRows(workflowRows, analyticsRows, startDate, endDate) {
     const aRow = analyticsMap.get(code) || {};
     const hasAnalytics = Object.keys(aRow).length > 0;
     const isFt = classifyFtRw(row?.reworkType) === "ft";
-    const dateForBucket = isFt
-      ? String(row?.strictLeadSubmittedDate || "").slice(0, 10)
-      : String(row?.etaToStartProd || "").slice(0, 10);
+    const dateForBucket = String(row?.stageDate || "").slice(0, 10);
     const timeParts = getTimeParts(dateForBucket);
     return {
       id: `full-gen-ai-${index + 1}`,
@@ -716,21 +717,31 @@ function isIncludedWorkflowAssetCode(assetCode, includeGuAssets = false) {
 
 function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
   const resolveWriterName = buildWriterNameResolver(workflowRows);
-  const filtered = (Array.isArray(workflowRows) ? workflowRows : []).filter((row) => {
+
+  // First pass: filter rows that fall within the date range.
+  // Uses ONLY "Date submitted by Lead" (strictLeadSubmittedDate) — no fallbacks.
+  // Throughput = when the CL actually reviewed and submitted the script, not when
+  // production was scheduled. Scripts without a lead submission date are excluded.
+  const candidateRows = (Array.isArray(workflowRows) ? workflowRows : []).filter((row) => {
     const source = String(row?.source || "");
     if (!["editorial", "ready_for_production", "production", "live"].includes(source)) return false;
-    const isFt = classifyFtRw(row?.reworkType) === "ft";
-    if (isFt) {
-      // Fresh Take: strict Date submitted by Lead across all 4 sheets (no fallbacks)
-      const d = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
-      return d && d >= startDate && d <= endDate;
-    } else {
-      // Rework: Production, Ready for Production, and Live sheets — Date approved for prod (etaToStartProd)
-      if (!["ready_for_production", "production", "live"].includes(source)) return false;
-      const d = String(row?.etaToStartProd || "").slice(0, 10);
-      return d && d >= startDate && d <= endDate;
-    }
+    const sld = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
+    return Boolean(sld) && sld >= startDate && sld <= endDate;
   });
+
+  // Deduplicate by assetCode — a script that hasn't been removed from an earlier tab after
+  // advancing will otherwise be counted multiple times. Keep the most-advanced stage
+  // (higher stagePriority wins).
+  const dedupMap = new Map();
+  const noCodeRows = [];
+  for (const row of candidateRows) {
+    const code = String(row?.assetCode || "").trim().toLowerCase();
+    if (!code) { noCodeRows.push(row); continue; }
+    if (!dedupMap.has(code) || Number(row?.stagePriority || 0) > Number(dedupMap.get(code)?.stagePriority || 0)) {
+      dedupMap.set(code, row);
+    }
+  }
+  const filtered = [...Array.from(dedupMap.values()), ...noCodeRows];
 
   const podMap = new Map();
   const ensurePod = (name) => {
@@ -743,7 +754,7 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
   const ensureWriter = (pod, name) => {
     const writer = normalizeText(name) || "Unknown Writer";
     if (!pod.writers.has(writer)) {
-      pod.writers.set(writer, { writerName: writer, totalScripts: 0, ftCount: 0, rwCount: 0 });
+      pod.writers.set(writer, { writerName: writer, totalScripts: 0, ftCount: 0, rwCount: 0, scripts: [] });
     }
     return pod.writers.get(writer);
   };
@@ -755,7 +766,18 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
     writer.totalScripts += 1;
 
     const scriptType = classifyFtRw(row?.reworkType);
-    if (scriptType === "ft") {
+    const isFt = scriptType === "ft";
+    const dateUsed = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
+    writer.scripts.push({
+      assetCode: normalizeText(row?.assetCode) || "",
+      showName: normalizeText(row?.showName) || "",
+      beatName: normalizeText(row?.beatName) || "",
+      type: isFt ? "ft" : "rw",
+      date: dateUsed,
+      source: normalizeText(row?.source),
+    });
+
+    if (isFt) {
       pod.ftCount += 1;
       writer.ftCount += 1;
     } else {
@@ -777,12 +799,14 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
               totalScripts: 0,
               ftCount: 0,
               rwCount: 0,
+              scripts: [],
             });
           }
           const target = acc.get(key);
           target.totalScripts += Number(writer.totalScripts || 0);
           target.ftCount += Number(writer.ftCount || 0);
           target.rwCount += Number(writer.rwCount || 0);
+          target.scripts = target.scripts.concat(writer.scripts || []);
           return acc;
         }, new Map()).values()
       );
@@ -793,23 +817,34 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
           totalScripts: Number(row.totalScripts || 0),
           ftCount: Number(row.ftCount || 0),
           rwCount: Number(row.rwCount || 0),
+          scripts: row.scripts || [],
         };
         const tokens = normalizeKey(current.writerName).split(" ").filter(Boolean);
         const isSingleToken = tokens.length === 1;
 
         if (isSingleToken) {
           const [token] = tokens;
-          const fullNameCandidates = Array.from(acc.values()).filter((candidate) => {
+          // First try: first-token match (e.g. "Paul" → "Paul Lee")
+          const firstTokenCandidates = Array.from(acc.values()).filter((candidate) => {
             const candidateTokens = normalizeKey(candidate.writerName).split(" ").filter(Boolean);
             return candidateTokens.length > 1 && candidateTokens[0] === token;
           });
-          if (fullNameCandidates.length > 0) {
-            const target = fullNameCandidates.sort(
+          // Fallback: any-token match (e.g. "Lee" → "Paul Lee") — only if exactly one candidate to avoid ambiguity
+          const anyTokenCandidates = firstTokenCandidates.length === 0
+            ? Array.from(acc.values()).filter((candidate) => {
+                const candidateTokens = normalizeKey(candidate.writerName).split(" ").filter(Boolean);
+                return candidateTokens.length > 1 && candidateTokens.includes(token);
+              })
+            : [];
+          const mergeCandidates = firstTokenCandidates.length > 0 ? firstTokenCandidates : (anyTokenCandidates.length === 1 ? anyTokenCandidates : []);
+          if (mergeCandidates.length > 0) {
+            const target = mergeCandidates.sort(
               (a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName)
             )[0];
             target.totalScripts += current.totalScripts;
             target.ftCount += current.ftCount;
             target.rwCount += current.rwCount;
+            target.scripts = (target.scripts || []).concat(current.scripts);
             return acc;
           }
         }
@@ -824,6 +859,7 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
               current.totalScripts += Number(singleEntry.totalScripts || 0);
               current.ftCount += Number(singleEntry.ftCount || 0);
               current.rwCount += Number(singleEntry.rwCount || 0);
+              current.scripts = current.scripts.concat(singleEntry.scripts || []);
               acc.delete(singleTokenKey);
             }
           }
@@ -835,6 +871,7 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
         target.totalScripts += current.totalScripts;
         target.ftCount += current.ftCount;
         target.rwCount += current.rwCount;
+        target.scripts = (target.scripts || []).concat(current.scripts);
         return acc;
       }, new Map());
 
@@ -843,9 +880,13 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
         totalScripts: pod.totalScripts,
         ftCount: pod.ftCount,
         rwCount: pod.rwCount,
-        writerRows: Array.from(mergedByPodLocalAlias.values()).sort(
-          (a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName)
-        ),
+        writerRows: Array.from(mergedByPodLocalAlias.values())
+          .filter((w) => normalizePodLeadName(w.writerName) !== pod.podLeadName)
+          .sort((a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName))
+          .map((w) => ({
+            ...w,
+            scripts: (w.scripts || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.assetCode || "").localeCompare(b.assetCode || "")),
+          })),
       };
     });
 }
