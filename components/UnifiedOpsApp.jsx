@@ -962,7 +962,10 @@ export default function UnifiedOpsApp() {
     [acdMetricsData, acdTimeView, acdViewType]
   );
   const analyticsSubtitle = useMemo(() => buildAnalyticsSubtitle(analyticsData), [analyticsData]);
-  const dashboardIsRefreshing = Boolean(dashboardLoadingMessage);
+  const dashboardIsRefreshing =
+    Boolean(dashboardLoadingMessage) ||
+    (activeView === "overview" && (overviewLoading || leadershipOverviewLoading)) ||
+    (activeView === "leadership-overview" && leadershipOverviewLoading);
 
 
   useEffect(() => {
