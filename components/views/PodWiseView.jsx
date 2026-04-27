@@ -622,7 +622,6 @@ export default function PodWiseContent({
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 10, padding: "8px 0 4px" }}>
               {blocks.map(({ pod, rank, h }) => (
                 <div key={rank} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, flex: 1, maxWidth: 200 }}>
-                  {rank === 1 && <span style={{ fontSize: 28 }}>👑</span>}
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{pod.podLeadName}</div>
                   <div style={{ fontWeight: 800, fontSize: 22, color: rankColor(rank) }}>{pod.conversion}%</div>
                   <div style={{ fontSize: 12, color: "var(--subtle)" }}>{pod.successful}/{pod.scripts} scripts</div>
