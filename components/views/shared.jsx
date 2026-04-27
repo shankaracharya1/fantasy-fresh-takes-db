@@ -368,7 +368,7 @@ function StackedMiniBarRow({ label, ftValue, rwValue, max }) {
 }
 
 // ─── BeatsSummaryCards ────────────────────────────────────────────────────────
-// 4-card summary (Total Beats, Fresh take, Production, Hit Rate)
+// 4-card summary (Beats, Fresh take, Production, Hit Rate)
 // Shared between Leadership Overview and Editorial Funnel.
 
 export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
@@ -444,7 +444,7 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
   return (
     <div className="metric-grid four-col">
       <MetricCard
-        label="Total Beats"
+        label="Beats"
         info="Counts unique ideation rows by Beats completed date (Beats assigned date as fallback) inside the selected date range."
         body={
           <>

@@ -201,6 +201,27 @@ function isDateWithinWeek(dateValue, weekSelection) {
   return primaryDate >= weekSelection.weekStart && primaryDate <= weekSelection.weekEnd;
 }
 
+// Check if an ideation row falls in the selected date range.
+// Primary: use ISO primaryDate. Fallback: derive the Sun–Sat bucket from monthKey+weekInMonth
+// and check for overlap. This handles rows whose date was stored as a label (e.g. "Apr Week 3").
+function isBeatRowInRange(row, weekSelection) {
+  if (row.primaryDate) {
+    return row.primaryDate >= weekSelection.weekStart && row.primaryDate <= weekSelection.weekEnd;
+  }
+  if (!row.monthKey || !row.weekInMonth) return false;
+  const [y, m] = String(row.monthKey).split("-").map(Number);
+  const anchorDay = (Number(row.weekInMonth) - 1) * 7 + 1;
+  const anchorDate = new Date(Date.UTC(y, m - 1, anchorDay, 12));
+  const weekday = anchorDate.getUTCDay(); // 0=Sun
+  const sunDate = new Date(Date.UTC(y, m - 1, anchorDay - weekday, 12));
+  const satDate = new Date(Date.UTC(y, m - 1, anchorDay - weekday + 6, 12));
+  const fmt = (d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
+  const bucketStart = fmt(sunDate);
+  const bucketEnd = fmt(satDate);
+  // Overlap: bucket overlaps selection if not entirely before or after
+  return bucketStart <= weekSelection.weekEnd && bucketEnd >= weekSelection.weekStart;
+}
+
 function categorizeIdeationStatus(statusLabel) {
   const normalized = normalizeKey(statusLabel);
   if (!normalized) return "to_be_ideated";
@@ -279,15 +300,19 @@ function buildBeatRows(rows) {
       const parsedBeatsAssignedDate = parseLiveDate(row?.beatsAssignedDate);
       const parsedAssignedDate = parseLiveDate(row?.assignedDate);
       const parsedCompletedDate = parseLiveDate(row?.completedDate);
-      // The "Beats week" column (beatsAssignedDate after header fix) uses Mon-Sun week
-      // numbering that differs from our day-of-month formula. Trust the label directly.
+      // Priority: "Beats completed" ISO date first (most accurate for filtering),
+      // then text label from "Beats week/assigned" column (fallback for older rows),
+      // then other date columns as last resort.
       const fromLabel = parseBeatsWeekLabel(row?.beatsAssignedDate || "");
       let timeParts;
-      if (fromLabel) {
+      if (parsedCompletedDate) {
+        // "Beats completed" date drives the primary date filter
+        timeParts = getTimeParts(parsedCompletedDate);
+      } else if (fromLabel) {
+        // Text label like "Apr week 3" — no ISO primaryDate but has monthKey/weekInMonth
         timeParts = { primaryDate: "", ...fromLabel };
       } else {
-        // No text label — fall back to ISO date calculation
-        const primaryDate = parsedBeatsAssignedDate || parsedAssignedDate || parsedCompletedDate || "";
+        const primaryDate = parsedBeatsAssignedDate || parsedAssignedDate || "";
         timeParts = getTimeParts(primaryDate);
       }
       return {
@@ -894,7 +919,7 @@ export async function GET(request) {
       liveRows: liveResult?.rows || [],
     });
     const filteredWorkflowRows = workflowRows.filter((row) => isIncludedWorkflowAssetCode(row?.assetCode, includeGuAssets));
-    const scopedBeatRows = beatRows.filter((row) => isDateWithinWeek(row.primaryDate, weekSelection));
+    const scopedBeatRows = beatRows.filter((row) => isBeatRowInRange(row, weekSelection));
     const scopedWorkflowRows = filteredWorkflowRows.filter((row) => isDateWithinWeek(row.stageDate, weekSelection));
     const approvedMatchedRows = buildApprovedMatchedRows(scopedBeatRows, filteredWorkflowRows);
 
