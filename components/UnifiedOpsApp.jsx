@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import GanttTracker from "./GanttTracker.jsx";
 import { copyNodeImageToClipboard } from "../lib/clipboard-share.js";
 import {
