@@ -216,6 +216,36 @@ function computeHitRatePerPodForWeek(analyticsRows, weekSelection) {
   return podStats;
 }
 
+// Build per-POD script detail rows for the detail drawer (Show, Angle, Code, CPI, True Comp, CTR, CTI)
+function buildPodScriptDetailRows(analyticsRows, weekSelection) {
+  const weekStart = String(weekSelection?.weekStart || "");
+  const weekEnd = String(weekSelection?.weekEnd || "");
+
+  const byPod = {};
+  for (const row of Array.isArray(analyticsRows) ? analyticsRows : []) {
+    const liveDate = String(row?.liveDate || "").trim();
+    if (!liveDate) continue;
+    if (weekStart && liveDate < weekStart) continue;
+    if (weekEnd && liveDate > weekEnd) continue;
+
+    const pod = String(row?.podLeadName || "").trim();
+    if (!pod) continue;
+
+    if (!byPod[pod]) byPod[pod] = [];
+    byPod[pod].push({
+      showName: row.showName || "",
+      beatName: row.beatName || "",
+      assetCode: row.assetCode || "",
+      cpi: row.cpiUsd != null ? row.cpiUsd : null,
+      trueComp: row.absoluteCompletionPct != null ? row.absoluteCompletionPct : null,
+      ctr: row.ctrPct != null ? row.ctrPct : null,
+      cti: row.clickToInstall != null ? row.clickToInstall : null,
+      liveDate,
+    });
+  }
+  return byPod;
+}
+
 function buildScriptsPerPodForWeek(liveRows, weekSelection) {
   const weekStart = String(weekSelection?.weekStart || "");
   const weekEnd = String(weekSelection?.weekEnd || "");
@@ -392,10 +422,12 @@ export async function GET(request) {
         ...row,
         lwEditorialOutput: beatsMap.get(row.podLeadName) || 0,
       }));
+      const scriptRowsByPod = buildPodScriptDetailRows(analyticsResult.rows, effectiveWeekSelection);
 
       return NextResponse.json({
         ok: true,
         podRows,
+        scriptRowsByPod,
         period: hasDateRangeFilter ? "range" : weekly.period,
         weekKey: effectiveWeekSelection.weekKey,
         weekLabel: formatWeekRangeLabel(effectiveWeekSelection.weekStart, effectiveWeekSelection.weekEnd),

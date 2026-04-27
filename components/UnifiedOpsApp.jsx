@@ -1909,6 +1909,7 @@ export default function UnifiedOpsApp() {
               <div className="section-shell">
                 <PodWiseContent
                   competitionPodRows={competitionData?.podRows}
+                  analyticsRows={analyticsData?.rows || []}
                   competitionLoading={competitionLoading}
                   competitionWeekLabel={competitionData?.weekLabel}
                   performanceRangeMode={podPerformanceRangeMode}

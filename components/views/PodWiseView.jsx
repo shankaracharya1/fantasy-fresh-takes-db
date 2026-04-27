@@ -510,8 +510,23 @@ export function PodTasksContent({ podTasksData, podTasksLoading, onShare, copyin
 
 // ─── Main View ────────────────────────────────────────────────────────────────
 
+// Normalize POD surname from assetLink to canonical competition pod name
+const POD_SURNAME_MAP = {
+  lee: "Paul", roth: "Josh", woodward: "Dan",
+  gilatar: "Nishant", berman: "Jacob Berman", "jacob berman": "Jacob Berman",
+  aakash: "Aakash Ahuja", yadhu: "Yadhu", nivesh: "Nivesh", sarbo: "Sarbo",
+};
+function parsePodFromAssetLink(assetLink) {
+  const parts = String(assetLink || "").split("||");
+  if (parts.length < 2) return "";
+  const podWriter = parts[parts.length - 2].trim();
+  const surname = podWriter.split("_")[0].trim().toLowerCase();
+  return POD_SURNAME_MAP[surname] || podWriter.split("_")[0].trim();
+}
+
 export default function PodWiseContent({
   competitionPodRows,
+  analyticsRows = [],
   competitionLoading,
   competitionWeekLabel,
   performanceRangeMode,
@@ -546,6 +561,27 @@ export default function PodWiseContent({
     .sort((a, b) => b.throughputScore - a.throughputScore || b.successful - a.successful || b.conversion - a.conversion);
 
   const bestPod = sorted[0] || null;
+  const [expandedPod, setExpandedPod] = useState(null);
+
+  // Build per-POD script detail map from analytics rows
+  const scriptRowsByPod = (() => {
+    const map = {};
+    for (const row of analyticsRows) {
+      const pod = parsePodFromAssetLink(row.assetLink);
+      if (!pod) continue;
+      if (!map[pod]) map[pod] = [];
+      map[pod].push({
+        showName: row.showName || "",
+        beatName: row.beatName || "",
+        assetCode: row.assetCode || "",
+        cpi: row.metrics?.cpi?.value ?? null,
+        trueComp: row.metrics?.absoluteCompletion?.value ?? null,
+        ctr: row.metrics?.ctr?.value ?? null,
+        cti: row.metrics?.cti?.value ?? null,
+      });
+    }
+    return map;
+  })();
 
   const totalBeats = sorted.reduce((s, r) => s + r.beats, 0);
   const totalScripts = sorted.reduce((s, r) => s + r.scripts, 0);
@@ -642,6 +678,7 @@ export default function PodWiseContent({
         {/* ── Ranked list ── */}
         {(() => {
           const rankColor = (r) => r === 1 ? "#e09b10" : r === 2 ? "#6b7f95" : r === 3 ? "#b8622c" : "#a0a0a0";
+          const fmt = (v, decimals = 2) => v != null ? Number(v).toFixed(decimals) : "—";
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
               {sorted.map((pod, i) => {
@@ -650,52 +687,106 @@ export default function PodWiseContent({
                 const pct = pod.conversion;
                 const r = 22, circ = 2 * Math.PI * r;
                 const offset = circ * (1 - Math.min(pct, 100) / 100);
+                const isOpen = expandedPod === pod.podLeadName;
+                const scriptRows = scriptRowsByPod[pod.podLeadName] || [];
                 return (
                   <div key={pod.podLeadName} style={{
-                    display: "flex", alignItems: "center", gap: 18,
                     background: "var(--card, #fffdf9)",
                     border: "1px solid var(--border)",
                     borderLeft: `5px solid ${rank <= 3 ? color : "var(--border)"}`,
-                    borderRadius: 10, padding: "14px 20px",
+                    borderRadius: 10,
+                    overflow: "hidden",
                   }}>
-                    {/* Rank number */}
-                    <div style={{ width: 28, textAlign: "center", fontWeight: 700, fontSize: 18, color: rank <= 3 ? color : "var(--subtle)", flexShrink: 0 }}>{rank}</div>
-                    {/* Circular progress ring */}
-                    <div style={{ position: "relative", width: 58, height: 58, flexShrink: 0 }}>
-                      <svg width={58} height={58} style={{ transform: "rotate(-90deg)" }}>
-                        <circle cx={29} cy={29} r={r} fill="none" stroke="var(--border)" strokeWidth={4} />
-                        <circle cx={29} cy={29} r={r} fill="none" stroke={color} strokeWidth={4}
-                          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
-                      </svg>
-                      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color }}>{pct}%</div>
-                    </div>
-                    {/* Name + stats */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>{pod.podLeadName}</div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {[
-                          { label: "Beats", value: pod.beats, dot: "#5b9bd5" },
-                          { label: "Scripts", value: pod.scripts, dot: "#e09b10" },
-                          { label: "Success", value: pod.successful, dot: "#5aab6e" },
-                        ].map(({ label, value, dot }) => (
-                          <span key={label} style={{
-                            display: "inline-flex", alignItems: "center", gap: 5,
-                            background: "var(--surface, #f5f0e8)",
-                            border: "1px solid var(--border)",
-                            borderRadius: 20, padding: "3px 10px",
-                            fontSize: 12, fontWeight: 600, color: "var(--text)",
-                          }}>
-                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, flexShrink: 0 }} />
-                            {label} {value}
-                          </span>
-                        ))}
+                    {/* ── Main row ── */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "14px 20px" }}>
+                      {/* Rank number */}
+                      <div style={{ width: 28, textAlign: "center", fontWeight: 700, fontSize: 18, color: rank <= 3 ? color : "var(--subtle)", flexShrink: 0 }}>{rank}</div>
+                      {/* Circular progress ring */}
+                      <div style={{ position: "relative", width: 58, height: 58, flexShrink: 0 }}>
+                        <svg width={58} height={58} style={{ transform: "rotate(-90deg)" }}>
+                          <circle cx={29} cy={29} r={r} fill="none" stroke="var(--border)" strokeWidth={4} />
+                          <circle cx={29} cy={29} r={r} fill="none" stroke={color} strokeWidth={4}
+                            strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
+                        </svg>
+                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color }}>{pct}%</div>
                       </div>
+                      {/* Name + stats */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>{pod.podLeadName}</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {[
+                            { label: "Beats", value: pod.beats, dot: "#5b9bd5" },
+                            { label: "Scripts", value: pod.scripts, dot: "#e09b10" },
+                            { label: "Success", value: pod.successful, dot: "#5aab6e" },
+                          ].map(({ label, value, dot }) => (
+                            <span key={label} style={{
+                              display: "inline-flex", alignItems: "center", gap: 5,
+                              background: "var(--surface, #f5f0e8)",
+                              border: "1px solid var(--border)",
+                              borderRadius: 20, padding: "3px 10px",
+                              fontSize: 12, fontWeight: 600, color: "var(--text)",
+                            }}>
+                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+                              {label} {value}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Hit rate */}
+                      <span style={{ fontWeight: 700, fontSize: 20, color: rank <= 3 ? color : "var(--subtle)", flexShrink: 0 }}>{pct}%</span>
+                      {/* Expand toggle */}
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPod(isOpen ? null : pod.podLeadName)}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          background: isOpen ? "var(--surface)" : "transparent",
+                          border: "1px solid var(--border)",
+                          borderRadius: 6, padding: "4px 10px",
+                          fontSize: 12, fontWeight: 700, cursor: "pointer",
+                          color: "var(--text-secondary)",
+                          flexShrink: 0,
+                          transition: "background 150ms",
+                        }}
+                      >
+                        <span style={{ fontSize: 14, lineHeight: 1 }}>{isOpen ? "−" : "+"}</span>
+                        <span>{scriptRows.length} scripts</span>
+                      </button>
                     </div>
-                    {/* Hit rate + trophy */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                      <span style={{ fontWeight: 700, fontSize: 20, color: rank <= 3 ? color : "var(--subtle)" }}>{pct}%</span>
-                      {rank === 1 && <span style={{ fontSize: 22 }}>🏆</span>}
-                    </div>
+
+                    {/* ── Detail drawer ── */}
+                    {isOpen && (
+                      <div style={{ borderTop: "1px solid var(--border)", overflowX: "auto" }}>
+                        {scriptRows.length === 0 ? (
+                          <div style={{ padding: "14px 20px", fontSize: 13, color: "var(--subtle)" }}>
+                            No analytics data available for this date range.
+                          </div>
+                        ) : (
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                            <thead>
+                              <tr style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
+                                {["Show", "Angle", "Code", "CPI ($)", "True Comp (%)", "CTR (%)", "CTI (%)"].map((h) => (
+                                  <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--subtle)", whiteSpace: "nowrap" }}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {scriptRows.map((sr, idx) => (
+                                <tr key={idx} style={{ borderBottom: "1px solid var(--border-light, var(--border))", background: idx % 2 === 0 ? "transparent" : "var(--surface, #f5f0e8)" }}>
+                                  <td style={{ padding: "8px 12px", fontWeight: 500 }}>{sr.showName || "—"}</td>
+                                  <td style={{ padding: "8px 12px" }}>{sr.beatName || "—"}</td>
+                                  <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: 11 }}>{sr.assetCode || "—"}</td>
+                                  <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 600, color: sr.cpi != null && sr.cpi < 10 ? "#16a34a" : sr.cpi != null ? "#dc2626" : "inherit" }}>{sr.cpi != null ? `$${fmt(sr.cpi)}` : "—"}</td>
+                                  <td style={{ padding: "8px 12px", textAlign: "right" }}>{sr.trueComp != null ? `${fmt(sr.trueComp)}%` : "—"}</td>
+                                  <td style={{ padding: "8px 12px", textAlign: "right" }}>{sr.ctr != null ? `${fmt(sr.ctr)}%` : "—"}</td>
+                                  <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 600, color: sr.cti != null && sr.cti >= 12 ? "#16a34a" : sr.cti != null ? "#dc2626" : "inherit" }}>{sr.cti != null ? `${fmt(sr.cti, 1)}%` : "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
