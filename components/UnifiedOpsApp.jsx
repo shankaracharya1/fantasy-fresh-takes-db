@@ -238,6 +238,173 @@ function SuggestionsContent() {
   );
 }
 
+// ─── Lifetime Angle Lifecycle ────────────────────────────────────────────────
+
+const LIFECYCLE_STAGES = [
+  { id: "live",          label: "Live",            color: "#2563eb", bg: "#eff6ff" },
+  { id: "editorial",     label: "Editorial",       color: "#9333ea", bg: "#f5f3ff" },
+  { id: "ready_for_prod",label: "Ready for Prod",  color: "#d97706", bg: "#fffbeb" },
+  { id: "production",    label: "Production",      color: "#16a34a", bg: "#f0fdf4" },
+];
+
+function LifetimeAngleContent() {
+  const [startDate, setStartDate] = useState("");
+  const [showFilter, setShowFilter] = useState("");
+  const [angleFilter, setAngleFilter] = useState("");
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+
+  // Fetch all lifecycle data (no end date = full lifetime)
+  useEffect(() => {
+    setLoading(true);
+    setFetched(false);
+    const params = new URLSearchParams();
+    if (startDate) params.set("startDate", startDate);
+    fetch(`/api/dashboard/overview-detail?${params}`)
+      .then((r) => r.json())
+      .then((d) => { setRows(Array.isArray(d.rows) ? d.rows : []); setFetched(true); })
+      .catch(() => { setRows([]); setFetched(true); })
+      .finally(() => setLoading(false));
+  }, [startDate]);
+
+  const showNames = useMemo(() =>
+    [...new Set(rows.map((r) => r.showName).filter(Boolean))].sort()
+  , [rows]);
+
+  const angles = useMemo(() => {
+    if (!showFilter) return [...new Set(rows.map((r) => r.beatName).filter(Boolean))].sort();
+    return [...new Set(rows.filter((r) => r.showName === showFilter).map((r) => r.beatName).filter(Boolean))].sort();
+  }, [rows, showFilter]);
+
+  // Reset angle when show changes
+  useEffect(() => { setAngleFilter(""); }, [showFilter]);
+
+  const lifecycle = useMemo(() => {
+    if (!angleFilter) return [];
+    return rows
+      .filter((r) => (!showFilter || r.showName === showFilter) && r.beatName === angleFilter)
+      .sort((a, b) => {
+        const order = { live: 0, editorial: 1, ready_for_prod: 2, production: 3 };
+        return (order[a.source] ?? 99) - (order[b.source] ?? 99) ||
+          (a.dateSubmittedByLead || "").localeCompare(b.dateSubmittedByLead || "");
+      });
+  }, [rows, showFilter, angleFilter]);
+
+  const stageMap = useMemo(() => {
+    const m = {};
+    for (const r of lifecycle) {
+      if (!m[r.source]) m[r.source] = r;
+    }
+    return m;
+  }, [lifecycle]);
+
+  const fLabel = { fontSize: 11, fontWeight: 700, color: "var(--subtle)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 6, display: "block" };
+  const fInput = { padding: "9px 12px", borderRadius: 8, border: "1.5px solid var(--border)", background: "var(--card, #fffdf9)", fontSize: 13, color: "var(--ink)", fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" };
+  const fSelect = { ...fInput, appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32 };
+
+  return (
+    <div style={{ padding: "32px 28px", maxWidth: 860, margin: "0 auto" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Lifetime Angle Lifecycle</div>
+        <div style={{ fontSize: 13, color: "var(--subtle)" }}>Track an angle's full journey — from Live through Editorial, Ready for Prod, and Production.</div>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end", background: "var(--card, #fffdf9)", border: "1px solid var(--border)", borderRadius: 12, padding: "20px 24px", marginBottom: 32 }}>
+        <div style={{ flex: "0 0 160px" }}>
+          <label style={fLabel}>Start Date</label>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={fInput} />
+        </div>
+        <div style={{ flex: "1 1 200px" }}>
+          <label style={fLabel}>Show Name</label>
+          <select value={showFilter} onChange={(e) => setShowFilter(e.target.value)} style={fSelect} disabled={loading}>
+            <option value="">All shows</option>
+            {showNames.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: "1 1 200px" }}>
+          <label style={fLabel}>Angle</label>
+          <select value={angleFilter} onChange={(e) => setAngleFilter(e.target.value)} style={fSelect} disabled={loading || angles.length === 0}>
+            <option value="">Select angle…</option>
+            {angles.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+        {loading && <div style={{ fontSize: 12, color: "var(--subtle)", alignSelf: "center" }}>Loading…</div>}
+      </div>
+
+      {/* Empty state */}
+      {!angleFilter ? (
+        <div style={{ textAlign: "center", padding: "48px 0", color: "var(--subtle)" }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🎯</div>
+          <div style={{ fontSize: 13 }}>{!fetched ? "Set a start date or select a show to begin." : "Select an angle to see its lifecycle."}</div>
+        </div>
+      ) : lifecycle.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "48px 0", color: "var(--subtle)", fontSize: 13 }}>No lifecycle data found for this angle.</div>
+      ) : (
+        <>
+          {/* Timeline progress bar */}
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 32, gap: 0 }}>
+            {LIFECYCLE_STAGES.map((stage, i) => {
+              const hit = stageMap[stage.id];
+              return (
+                <div key={stage.id} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
+                  {/* Connector line */}
+                  {i < LIFECYCLE_STAGES.length - 1 && (
+                    <div style={{ position: "absolute", top: 19, left: "50%", width: "100%", height: 3, background: hit ? stage.color : "var(--border)", opacity: 0.4, zIndex: 0 }} />
+                  )}
+                  {/* Circle */}
+                  <div style={{
+                    width: 38, height: 38, borderRadius: "50%", zIndex: 1, marginBottom: 8,
+                    background: hit ? stage.bg : "var(--surface, #f5f0e8)",
+                    border: `2.5px solid ${hit ? stage.color : "var(--border)"}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 15, color: hit ? stage.color : "var(--border)",
+                  }}>
+                    {hit ? "✓" : "○"}
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: hit ? stage.color : "var(--subtle)", textAlign: "center" }}>{stage.label}</div>
+                  <div style={{ fontSize: 10, color: "var(--subtle)", marginTop: 2, textAlign: "center" }}>{hit?.dateSubmittedByLead || "—"}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Detail table */}
+          <div style={{ border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: "var(--surface, #f5f0e8)" }}>
+                  {["Stage", "Date", "Writer", "POD Lead", "Type"].map((h) => (
+                    <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "var(--subtle)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {lifecycle.map((row, i) => {
+                  const s = LIFECYCLE_STAGES.find((s) => s.id === row.source) || {};
+                  return (
+                    <tr key={i} style={{ borderTop: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "var(--surface, #f9f6f1)" }}>
+                      <td style={{ padding: "11px 14px" }}>
+                        <span style={{ background: s.bg, color: s.color, border: `1px solid ${s.color}20`, borderRadius: 20, padding: "3px 11px", fontSize: 12, fontWeight: 600 }}>{s.label}</span>
+                      </td>
+                      <td style={{ padding: "11px 14px", fontWeight: 600 }}>{row.dateSubmittedByLead || "—"}</td>
+                      <td style={{ padding: "11px 14px" }}>{row.writerName || "—"}</td>
+                      <td style={{ padding: "11px 14px" }}>{row.podLeadName || "—"}</td>
+                      <td style={{ padding: "11px 14px", color: "var(--subtle)" }}>{row.reworkType || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Shell-only constants ─────────────────────────────────────────────────────
 
 const THEME_STORAGE_KEY = "fresh-takes-theme-mode";
@@ -1368,6 +1535,7 @@ export default function UnifiedOpsApp() {
     analytics: "Analytics",
     production: "Production Pipeline",
     suggestions: "Suggestions",
+    "lifetime-angle": "Lifetime Angle Lifecycle",
     reports: "WIP",
     details: "Details",
   };
@@ -1448,6 +1616,13 @@ export default function UnifiedOpsApp() {
                 <>
                   <button
                     type="button"
+                    className={`sidebar-link${activeView === "lifetime-angle" ? " active" : ""}`}
+                    onClick={() => setActiveView("lifetime-angle")}
+                  >
+                    Lifetime Angle Lifecycle
+                  </button>
+                  <button
+                    type="button"
                     className={`sidebar-link${activeView === "reports" ? " active" : ""}`}
                     onClick={() => setActiveView("reports")}
                   >
@@ -1499,7 +1674,7 @@ export default function UnifiedOpsApp() {
                         <circle cx="10.5" cy="9.5" r="0.8" fill="currentColor"/>
                       </svg>
                       <span className="week-picker-label" suppressHydrationWarning>
-                        {selectedMonthWeekOption ? selectedMonthWeekOption.label : "Select week"}
+                        {selectedMonthWeekOption ? `${selectedMonthWeekOption.rangeLabel || selectedMonthWeekOption.label} (Sun–Sat)` : "Select week"}
                       </span>
                       <svg className="week-picker-chevron" viewBox="0 0 10 6" fill="none" aria-hidden="true">
                         <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1542,8 +1717,7 @@ export default function UnifiedOpsApp() {
                                   <svg className="week-picker-check" viewBox="0 0 12 10" fill="none" aria-hidden="true">
                                     <path d="M1 5l3.5 3.5L11 1" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
                                   </svg>
-                                  <span>{option.label.replace(/^.*?\s+(week\s+\d+)$/i, (_, w) => w.charAt(0).toUpperCase() + w.slice(1))}</span>
-                                  <span className="week-picker-dates">{option.weekStart} – {option.weekEnd}</span>
+                                  <span>{option.rangeLabel ? `${option.rangeLabel} (Sun–Sat)` : option.label}</span>
                                 </button>
                               ))}
                             </div>
@@ -1552,6 +1726,7 @@ export default function UnifiedOpsApp() {
                       </div>
                     )}
                   </div>
+                <span className="topbar-range-divider" aria-hidden="true">|</span>
                 <div className={`date-field-wrap${headerDateRangeUsesManualDates ? " is-active" : ""}`}>
                   <span className="app-topbar-date-label">Start date</span>
                   <button
@@ -1740,6 +1915,12 @@ export default function UnifiedOpsApp() {
             {activeView === "suggestions" ? (
               <div className="section-shell" style={{ display: "flex", flexDirection: "column", overflow: "hidden", padding: 0, height: "100%" }}>
                 <SuggestionsContent />
+              </div>
+            ) : null}
+
+            {activeView === "lifetime-angle" ? (
+              <div className="section-shell" style={{ overflowY: "auto" }}>
+                <LifetimeAngleContent />
               </div>
             ) : null}
 

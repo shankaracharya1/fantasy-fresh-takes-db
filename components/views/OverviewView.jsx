@@ -624,72 +624,33 @@ function computeFourBeatsWeeks() {
 }
 
 function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", loading = false }) {
-  // Build a Set of week-bucket keys that fall WITHIN weekStart..weekEnd.
-  // 1-week selection → 1 bucket; 2-week selection → 2 buckets; etc.
-  const recentWeekKeys = useMemo(() => {
-    const refStart = weekStart || weekEnd;
-    const refEnd = weekEnd || weekStart;
-    if (!refStart || !refEnd) return null; // no range — show all weeks
+  // Aggregate all rows within the selected date range into a single flat table.
+  const { pods, total } = useMemo(() => {
+    const podMap = new Map();
 
-    const toBucket = (dateStr) => {
-      const [y, mo, d] = String(dateStr).split("-").map(Number);
-      return {
-        mk: `${y}-${String(mo).padStart(2, "0")}`,
-        wk: Math.min(4, Math.floor((d - 1) / 7) + 1),
-      };
-    };
-
-    const start = toBucket(refStart);
-    const end = toBucket(refEnd);
-    const set = new Set();
-    let { mk, wk } = start;
-
-    for (let i = 0; i < 52; i++) { // cap at 1 year of weeks
-      set.add(`${mk}-W${wk}`);
-      if (mk === end.mk && wk === end.wk) break;
-      // step forward 1 week-bucket
-      wk++;
-      if (wk > 4) {
-        wk = 1;
-        const [y, m] = mk.split("-").map(Number);
-        const nm = m + 1;
-        mk = nm > 12 ? `${y + 1}-01` : `${y}-${String(nm).padStart(2, "0")}`;
+    for (const row of allBeatRows) {
+      // Date-filter: use primaryDate when available, fall back to week-bucket bounds
+      const primaryDate = String(row.primaryDate || "").slice(0, 10);
+      if (primaryDate) {
+        if (weekStart && primaryDate < weekStart) continue;
+        if (weekEnd && primaryDate > weekEnd) continue;
+      } else if (row.monthKey && row.weekInMonth) {
+        // derive the week-bucket start (approx) and check overlap
+        const [y, mo] = String(row.monthKey).split("-").map(Number);
+        const anchorDay = (Number(row.weekInMonth) - 1) * 7 + 1;
+        const approxDate = `${y}-${String(mo).padStart(2, "0")}-${String(anchorDay).padStart(2, "0")}`;
+        if (weekEnd && approxDate > weekEnd) continue;
+        const approxEnd = `${y}-${String(mo).padStart(2, "0")}-${String(anchorDay + 6).padStart(2, "0")}`;
+        if (weekStart && approxEnd < weekStart) continue;
+      } else {
+        continue; // no date info — skip
       }
-    }
-    return set;
-  }, [weekEnd, weekStart]);
 
-  // Filter by monthKey+weekInMonth directly — handles both ISO-date rows and
-  // label-based rows (e.g. beatsAssignedDate="Apr Week 3") that have primaryDate=""
-  const filtered = useMemo(() => {
-    return allBeatRows.filter((row) => {
-      if (!row.monthKey || !row.weekInMonth) return false;
-      if (recentWeekKeys === null) return true;
-      return recentWeekKeys.has(`${row.monthKey}-W${row.weekInMonth}`);
-    });
-  }, [allBeatRows, recentWeekKeys]);
-
-  const weeks = useMemo(() => {
-    const weekMap = new Map();
-    for (const row of filtered) {
-      if (!row.monthKey || !row.weekInMonth) continue;
-      const weekKey = `${row.monthKey}-W${row.weekInMonth}`;
-      if (!weekMap.has(weekKey)) {
-        weekMap.set(weekKey, {
-          weekKey,
-          monthKey: row.monthKey,
-          weekInMonth: row.weekInMonth,
-          label: `${getMonthShort(row.monthKey)} Week ${row.weekInMonth}`,
-          pods: new Map(),
-        });
-      }
-      const week = weekMap.get(weekKey);
       const pod = row.podLeadName || "Unknown";
-
-      if (!week.pods.has(pod)) {
-        week.pods.set(pod, { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0 });
+      if (!podMap.has(pod)) {
+        podMap.set(pod, { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0 });
       }
-      const c = week.pods.get(pod);
+      const c = podMap.get(pod);
       const sc = String(row.statusCategory || "");
       const ss = String(row.scriptStatus || "").toLowerCase().trim();
 
@@ -702,37 +663,33 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
       if (ss.includes("completed by writer")) c.completedByWriter += 1;
     }
 
-    return Array.from(weekMap.values())
-      .sort((a, b) => a.monthKey !== b.monthKey ? a.monthKey.localeCompare(b.monthKey) : a.weekInMonth - b.weekInMonth)
-      .map((week) => {
-        const pods = Array.from(week.pods.entries())
-          .map(([podName, c]) => ({ podName, ...c, writing: c.approved - (c.uploaded + c.completedByWriter) }))
-          .sort((a, b) => b.approved - a.approved || a.podName.localeCompare(b.podName));
-        const total = pods.reduce(
-          (acc, p) => ({
-            approved: acc.approved + p.approved,
-            iterate: acc.iterate + p.iterate,
-            reviewPending: acc.reviewPending + p.reviewPending,
-            uploaded: acc.uploaded + p.uploaded,
-            inProd: acc.inProd + p.inProd,
-            approvedForProd: acc.approvedForProd + p.approvedForProd,
-            completedByWriter: acc.completedByWriter + p.completedByWriter,
-            writing: acc.writing + p.writing,
-          }),
-          { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0, writing: 0 }
-        );
-        return { ...week, pods, total };
-      });
-  }, [filtered]);
+    const pods = Array.from(podMap.entries())
+      .map(([podName, c]) => ({ podName, ...c, writing: c.approved - (c.uploaded + c.completedByWriter) }))
+      .sort((a, b) => b.approved - a.approved || a.podName.localeCompare(b.podName));
 
-  const isSingleWeek = weeks.length <= 1;
+    const total = pods.reduce(
+      (acc, p) => ({
+        approved: acc.approved + p.approved,
+        iterate: acc.iterate + p.iterate,
+        reviewPending: acc.reviewPending + p.reviewPending,
+        uploaded: acc.uploaded + p.uploaded,
+        inProd: acc.inProd + p.inProd,
+        approvedForProd: acc.approvedForProd + p.approvedForProd,
+        completedByWriter: acc.completedByWriter + p.completedByWriter,
+        writing: acc.writing + p.writing,
+      }),
+      { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0, writing: 0 }
+    );
+
+    return { pods, total };
+  }, [allBeatRows, weekStart, weekEnd]);
 
   const numCell = (v, bold = false) => (
     <td style={{ textAlign: "center", fontWeight: bold ? 700 : 400, fontSize: 13, padding: "8px 10px" }}>{v}</td>
   );
 
   if (loading) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>Loading…</div>;
-  if (!weeks.length) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>No ideation data for selected range.</div>;
+  if (!pods.length) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>No ideation data for selected range.</div>;
 
   return (
     <div style={{ marginTop: 8 }}>
@@ -741,7 +698,6 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
         <table className="ops-table" style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              {!isSingleWeek && <th style={{ textAlign: "center", width: 110 }}>Ideation date</th>}
               <th style={{ width: 120 }}>POD</th>
               <th style={{ textAlign: "center", fontWeight: 700 }}>Approved</th>
               <th style={{ textAlign: "center", fontWeight: 700 }}>Iterate</th>
@@ -754,46 +710,30 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
             </tr>
           </thead>
           <tbody>
-            {weeks.flatMap((week, wi) => {
-              const rowCount = week.pods.length + 1;
-              const weekRows = week.pods.map((pod, pi) => (
-                <tr key={`${week.weekKey}-${pod.podName}`}>
-                  {!isSingleWeek && pi === 0 && (
-                    <td rowSpan={rowCount} style={{ textAlign: "center", fontWeight: 600, fontSize: 12, verticalAlign: "middle", background: "var(--card-alt, #f7f4ee)", borderRight: "1px solid var(--border)" }}>
-                      {week.label}
-                    </td>
-                  )}
-                  <td style={{ fontSize: 12, padding: "8px 10px" }}>{pod.podName}</td>
-                  {numCell(pod.approved, true)}
-                  {numCell(pod.iterate, true)}
-                  {numCell(pod.reviewPending, true)}
-                  {numCell(pod.uploaded)}
-                  {numCell(pod.inProd)}
-                  {numCell(pod.approvedForProd)}
-                  {numCell(pod.completedByWriter)}
-                  {numCell(pod.writing)}
-                </tr>
-              ));
-              const totalRow = (
-                <tr key={`${week.weekKey}-total`} style={{ background: "var(--subtle-bg, #f0ece4)", borderTop: "2px solid var(--border)" }}>
-                  <td style={{ fontStyle: "italic", fontWeight: 600, fontSize: 12, padding: "8px 10px" }}>Total</td>
-                  {numCell(week.total.approved, true)}
-                  {numCell(week.total.iterate, true)}
-                  {numCell(week.total.reviewPending, true)}
-                  {numCell(week.total.uploaded)}
-                  {numCell(week.total.inProd)}
-                  {numCell(week.total.approvedForProd)}
-                  {numCell(week.total.completedByWriter)}
-                  {numCell(week.total.writing)}
-                </tr>
-              );
-              const spacer = wi < weeks.length - 1 ? (
-                <tr key={`spacer-${week.weekKey}`} style={{ height: 12, background: "transparent" }}>
-                  <td colSpan={isSingleWeek ? 9 : 10} style={{ border: "none", padding: 0 }} />
-                </tr>
-              ) : null;
-              return spacer ? [...weekRows, totalRow, spacer] : [...weekRows, totalRow];
-            })}
+            {pods.map((pod) => (
+              <tr key={pod.podName}>
+                <td style={{ fontSize: 12, padding: "8px 10px" }}>{pod.podName}</td>
+                {numCell(pod.approved, true)}
+                {numCell(pod.iterate, true)}
+                {numCell(pod.reviewPending, true)}
+                {numCell(pod.uploaded)}
+                {numCell(pod.inProd)}
+                {numCell(pod.approvedForProd)}
+                {numCell(pod.completedByWriter)}
+                {numCell(pod.writing)}
+              </tr>
+            ))}
+            <tr style={{ background: "var(--subtle-bg, #f0ece4)", borderTop: "2px solid var(--border)" }}>
+              <td style={{ fontStyle: "italic", fontWeight: 600, fontSize: 12, padding: "8px 10px" }}>Total</td>
+              {numCell(total.approved, true)}
+              {numCell(total.iterate, true)}
+              {numCell(total.reviewPending, true)}
+              {numCell(total.uploaded)}
+              {numCell(total.inProd)}
+              {numCell(total.approvedForProd)}
+              {numCell(total.completedByWriter)}
+              {numCell(total.writing)}
+            </tr>
           </tbody>
         </table>
       </div>
@@ -1508,7 +1448,7 @@ function ReworkBadge({ value }) {
   );
 }
 
-function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loading = false, allWorkflowRows = [] }) {
+function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loading = false }) {
   const [expandedAngles, setExpandedAngles] = useState({});
   const [sortConfig, setSortConfig] = useState({ col: "ads", dir: "desc" });
   const [collapsedPods, setCollapsedPods] = useState(new Set());
@@ -1534,24 +1474,6 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
     );
   };
 
-  // Build per-beat lookup: "show|beat" → { pod, writers }
-  const showBeatInfo = useMemo(() => {
-    const map = new Map();
-    for (const row of allWorkflowRows) {
-      const show = String(row.showName || "").trim().toLowerCase();
-      const beat = String(row.beatName || "").trim().toLowerCase();
-      if (!show || !beat) continue;
-      const key = `${show}|${beat}`;
-      if (!map.has(key)) map.set(key, { pod: "", writers: new Map() });
-      const entry = map.get(key);
-      const pod = String(row.podLeadName || "").trim();
-      const writer = String(row.writerName || "").trim();
-      if (pod && !entry.pod) entry.pod = pod;
-      if (writer) entry.writers.set(writer, true);
-    }
-    return map;
-  }, [allWorkflowRows]);
-
   // Group by POD → Writer → Show → Beat, with dynamic sorting
   const byPod = useMemo(() => {
     const { col, dir } = sortConfig;
@@ -1559,10 +1481,8 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
 
     const podMap = new Map();
     for (const row of scopedRows) {
-      const wfKey = `${row.showName.toLowerCase()}|${row.beatName.toLowerCase()}`;
-      const wfEntry = showBeatInfo.get(wfKey) || {};
-      const pod = row.podLeadName || wfEntry.pod || "Unknown";
-      const writer = wfEntry.writers && wfEntry.writers.size > 0 ? Array.from(wfEntry.writers.keys())[0] : "Unknown";
+      const pod = row.podLeadName || "Unknown";
+      const writer = row.writerName || "Unknown";
       const show = row.showName;
       const beatKey = `${show}|${row.beatName}`;
 
@@ -1572,11 +1492,12 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
       const writerEntry = podEntry.writerMap.get(writer);
       if (!writerEntry.showMap.has(show)) writerEntry.showMap.set(show, { showName: show, beatMap: new Map() });
       const showEntry = writerEntry.showMap.get(show);
-      if (!showEntry.beatMap.has(beatKey)) showEntry.beatMap.set(beatKey, { beatName: row.beatName, showName: show, attempts: 0, successCount: 0, ads: [] });
+      if (!showEntry.beatMap.has(beatKey)) showEntry.beatMap.set(beatKey, { beatName: row.beatName, showName: show, attempts: 0, successCount: 0, ftCount: 0, rwCount: 0, ads: [] });
       const beatEntry = showEntry.beatMap.get(beatKey);
       beatEntry.attempts++;
       if (row.success) beatEntry.successCount++;
-      beatEntry.ads.push({ assetCode: row.assetCode, success: row.success, cpiUsd: row.cpiUsd, absoluteCompletionPct: row.absoluteCompletionPct, ctrPct: row.ctrPct, clickToInstall: row.clickToInstall });
+      if (row.scriptType === "ft") beatEntry.ftCount++; else if (row.scriptType === "rw") beatEntry.rwCount++;
+      beatEntry.ads.push({ assetCode: row.assetCode, success: row.success, scriptType: row.scriptType, cpiUsd: row.cpiUsd, absoluteCompletionPct: row.absoluteCompletionPct, ctrPct: row.ctrPct, clickToInstall: row.clickToInstall });
     }
 
     // Sort helpers
@@ -1624,15 +1545,15 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
       }
       return m * (a.totalAttempts - b.totalAttempts);
     });
-  }, [scopedRows, showBeatInfo, sortConfig]);
+  }, [scopedRows, sortConfig]);
 
   return (
     <section className="overview-flow-section">
       <div className="overview-section-head">
         <div>
-          <div className="overview-section-title">Full Gen AI</div>
+          <div className="overview-section-title">Detailed POD Overview</div>
           <div className="overview-section-subtitle" style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-            Live sheet rows where Ad Code starts with GA or GI
+            GA/GI workflow rows · same filter as POD Throughput · success metrics from analytics
           </div>
         </div>
         <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end", display: "flex", alignItems: "center", gap: 10 }}>
@@ -1667,7 +1588,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                   <th style={{ width: 110, cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("pod")}>POD{sortIcon("pod")}</th>
                   <th style={{ width: 120, cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("writer")}>Writer{sortIcon("writer")}</th>
                   <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("show")}>Show{sortIcon("show")}</th>
-                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("beat")}>Beat{sortIcon("beat")}</th>
+                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("beat")}>Angle{sortIcon("beat")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("ads")}>Ads{sortIcon("ads")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("successful")}>Successful{sortIcon("successful")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("hitRate")}>Hit Rate{sortIcon("hitRate")}</th>
@@ -1762,7 +1683,11 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                                 {show.showName}
                               </td>
                             )}
-                            <td className="genai-beat-name">{beat.beatName || "-"}</td>
+                            <td className="genai-beat-name">
+                              <span>{beat.beatName || "-"}</span>
+                              {beat.ftCount > 0 && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "#dcfce7", color: "#15803d" }}>FT</span>}
+                              {beat.rwCount > 0 && <span style={{ marginLeft: 4, fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "#fef3c7", color: "#b45309" }}>RW</span>}
+                            </td>
                             <td className="genai-num-cell" style={{ textAlign: "right" }}>{formatMetricValue(beat.attempts)}</td>
                             <td className="genai-num-cell" style={{ textAlign: "right" }}>
                               {beat.successCount > 0
@@ -1995,11 +1920,6 @@ export function ReportsContent({
 
   return (
     <div className="section-stack">
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Detailed Overview</div>
-      <DetailedOverviewTable rows={detailRows} loading={detailLoading} />
-
-      <hr className="section-divider" />
-
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Show Wise</div>
       <ShowWiseTable
         allWorkflowRows={allWorkflowRows}
@@ -2092,7 +2012,6 @@ export default function OverviewContent({
           fullGenAiRows={Array.isArray(leadershipOverviewData?.fullGenAiRows) ? leadershipOverviewData.fullGenAiRows : []}
           fullGenAiSourceError={leadershipOverviewData?.fullGenAiSourceError || null}
           loading={podLoading}
-          allWorkflowRows={allWorkflowRows}
         />
 
       </div>

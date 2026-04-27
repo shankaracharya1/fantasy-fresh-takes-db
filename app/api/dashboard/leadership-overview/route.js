@@ -586,30 +586,66 @@ function isFunnelSuccess(row) {
   return passesAllThresholds || passesCpiOnly;
 }
 
-function buildFullGenAiRows(rows) {
-  return (Array.isArray(rows) ? rows : [])
-    .filter((row) => row?.liveDate)
-    .filter((row) => isFullGenAiAssetCode(row?.assetCode))
-    .map((row, index) => {
-      const timeParts = getTimeParts(normalizeText(row?.liveDate));
-      return {
-        id: `full-gen-ai-${index + 1}`,
-        assetCode: normalizeText(row?.assetCode),
-        showName: toTitleCase(row?.showName),
-        beatName: toTitleCase(row?.beatName),
-        podLeadName: toTitleCase(row?.podLeadName || ""),
-        productionType: normalizeText(row?.productionType),
-        success: isFunnelSuccess(row),
-        amountSpentUsd: toFiniteNumber(row?.amountSpentUsd),
-        q1CompletionPct: toFiniteNumber(row?.video0To25Pct),
-        cpiUsd: toFiniteNumber(row?.cpiUsd),
-        absoluteCompletionPct: toFiniteNumber(row?.absoluteCompletionPct),
-        ctrPct: toFiniteNumber(row?.ctrPct),
-        clickToInstall: toFiniteNumber(row?.clickToInstall),
-        ...timeParts,
-      };
-    })
-    .filter((row) => row.monthKey && row.weekInMonth);
+// Build Full Gen AI detail rows using the EXACT same filter logic as POD Throughput.
+// Each row = one script entry (no deduplication), so counts match POD Throughput exactly.
+// Success/hit-rate metrics are joined from the analytics sheet by asset code.
+function buildFullGenAiRows(workflowRows, analyticsRows, startDate, endDate) {
+  // Analytics lookup by asset code — for success metrics only
+  const analyticsMap = new Map();
+  for (const row of (Array.isArray(analyticsRows) ? analyticsRows : [])) {
+    const code = normalizeText(row?.assetCode || "").toUpperCase();
+    if (code && !analyticsMap.has(code)) {
+      analyticsMap.set(code, row);
+    }
+  }
+
+  // Same filter as buildPodThroughputRowsForRange: FT → strictLeadSubmittedDate, RW → etaToStartProd
+  const filtered = (Array.isArray(workflowRows) ? workflowRows : []).filter((row) => {
+    const source = String(row?.source || "");
+    if (!["editorial", "ready_for_production", "production", "live"].includes(source)) return false;
+    if (!isFullGenAiAssetCode(row?.assetCode)) return false;
+    const isFt = classifyFtRw(row?.reworkType) === "ft";
+    if (isFt) {
+      const d = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
+      return d && (!startDate || d >= startDate) && (!endDate || d <= endDate);
+    } else {
+      if (!["ready_for_production", "production", "live"].includes(source)) return false;
+      const d = String(row?.etaToStartProd || "").slice(0, 10);
+      return d && (!startDate || d >= startDate) && (!endDate || d <= endDate);
+    }
+  });
+
+  return filtered.map((row, index) => {
+    const code = normalizeText(row?.assetCode || "").toUpperCase();
+    const aRow = analyticsMap.get(code) || {};
+    const hasAnalytics = Object.keys(aRow).length > 0;
+    const isFt = classifyFtRw(row?.reworkType) === "ft";
+    const dateForBucket = isFt
+      ? String(row?.strictLeadSubmittedDate || "").slice(0, 10)
+      : String(row?.etaToStartProd || "").slice(0, 10);
+    const timeParts = getTimeParts(dateForBucket);
+    return {
+      id: `full-gen-ai-${index + 1}`,
+      assetCode: normalizeText(row.assetCode),
+      showName: toTitleCase(row.showName || ""),
+      beatName: toTitleCase(row.beatName || ""),
+      podLeadName: toTitleCase(row.podLeadName || ""),
+      writerName: toTitleCase(row.writerName || ""),
+      scriptType: isFt ? "ft" : "rw",
+      productionType: normalizeText(row.productionType),
+      source: String(row.source || ""),
+      // Success/hit-rate from analytics only
+      success: hasAnalytics ? isFunnelSuccess(aRow) : false,
+      hasAnalytics,
+      amountSpentUsd: toFiniteNumber(aRow?.amountSpentUsd),
+      q1CompletionPct: toFiniteNumber(aRow?.video0To25Pct),
+      cpiUsd: toFiniteNumber(aRow?.cpiUsd),
+      absoluteCompletionPct: toFiniteNumber(aRow?.absoluteCompletionPct),
+      ctrPct: toFiniteNumber(aRow?.ctrPct),
+      clickToInstall: toFiniteNumber(aRow?.clickToInstall),
+      ...timeParts,
+    };
+  });
 }
 
 function buildCurrentWeekUpdateRows(beatRows, workflowRows, weekSelection) {
@@ -880,8 +916,11 @@ export async function GET(request) {
       }
       return seen.size;
     })();
-    const fullGenAiRows = buildFullGenAiRows(analyticsResult?.rows || []).filter((row) =>
-      isDateWithinWeek(row.primaryDate, weekSelection)
+    const fullGenAiRows = buildFullGenAiRows(
+      filteredWorkflowRows,
+      analyticsResult?.rows || [],
+      weekSelection.weekStart,
+      weekSelection.weekEnd
     );
     const currentWeekUpdateRows = buildCurrentWeekUpdateRows(beatRows, filteredWorkflowRows, weekSelection);
     const podThroughputRows = buildPodThroughputRowsForRange(filteredWorkflowRows, weekSelection.weekStart, weekSelection.weekEnd);

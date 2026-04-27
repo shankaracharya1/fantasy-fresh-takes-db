@@ -550,6 +550,18 @@ select {
   letter-spacing: 0.01em;
 }
 
+/* | divider between week preset picker and manual date fields */
+.topbar-range-divider {
+  align-self: flex-end;
+  margin-bottom: 6px;
+  color: var(--border-strong, #c8c0b0);
+  font-size: 24px;
+  font-weight: 300;
+  line-height: 1;
+  user-select: none;
+  flex-shrink: 0;
+}
+
 /* ── Custom week picker dropdown ─────────────────────────────────────────── */
 .week-picker-wrap {
   display: grid;
