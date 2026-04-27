@@ -1,7 +1,7 @@
 :root {
   --dashboard-shell-x: 24px;
   --dashboard-shell-y: 24px;
-  --dashboard-filter-week-width: 196px;
+  --dashboard-filter-week-width: 232px;
   --dashboard-filter-date-width: 150px;
   --font-body: "Space Grotesk", "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-display: "Space Grotesk", "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -442,34 +442,42 @@ select {
   flex: 0 0 auto;
 }
 
-.topbar-refresh-btn {
-  display: flex;
+.topbar-sync-btn {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
+  gap: 5px;
+  padding: 0 11px;
   height: 28px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: color 150ms, border-color 150ms, background 150ms;
-}
-.topbar-refresh-btn:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms, box-shadow 150ms, color 150ms;
 }
-.topbar-refresh-btn:disabled {
+.topbar-sync-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fffdf8;
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.topbar-sync-btn:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: 0.55;
 }
-.topbar-refresh-btn.is-spinning svg {
-  animation: topbarRefreshSpin 0.8s linear infinite;
+.topbar-sync-icon {
+  flex-shrink: 0;
+}
+.topbar-sync-btn.is-spinning .topbar-sync-icon {
+  animation: topbarRefreshSpin 0.75s linear infinite;
 }
 @keyframes topbarRefreshSpin {
   from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  to   { transform: rotate(-360deg); }
 }
 
 /* date filter — no box, just inline controls */
@@ -680,8 +688,8 @@ select {
   top: calc(100% + 6px);
   left: 0;
   z-index: 200;
-  min-width: 220px;
-  max-height: 320px;
+  width: max(var(--dashboard-filter-week-width), 240px);
+  max-height: 340px;
   overflow-y: auto;
   background: var(--card);
   border: 1px solid var(--border);

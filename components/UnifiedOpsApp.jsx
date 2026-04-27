@@ -1826,15 +1826,16 @@ export default function UnifiedOpsApp() {
             <div className="app-topbar-end">
               <button
                 type="button"
-                className={`topbar-refresh-btn${cacheRefreshing ? " is-spinning" : ""}`}
+                className={`topbar-sync-btn${cacheRefreshing ? " is-spinning" : ""}`}
                 onClick={handleRefreshCache}
                 disabled={cacheRefreshing}
-                title="Force refresh — fetches latest data from Google Sheets, bypassing the cache"
-                aria-label="Force refresh data"
+                title="Sync — fetches latest data from Google Sheets, bypassing cache"
+                aria-label="Sync data from Google Sheets"
               >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <svg className="topbar-sync-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.76-4.24L9 6h6V0l-1.35 2.35Z" fill="currentColor"/>
                 </svg>
+                <span>{cacheRefreshing ? "Syncing…" : "Sync"}</span>
               </button>
               <label className="theme-switch" aria-label="Toggle dark mode">
                 <input
