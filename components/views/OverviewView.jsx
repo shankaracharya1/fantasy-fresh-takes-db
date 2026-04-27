@@ -592,7 +592,6 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
 
 function PodThroughputDetailTable({ rows = [], loading = false }) {
   const safeRows = Array.isArray(rows) ? rows : [];
-  const [expanded, setExpanded] = useState(false);
 
   // Flatten all scripts from all pods/writers, preserving pod+writer grouping order
   const detailRows = [];
@@ -617,62 +616,45 @@ function PodThroughputDetailTable({ rows = [], loading = false }) {
 
   return (
     <div style={{ marginTop: 20 }}>
-      <div
-        style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", marginBottom: 4 }}
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <span style={{
-          fontSize: 10, width: 16, height: 16, display: "inline-flex", alignItems: "center",
-          justifyContent: "center", background: "var(--subtle-bg, #f0ece4)", borderRadius: 3,
-          color: "var(--subtle)", flexShrink: 0,
-        }}>
-          {expanded ? "▾" : "▸"}
-        </span>
-        <span style={{ fontSize: 14, fontWeight: 600 }}>
-          Detailed POD Overview
-        </span>
-      </div>
-      {expanded && (
-        <div className="table-wrap" style={{ marginTop: 6 }}>
-          <table className="ops-table overview-table" style={{ fontSize: 12 }}>
-            <thead>
-              <tr>
-                <th>POD</th>
-                <th>Writer</th>
-                <th>Code</th>
-                <th>Show</th>
-                <th>Beat / Angle</th>
-                <th style={{ textAlign: "center" }}>Type</th>
-                <th style={{ textAlign: "center" }}>Date</th>
+      <div className="table-wrap" style={{ marginTop: 6 }}>
+        <table className="ops-table overview-table" style={{ fontSize: 12 }}>
+          <thead>
+            <tr>
+              <th>POD</th>
+              <th>Writer</th>
+              <th>Code</th>
+              <th>Show</th>
+              <th>Beat / Angle</th>
+              <th style={{ textAlign: "center" }}>Type</th>
+              <th style={{ textAlign: "center" }}>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="7" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+            ) : detailRows.map((r, i) => (
+              <tr key={i} style={{ background: i % 2 === 0 ? undefined : "var(--bg-deep, #f7f4ef)" }}>
+                <td style={{ fontWeight: 600 }}>{r.pod}</td>
+                <td>{getWriterLastName(r.writer)}</td>
+                <td style={{ fontFamily: "monospace", fontSize: 11 }}>{r.assetCode}</td>
+                <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.showName}</td>
+                <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.beatName}</td>
+                <td style={{ textAlign: "center" }}>
+                  <span style={{
+                    display: "inline-block", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                    background: r.type === "ft" ? "rgba(45,90,61,0.12)" : "rgba(194,112,62,0.12)",
+                    color: r.type === "ft" ? "#2d5a3d" : "#c2703e",
+                    letterSpacing: "0.04em",
+                  }}>
+                    {r.type === "ft" ? "FT" : "RW"}
+                  </span>
+                </td>
+                <td style={{ textAlign: "center", color: "var(--subtle)", fontSize: 11 }}>{r.date}</td>
               </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan="7" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
-              ) : detailRows.map((r, i) => (
-                <tr key={i} style={{ background: i % 2 === 0 ? undefined : "var(--bg-deep, #f7f4ef)" }}>
-                  <td style={{ fontWeight: 600 }}>{r.pod}</td>
-                  <td>{getWriterLastName(r.writer)}</td>
-                  <td style={{ fontFamily: "monospace", fontSize: 11 }}>{r.assetCode}</td>
-                  <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.showName}</td>
-                  <td style={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.beatName}</td>
-                  <td style={{ textAlign: "center" }}>
-                    <span style={{
-                      display: "inline-block", padding: "1px 7px", borderRadius: 4, fontSize: 10, fontWeight: 700,
-                      background: r.type === "ft" ? "rgba(45,90,61,0.12)" : "rgba(194,112,62,0.12)",
-                      color: r.type === "ft" ? "#2d5a3d" : "#c2703e",
-                      letterSpacing: "0.04em",
-                    }}>
-                      {r.type === "ft" ? "FT" : "RW"}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: "center", color: "var(--subtle)", fontSize: 11 }}>{r.date}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
