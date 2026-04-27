@@ -867,8 +867,7 @@ function buildLastWeekPayload(
     weekLabel,
     hasPlannerData: false,
     hasWeekData: freshTakeRows.length > 0,
-    emptyStateMessage:
-      freshTakeRows.length > 0 ? "" : `No released fresh takes were found in the Live tab for ${weekLabel}.`,
+    emptyStateMessage: "",
     plannerBeatCount: null,
     throughputBeatCount: freshTakeRows.length,
     goodToGoBeatsCount: null,
@@ -944,7 +943,7 @@ function buildRangePayload(
     weekLabel: rangeLabel,
     hasPlannerData: false,
     hasWeekData: freshTakeRows.length > 0,
-    emptyStateMessage: freshTakeRows.length > 0 ? "" : `No released fresh takes were found in the Live tab for ${rangeLabel}.`,
+    emptyStateMessage: "",
     plannerBeatCount: null,
     throughputBeatCount: freshTakeRows.length,
     goodToGoBeatsCount: null,
