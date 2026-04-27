@@ -428,11 +428,6 @@ function PodThroughputDetailTable({ rows = [], loading = false }) {
           {expanded ? "▾" : "▸"}
         </span>
         <span style={{ fontSize: 14, fontWeight: 600 }}>Detailed POD Overview</span>
-        {!loading && (
-          <span style={{ fontSize: 11, color: "var(--subtle)", fontWeight: 400 }}>
-            {detailRows.length} script{detailRows.length !== 1 ? "s" : ""}
-          </span>
-        )}
       </div>
       {expanded && (
         <div className="table-wrap" style={{ marginTop: 6 }}>
