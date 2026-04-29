@@ -496,6 +496,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
 
   const totalFt = safeRows.reduce((sum, pod) => sum + (pod.ftCount || 0), 0);
   const totalRw = safeRows.reduce((sum, pod) => sum + (pod.rwCount || 0), 0);
+  const totalLive = safeRows.reduce((sum, pod) => sum + (pod.liveCount || 0), 0);
 
   const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const fmtDate = (ymd) => {
@@ -554,6 +555,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
         <td style={{ fontWeight: 700, textAlign: "center" }}>{(pod.ftCount || 0) + (pod.rwCount || 0)}</td>
         <td style={{ fontWeight: 700, textAlign: "center", color: "#2d5a3d" }}>{pod.ftCount || 0}</td>
         <td style={{ fontWeight: 700, textAlign: "center", color: "#c2703e" }}>{pod.rwCount || 0}</td>
+        <td style={{ fontWeight: 700, textAlign: "center", color: "#5a7fb5" }}>{pod.liveCount || 0}</td>
       </tr>
     );
 
@@ -562,6 +564,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
         const scripts = Array.isArray(writer.scripts) ? writer.scripts : [];
         const ftScripts = scripts.filter((s) => s.type === "ft");
         const rwScripts = scripts.filter((s) => s.type !== "ft");
+        const liveScripts = scripts.filter((s) => s.source === "live");
 
         tableRows.push(
           <tr key={`writer-${pod.podLeadName}::${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)", verticalAlign: "top" }}>
@@ -576,6 +579,9 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
             </td>
             <td style={{ padding: "8px 10px", color: "#c2703e" }}>
               {scriptList(rwScripts)}
+            </td>
+            <td style={{ padding: "8px 10px", color: "#5a7fb5" }}>
+              {scriptList(liveScripts)}
             </td>
           </tr>
         );
@@ -597,11 +603,12 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
               <th style={{ textAlign: "center" }}>Total Script</th>
               <th style={{ textAlign: "center" }}>Fresh Take</th>
               <th style={{ textAlign: "center" }}>Rework</th>
+              <th style={{ textAlign: "center" }}>Live</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="4" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
+              <tr><td colSpan="5" style={{ color: "var(--subtle)" }}>Loading…</td></tr>
             ) : tableRows.length > 0 ? (
               <>
                 {tableRows}
@@ -610,10 +617,11 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
                   <td style={{ fontWeight: 700, textAlign: "center" }}>{totalFt + totalRw}</td>
                   <td style={{ fontWeight: 700, textAlign: "center", color: "#2d5a3d" }}>{totalFt}</td>
                   <td style={{ fontWeight: 700, textAlign: "center", color: "#c2703e" }}>{totalRw}</td>
+                  <td style={{ fontWeight: 700, textAlign: "center", color: "#5a7fb5" }}>{totalLive}</td>
                 </tr>
               </>
             ) : (
-              <tr><td colSpan="4">No scripts found for the selected date range.</td></tr>
+              <tr><td colSpan="5">No scripts found for the selected date range.</td></tr>
             )}
           </tbody>
         </table>

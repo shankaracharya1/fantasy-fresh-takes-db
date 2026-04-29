@@ -878,18 +878,21 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
         return acc;
       }, new Map());
 
+      const writerRows = Array.from(mergedByPodLocalAlias.values())
+        .filter((w) => normalizePodLeadName(w.writerName) !== pod.podLeadName)
+        .sort((a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName))
+        .map((w) => {
+          const scripts = (w.scripts || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.assetCode || "").localeCompare(b.assetCode || ""));
+          return { ...w, scripts, liveCount: scripts.filter((s) => s.source === "live").length };
+        });
+
       return {
         podLeadName: pod.podLeadName,
         totalScripts: pod.totalScripts,
         ftCount: pod.ftCount,
         rwCount: pod.rwCount,
-        writerRows: Array.from(mergedByPodLocalAlias.values())
-          .filter((w) => normalizePodLeadName(w.writerName) !== pod.podLeadName)
-          .sort((a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName))
-          .map((w) => ({
-            ...w,
-            scripts: (w.scripts || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.assetCode || "").localeCompare(b.assetCode || "")),
-          })),
+        liveCount: writerRows.reduce((sum, w) => sum + (w.liveCount || 0), 0),
+        writerRows,
       };
     });
 }
