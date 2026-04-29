@@ -564,7 +564,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
         const scripts = Array.isArray(writer.scripts) ? writer.scripts : [];
         const ftScripts = scripts.filter((s) => s.type === "ft");
         const rwScripts = scripts.filter((s) => s.type !== "ft");
-        const liveScripts = scripts.filter((s) => s.source === "live");
+        const liveScripts = scripts.filter((s) => String(s.scriptStatus || "").toLowerCase() === "uploaded");
 
         tableRows.push(
           <tr key={`writer-${pod.podLeadName}::${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)", verticalAlign: "top" }}>

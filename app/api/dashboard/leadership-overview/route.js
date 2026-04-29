@@ -883,7 +883,7 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
         .sort((a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName))
         .map((w) => {
           const scripts = (w.scripts || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.assetCode || "").localeCompare(b.assetCode || ""));
-          return { ...w, scripts, liveCount: scripts.filter((s) => s.source === "live").length };
+          return { ...w, scripts, liveCount: scripts.filter((s) => String(s.scriptStatus || "").toLowerCase() === "uploaded").length };
         });
 
       return {
