@@ -308,7 +308,7 @@ function buildBeatRows(rows) {
       podLeadName: normalizeText(row?.podLeadRaw || row?.podLeadName),
       showName: normalizeText(row?.showName),
       beatName: normalizeText(row?.beatName),
-      writerName: normalizeText(row?.writerName),
+      writerName: normalizeText(row?.writerName) || normalizeText(row?.beatsOwner) || "",
       statusLabel: normalizeText(row?.status || row?.beatsStatus),
       statusCategory: categorizeIdeationStatus(row?.status || row?.beatsStatus),
       scriptStatus: normalizeText(row?.scriptStatus || ""),

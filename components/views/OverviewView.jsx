@@ -630,18 +630,20 @@ function computeFourBeatsWeeks() {
 }
 
 function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", loading = false }) {
-  // Aggregate all rows within the selected date range into a single flat table.
+  const [expandedPods, setExpandedPods] = useState(new Set());
+  const [expandedWriters, setExpandedWriters] = useState(new Set());
+
+  const CATS = ["approved", "iterate", "reviewPending", "uploaded", "inProd", "approvedForProd", "completedByWriter"];
+
   const { pods, total } = useMemo(() => {
     const podMap = new Map();
 
     for (const row of allBeatRows) {
-      // Date-filter: use primaryDate when available, fall back to week-bucket bounds
       const primaryDate = String(row.primaryDate || "").slice(0, 10);
       if (primaryDate) {
         if (weekStart && primaryDate < weekStart) continue;
         if (weekEnd && primaryDate > weekEnd) continue;
       } else if (row.monthKey && row.weekInMonth) {
-        // derive the week-bucket start (approx) and check overlap
         const [y, mo] = String(row.monthKey).split("-").map(Number);
         const anchorDay = (Number(row.weekInMonth) - 1) * 7 + 1;
         const approxDate = `${y}-${String(mo).padStart(2, "0")}-${String(anchorDay).padStart(2, "0")}`;
@@ -649,53 +651,130 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
         const approxEnd = `${y}-${String(mo).padStart(2, "0")}-${String(anchorDay + 6).padStart(2, "0")}`;
         if (weekStart && approxEnd < weekStart) continue;
       } else {
-        continue; // no date info — skip
+        continue;
       }
 
-      const pod = row.podLeadName || "Unknown";
-      if (!podMap.has(pod)) {
-        podMap.set(pod, { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0 });
-      }
-      const c = podMap.get(pod);
+      const pod = row.podLeadName || "Unknown POD";
+      const writer = String(row.writerName || "").trim() || "No owner";
       const sc = String(row.statusCategory || "");
       const ss = String(row.scriptStatus || "").toLowerCase().trim();
+      const script = {
+        show: String(row.showName || "").trim(),
+        beat: String(row.beatName || "").trim(),
+        date: primaryDate,
+      };
 
-      if (sc === "approved") c.approved += 1;
-      if (sc === "iterate") c.iterate += 1;
-      if (sc === "review_pending") c.reviewPending += 1;
-      if (ss === "uploaded") c.uploaded += 1;
-      if (ss.includes("visual") || ss.includes("sound editing")) c.inProd += 1;
-      if (ss.includes("approved for production")) c.approvedForProd += 1;
-      if (ss.includes("completed by writer")) c.completedByWriter += 1;
+      // Which categories this row belongs to
+      const hits = [];
+      if (sc === "approved")       hits.push("approved");
+      if (sc === "iterate")        hits.push("iterate");
+      if (sc === "review_pending") hits.push("reviewPending");
+      if (ss === "uploaded")                                    hits.push("uploaded");
+      if (ss.includes("visual") || ss.includes("sound editing")) hits.push("inProd");
+      if (ss.includes("approved for production"))               hits.push("approvedForProd");
+      if (ss.includes("completed by writer"))                   hits.push("completedByWriter");
+
+      if (!podMap.has(pod)) {
+        podMap.set(pod, {
+          counts: Object.fromEntries(CATS.map((k) => [k, 0])),
+          writers: new Map(),
+        });
+      }
+      const podEntry = podMap.get(pod);
+
+      if (!podEntry.writers.has(writer)) {
+        podEntry.writers.set(writer, {
+          counts: Object.fromEntries(CATS.map((k) => [k, 0])),
+          lists: Object.fromEntries(CATS.map((k) => [k, []])),
+        });
+      }
+      const we = podEntry.writers.get(writer);
+
+      for (const cat of hits) {
+        podEntry.counts[cat]++;
+        we.counts[cat]++;
+        we.lists[cat].push(script);
+      }
     }
 
     const pods = Array.from(podMap.entries())
-      .map(([podName, c]) => ({ podName, ...c, writing: c.approved - (c.uploaded + c.completedByWriter) }))
-      .sort((a, b) => b.approved - a.approved || a.podName.localeCompare(b.podName));
+      .map(([podName, d]) => ({
+        podName,
+        counts: d.counts,
+        writing: d.counts.approved - (d.counts.uploaded + d.counts.completedByWriter),
+        writers: Array.from(d.writers.entries())
+          .map(([name, wd]) => ({
+            writerName: name,
+            counts: wd.counts,
+            lists: wd.lists,
+            writing: wd.counts.approved - (wd.counts.uploaded + wd.counts.completedByWriter),
+          }))
+          .sort((a, b) => b.counts.approved - a.counts.approved || a.writerName.localeCompare(b.writerName)),
+      }))
+      .sort((a, b) => b.counts.approved - a.counts.approved || a.podName.localeCompare(b.podName));
 
     const total = pods.reduce(
-      (acc, p) => ({
-        approved: acc.approved + p.approved,
-        iterate: acc.iterate + p.iterate,
-        reviewPending: acc.reviewPending + p.reviewPending,
-        uploaded: acc.uploaded + p.uploaded,
-        inProd: acc.inProd + p.inProd,
-        approvedForProd: acc.approvedForProd + p.approvedForProd,
-        completedByWriter: acc.completedByWriter + p.completedByWriter,
-        writing: acc.writing + p.writing,
-      }),
-      { approved: 0, iterate: 0, reviewPending: 0, uploaded: 0, inProd: 0, approvedForProd: 0, completedByWriter: 0, writing: 0 }
+      (acc, p) => {
+        for (const k of CATS) acc[k] += p.counts[k];
+        acc.writing += p.writing;
+        return acc;
+      },
+      Object.fromEntries([...CATS, "writing"].map((k) => [k, 0]))
     );
 
     return { pods, total };
   }, [allBeatRows, weekStart, weekEnd]);
 
+  const togglePod = (name) => setExpandedPods((prev) => {
+    const next = new Set(prev); next.has(name) ? next.delete(name) : next.add(name); return next;
+  });
+  const toggleWriter = (key) => setExpandedWriters((prev) => {
+    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next;
+  });
+
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmtD(ymd) {
+    if (!ymd) return "";
+    const d = new Date(ymd + "T00:00:00Z");
+    return `${monthNames[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  }
+
+  function statusCell(scripts) {
+    if (!scripts || scripts.length === 0) return <span style={{ color: "#bbb" }}>—</span>;
+    const byDate = new Map();
+    for (const s of [...scripts].sort((a, b) => (a.date||"").localeCompare(b.date||""))) {
+      const k = s.date || "unknown";
+      if (!byDate.has(k)) byDate.set(k, []);
+      byDate.get(k).push(s);
+    }
+    return (
+      <div style={{ textAlign: "left", minWidth: 100 }}>
+        {Array.from(byDate.entries()).map(([date, items]) => (
+          <div key={date} style={{ marginBottom: 4 }}>
+            <div style={{ fontSize: 9, fontWeight: 800, color: "#2d4a2d", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 1 }}>
+              {fmtD(date)}
+            </div>
+            {items.map((s, si) => (
+              <div key={si} style={{ paddingLeft: 2, lineHeight: 1.6 }}>
+                {s.show && <span style={{ color: "#444", fontSize: 11, fontWeight: 600 }}>{s.show}</span>}
+                {s.beat && <span style={{ color: "#888", fontSize: 10 }}> · {s.beat}</span>}
+                {!s.show && !s.beat && <span style={{ color: "#aaa", fontSize: 10 }}>—</span>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const numCell = (v, bold = false) => (
-    <td style={{ textAlign: "center", fontWeight: bold ? 700 : 400, fontSize: 13, padding: "8px 10px" }}>{v}</td>
+    <td style={{ textAlign: "center", fontWeight: bold ? 700 : 400, fontSize: 13, padding: "8px 10px" }}>{v || "—"}</td>
   );
 
   if (loading) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>Loading…</div>;
   if (!pods.length) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>No ideation data for selected range.</div>;
+
+  const TOTAL_COLS = 9; // POD + 7 status cols + Writing
 
   return (
     <div style={{ marginTop: 8 }}>
@@ -704,7 +783,7 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
         <table className="ops-table" style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={{ width: 120 }}>POD</th>
+              <th style={{ minWidth: 130 }}>POD / Writer</th>
               <th style={{ textAlign: "center", fontWeight: 700 }}>Approved</th>
               <th style={{ textAlign: "center", fontWeight: 700 }}>Iterate</th>
               <th style={{ textAlign: "center", fontWeight: 700 }}>Review pending</th>
@@ -716,20 +795,84 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
             </tr>
           </thead>
           <tbody>
-            {pods.map((pod) => (
-              <tr key={pod.podName}>
-                <td style={{ fontSize: 12, padding: "8px 10px" }}>{pod.podName}</td>
-                {numCell(pod.approved, true)}
-                {numCell(pod.iterate, true)}
-                {numCell(pod.reviewPending, true)}
-                {numCell(pod.uploaded)}
-                {numCell(pod.inProd)}
-                {numCell(pod.approvedForProd)}
-                {numCell(pod.completedByWriter)}
-                {numCell(pod.writing)}
-              </tr>
-            ))}
-            <tr style={{ background: "var(--subtle-bg, #f0ece4)", borderTop: "2px solid var(--border)" }}>
+            {pods.flatMap((pod) => {
+              const isPodOpen = expandedPods.has(pod.podName);
+
+              const podRow = (
+                <tr key={`pod-${pod.podName}`} style={{ cursor: "pointer", userSelect: "none" }} onClick={() => togglePod(pod.podName)}>
+                  <td style={{ fontSize: 13, fontWeight: 700, padding: "8px 10px" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 10, width: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--subtle-bg, #f0ece4)", borderRadius: 3, color: "var(--subtle)", flexShrink: 0 }}>
+                        {isPodOpen ? "▾" : "▸"}
+                      </span>
+                      {pod.podName}
+                      <span style={{ fontWeight: 400, fontSize: 11, color: "var(--subtle)" }}>{pod.writers.length} writer{pod.writers.length !== 1 ? "s" : ""}</span>
+                    </span>
+                  </td>
+                  {numCell(pod.counts.approved, true)}
+                  {numCell(pod.counts.iterate, true)}
+                  {numCell(pod.counts.reviewPending, true)}
+                  {numCell(pod.counts.uploaded)}
+                  {numCell(pod.counts.inProd)}
+                  {numCell(pod.counts.approvedForProd)}
+                  {numCell(pod.counts.completedByWriter)}
+                  {numCell(pod.writing)}
+                </tr>
+              );
+
+              if (!isPodOpen) return [podRow];
+
+              const writerEls = pod.writers.flatMap((w) => {
+                const wKey = `${pod.podName}::${w.writerName}`;
+                const isWriterOpen = expandedWriters.has(wKey);
+
+                const countRow = (
+                  <tr key={`w-${wKey}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
+                    <td style={{ fontSize: 12, padding: "6px 10px 6px 24px" }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleWriter(wKey); }}
+                        style={{
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          width: 16, height: 16, marginRight: 6, flexShrink: 0,
+                          border: "1.5px solid #2d4a2d", borderRadius: 3,
+                          background: isWriterOpen ? "#2d4a2d" : "transparent",
+                          color: isWriterOpen ? "#fff" : "#2d4a2d",
+                          fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0,
+                        }}
+                      >
+                        {isWriterOpen ? "−" : "+"}
+                      </button>
+                      {w.writerName}
+                    </td>
+                    {numCell(w.counts.approved, true)}
+                    {numCell(w.counts.iterate, true)}
+                    {numCell(w.counts.reviewPending, true)}
+                    {numCell(w.counts.uploaded)}
+                    {numCell(w.counts.inProd)}
+                    {numCell(w.counts.approvedForProd)}
+                    {numCell(w.counts.completedByWriter)}
+                    {numCell(w.writing)}
+                  </tr>
+                );
+
+                const detailRow = isWriterOpen ? (
+                  <tr key={`wd-${wKey}`} style={{ background: "#f6f8f3", verticalAlign: "top" }}>
+                    <td style={{ padding: "6px 10px" }} />
+                    {CATS.map((cat) => (
+                      <td key={cat} style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9", verticalAlign: "top" }}>
+                        {statusCell(w.lists[cat])}
+                      </td>
+                    ))}
+                    <td style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9" }} />
+                  </tr>
+                ) : null;
+
+                return [countRow, detailRow].filter(Boolean);
+              });
+
+              return [podRow, ...writerEls];
+            })}
+            <tr style={{ background: "var(--subtle-bg, #f0ece4)", borderTop: "2px solid var(--border)", fontWeight: 700 }}>
               <td style={{ fontStyle: "italic", fontWeight: 600, fontSize: 12, padding: "8px 10px" }}>Total</td>
               {numCell(total.approved, true)}
               {numCell(total.iterate, true)}
@@ -762,8 +905,8 @@ function PodWriterScriptTable({ allBeatRows = [], allWorkflowRows = [], weekStar
     const approvedMap = new Map(); // pod → Map(writer → count)
     for (const row of allBeatRows) {
       if (row.statusCategory !== "approved") continue;
-      const pod = row.podLeadName || "Unknown";
-      const writer = row.writerName || "Unknown";
+      const pod = row.podLeadName || "Unknown POD";
+      const writer = row.writerName || "No owner";
       if (!approvedMap.has(pod)) approvedMap.set(pod, new Map());
       const wm = approvedMap.get(pod);
       wm.set(writer, (wm.get(writer) || 0) + 1);
@@ -782,8 +925,8 @@ function PodWriterScriptTable({ allBeatRows = [], allWorkflowRows = [], weekStar
     const completedMap = new Map(); // pod → Map(writer → count) — live only
 
     for (const row of dateFiltered) {
-      const pod = row.podLeadName || "Unknown";
-      const writer = row.writerName || "Unknown";
+      const pod = row.podLeadName || "Unknown POD";
+      const writer = row.writerName || "No owner";
       if (!submittedMap.has(pod)) submittedMap.set(pod, new Map());
       const sm = submittedMap.get(pod);
       sm.set(writer, (sm.get(writer) || 0) + 1);
@@ -898,8 +1041,8 @@ function PodWriterScriptTable({ allBeatRows = [], allWorkflowRows = [], weekStar
 
 function BeatsOverviewTable({ allBeatRows = [], loading = false }) {
   const [expandedPods, setExpandedPods] = useState(new Set());
+  const [expandedWriters, setExpandedWriters] = useState(new Set());
 
-  // Stable for the lifetime of the session — today doesn't change mid-session
   const weeks = useMemo(() => computeFourBeatsWeeks(), []);
 
   const podMap = useMemo(() => {
@@ -908,8 +1051,7 @@ function BeatsOverviewTable({ allBeatRows = [], loading = false }) {
     for (const row of allBeatRows) {
       if (row?.statusCategory !== "approved") continue;
       const pod = String(row?.podLeadName || "").trim() || "Unknown";
-      const writer = String(row?.writerName || "").trim() || "Unknown";
-      // Match using the same monthKey + weekInMonth fields the API already computed
+      const writer = String(row?.writerName || "").trim() || "No owner";
       const weekIdx = weeks.findIndex(
         (w) => w.monthKey === row.monthKey && w.weekInMonth === row.weekInMonth
       );
@@ -920,10 +1062,20 @@ function BeatsOverviewTable({ allBeatRows = [], loading = false }) {
       podEntry.weekCounts[weekIdx]++;
       podEntry.total++;
 
-      if (!podEntry.writers.has(writer)) podEntry.writers.set(writer, { weekCounts: [0, 0, 0, 0], total: 0 });
+      if (!podEntry.writers.has(writer)) {
+        podEntry.writers.set(writer, {
+          weekCounts: [0, 0, 0, 0], total: 0,
+          scripts: [[], [], [], []], // per week: [{ show, beat, date }]
+        });
+      }
       const writerEntry = podEntry.writers.get(writer);
       writerEntry.weekCounts[weekIdx]++;
       writerEntry.total++;
+      writerEntry.scripts[weekIdx].push({
+        show: String(row?.showName || "").trim(),
+        beat: String(row?.beatName || "").trim(),
+        date: String(row?.primaryDate || "").slice(0, 10),
+      });
     }
     return map;
   }, [allBeatRows, weeks]);
@@ -935,7 +1087,7 @@ function BeatsOverviewTable({ allBeatRows = [], loading = false }) {
         total: data.total,
         weekCounts: data.weekCounts,
         writerRows: Array.from(data.writers.entries())
-          .map(([writer, wd]) => ({ writerName: writer, total: wd.total, weekCounts: wd.weekCounts }))
+          .map(([writer, wd]) => ({ writerName: writer, total: wd.total, weekCounts: wd.weekCounts, scripts: wd.scripts }))
           .sort((a, b) => b.total - a.total || a.writerName.localeCompare(b.writerName)),
       }))
       .sort((a, b) => b.total - a.total || a.podLeadName.localeCompare(b.podLeadName)),
@@ -945,12 +1097,48 @@ function BeatsOverviewTable({ allBeatRows = [], loading = false }) {
   const weekTotals = weeks.map((_, i) => podRows.reduce((s, r) => s + r.weekCounts[i], 0));
 
   const togglePod = (name) => setExpandedPods((prev) => {
-    const next = new Set(prev);
-    next.has(name) ? next.delete(name) : next.add(name);
-    return next;
+    const next = new Set(prev); next.has(name) ? next.delete(name) : next.add(name); return next;
+  });
+  const toggleWriter = (key) => setExpandedWriters((prev) => {
+    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next;
   });
 
   const colCount = 2 + weeks.length;
+
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmtD(ymd) {
+    if (!ymd) return "";
+    const d = new Date(ymd + "T00:00:00Z");
+    return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  }
+
+  function beatsCell(scripts) {
+    if (!scripts || scripts.length === 0) return <span style={{ color: "#bbb", fontSize: 11 }}>—</span>;
+    const byDate = new Map();
+    for (const s of [...scripts].sort((a, b) => (a.date||"").localeCompare(b.date||""))) {
+      const key = s.date || "unknown";
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key).push(s);
+    }
+    return (
+      <div style={{ textAlign: "left" }}>
+        {Array.from(byDate.entries()).map(([date, items]) => (
+          <div key={date} style={{ marginBottom: 5 }}>
+            <div style={{ fontSize: 9, fontWeight: 800, color: "#2d4a2d", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>
+              {fmtD(date)}
+            </div>
+            {items.map((s, si) => (
+              <div key={si} style={{ display: "flex", alignItems: "baseline", gap: 5, paddingLeft: 2, lineHeight: 1.6, flexWrap: "wrap" }}>
+                {s.show && <span style={{ color: "#444", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap" }}>{s.show}</span>}
+                {s.beat && <span style={{ color: "#888", fontSize: 10, whiteSpace: "nowrap" }}>· {s.beat}</span>}
+                {!s.show && !s.beat && <span style={{ color: "#aaa", fontSize: 10 }}>—</span>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -977,14 +1165,14 @@ function BeatsOverviewTable({ allBeatRows = [], loading = false }) {
             ) : (
               <>
                 {podRows.flatMap((pod) => {
-                  const isExpanded = expandedPods.has(pod.podLeadName);
-                  return [
+                  const isPodExpanded = expandedPods.has(pod.podLeadName);
+                  const podRow = (
                     <tr key={`pod-${pod.podLeadName}`} style={{ cursor: pod.writerRows.length ? "pointer" : undefined, userSelect: "none" }} onClick={() => pod.writerRows.length && togglePod(pod.podLeadName)}>
                       <td style={{ fontWeight: 700 }}>
                         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                           {pod.writerRows.length > 0 && (
                             <span style={{ fontSize: 10, width: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--subtle-bg, #f0ece4)", borderRadius: 3, color: "var(--subtle)", flexShrink: 0 }}>
-                              {isExpanded ? "▾" : "▸"}
+                              {isPodExpanded ? "▾" : "▸"}
                             </span>
                           )}
                           {pod.podLeadName}
@@ -999,17 +1187,57 @@ function BeatsOverviewTable({ allBeatRows = [], loading = false }) {
                       {pod.weekCounts.map((count, i) => (
                         <td key={i} style={{ textAlign: "center" }}>{count > 0 ? count : "—"}</td>
                       ))}
-                    </tr>,
-                    ...(isExpanded ? pod.writerRows.map((writer) => (
-                      <tr key={`writer-${pod.podLeadName}-${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
-                        <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>• {writer.writerName}</td>
+                    </tr>
+                  );
+
+                  if (!isPodExpanded) return [podRow];
+
+                  const writerRowsEl = pod.writerRows.flatMap((writer) => {
+                    const writerKey = `${pod.podLeadName}::${writer.writerName}`;
+                    const isWriterOpen = expandedWriters.has(writerKey);
+
+                    const countRow = (
+                      <tr key={`writer-${writerKey}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
+                        <td style={{ paddingLeft: 20, fontSize: 12 }}>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleWriter(writerKey); }}
+                            style={{
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                              width: 16, height: 16, marginRight: 6, flexShrink: 0,
+                              border: "1.5px solid #2d4a2d", borderRadius: 3,
+                              background: isWriterOpen ? "#2d4a2d" : "transparent",
+                              color: isWriterOpen ? "#fff" : "#2d4a2d",
+                              fontSize: 12, fontWeight: 700, lineHeight: 1,
+                              cursor: "pointer", padding: 0, verticalAlign: "middle",
+                            }}
+                          >
+                            {isWriterOpen ? "−" : "+"}
+                          </button>
+                          {writer.writerName}
+                        </td>
                         <td style={{ textAlign: "center", fontSize: 12, fontWeight: 600 }}>{writer.total}</td>
                         {writer.weekCounts.map((count, i) => (
-                          <td key={i} style={{ textAlign: "center", fontSize: 12 }}>{count > 0 ? count : "—"}</td>
+                          <td key={i} style={{ textAlign: "center", fontSize: 12, fontWeight: 600 }}>{count > 0 ? count : "—"}</td>
                         ))}
                       </tr>
-                    )) : []),
-                  ];
+                    );
+
+                    const detailRow = isWriterOpen ? (
+                      <tr key={`writer-detail-${writerKey}`} style={{ background: "#f6f8f3", verticalAlign: "top" }}>
+                        <td style={{ padding: "6px 8px" }} />
+                        <td style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9" }} />
+                        {writer.scripts.map((weekScripts, wi) => (
+                          <td key={wi} style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9", verticalAlign: "top" }}>
+                            {beatsCell(weekScripts)}
+                          </td>
+                        ))}
+                      </tr>
+                    ) : null;
+
+                    return [countRow, detailRow].filter(Boolean);
+                  });
+
+                  return [podRow, ...writerRowsEl];
                 })}
                 <tr style={{ borderTop: "2px solid var(--border)", background: "var(--subtle-bg, #f0ece4)", fontWeight: 700 }}>
                   <td>Total</td>
@@ -1487,8 +1715,8 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
 
     const podMap = new Map();
     for (const row of scopedRows) {
-      const pod = row.podLeadName || "Unknown";
-      const writer = row.writerName || "Unknown";
+      const pod = row.podLeadName || "Unknown POD";
+      const writer = row.writerName || "No owner";
       const show = row.showName;
       const beatKey = `${show}|${row.beatName}`;
 
@@ -1961,6 +2189,10 @@ function fmtShortRange(start, end) {
 }
 
 function ThroughputPerWriterTable({ allWorkflowRows = [], endDate = "", loading = false }) {
+  const [sortCol, setSortCol] = useState("totalFt");
+  const [sortDir, setSortDir] = useState("desc");
+  const [expanded, setExpanded] = useState(new Set());
+
   const anchor = endDate || new Date().toISOString().slice(0, 10);
 
   // 3 consecutive 7-day windows ending at anchor
@@ -1968,9 +2200,9 @@ function ThroughputPerWriterTable({ allWorkflowRows = [], endDate = "", loading 
     { start: addDays(anchor, -20), end: addDays(anchor, -14) },
     { start: addDays(anchor, -13), end: addDays(anchor, -7) },
     { start: addDays(anchor, -6),  end: anchor },
-  ].map((w, i) => ({ ...w, label: `Week ${i + 1} (${fmtShortRange(w.start, w.end)})` }));
+  ].map((w, i) => ({ ...w, label: `W${i + 1} ${fmtShortRange(w.start, w.end)}` }));
 
-  // Build pod → writer → { ft:[w1,w2,w3], rw:[w1,w2,w3] }
+  // Build pod → writer → { ft, rw counts + scripts per week }
   const podMap = new Map();
   for (const row of allWorkflowRows) {
     const sld = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
@@ -1981,16 +2213,33 @@ function ThroughputPerWriterTable({ allWorkflowRows = [], endDate = "", loading 
     if (!type) continue;
     const pod = normPodClient(row?.podLeadName);
     if (!pod) continue;
-    const writer = String(row?.writerName || "").trim() || "Unknown";
+    const writer = String(row?.writerName || "").trim() || "No owner";
 
     if (!podMap.has(pod)) podMap.set(pod, new Map());
     const wMap = podMap.get(pod);
-    if (!wMap.has(writer)) wMap.set(writer, { ft: [0, 0, 0], rw: [0, 0, 0] });
-    wMap.get(writer)[type][wi]++;
+    if (!wMap.has(writer)) wMap.set(writer, {
+      ft: [0, 0, 0], rw: [0, 0, 0],
+      scripts: [
+        { ft: [], rw: [] },
+        { ft: [], rw: [] },
+        { ft: [], rw: [] },
+      ],
+    });
+    const entry = wMap.get(writer);
+    entry[type][wi]++;
+    entry.scripts[wi][type].push({
+      code: String(row?.assetCode || "").trim(),
+      show: String(row?.showName || "").trim(),
+      angle: String(row?.beatName || "").trim(),
+      date: sld,
+    });
   }
 
-  // Sort pods by display order
+  // Sort pods — by name when sortCol==="pod", otherwise by display order
   const sortedPods = Array.from(podMap.entries()).sort((a, b) => {
+    if (sortCol === "pod") {
+      return sortDir === "asc" ? a[0].localeCompare(b[0]) : b[0].localeCompare(a[0]);
+    }
     const ai = POD_DISPLAY_ORDER.indexOf(a[0]);
     const bi = POD_DISPLAY_ORDER.indexOf(b[0]);
     if (ai !== -1 && bi !== -1) return ai - bi;
@@ -2003,48 +2252,107 @@ function ThroughputPerWriterTable({ allWorkflowRows = [], endDate = "", loading 
     <div style={{ color: "var(--subtle)", fontSize: 13, padding: "10px 0" }}>No throughput data available for the last 3 weeks.</div>
   );
 
+  function handleSort(col) {
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortCol(col);
+      setSortDir("desc");
+    }
+  }
+
+  function sortIcon(col) {
+    if (sortCol !== col) return <span style={{ opacity: 0.7, fontSize: 13, marginLeft: 4, fontWeight: 900 }}>⇅</span>;
+    return <span style={{ fontSize: 13, marginLeft: 4, fontWeight: 900 }}>{sortDir === "asc" ? "▲" : "▼"}</span>;
+  }
+
+  function sortWriters(entries) {
+    return [...entries].sort((a, b) => {
+      const [wa, da] = a;
+      const [wb, db] = b;
+      let va, vb;
+      switch (sortCol) {
+        case "writer":  va = wa; vb = wb; break;
+        case "w0ft":    va = da.ft[0]; vb = db.ft[0]; break;
+        case "w0rw":    va = da.rw[0]; vb = db.rw[0]; break;
+        case "w1ft":    va = da.ft[1]; vb = db.ft[1]; break;
+        case "w1rw":    va = da.rw[1]; vb = db.rw[1]; break;
+        case "w2ft":    va = da.ft[2]; vb = db.ft[2]; break;
+        case "w2rw":    va = da.rw[2]; vb = db.rw[2]; break;
+        case "w0":      va = da.ft[0]; vb = db.ft[0]; break;
+        case "w1":      va = da.ft[1]; vb = db.ft[1]; break;
+        case "w2":      va = da.ft[2]; vb = db.ft[2]; break;
+        case "avgFt":   va = da.ft.reduce((s,v)=>s+v,0); vb = db.ft.reduce((s,v)=>s+v,0); break;
+        default:        va = da.ft.reduce((s,v)=>s+v,0); vb = db.ft.reduce((s,v)=>s+v,0);
+      }
+      if (sortCol === "writer") return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+      return sortDir === "asc" ? va - vb : vb - va;
+    });
+  }
+
+  function toggleExpand(key) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
   const FT_TARGET = 1.5;
-  const thBase = { background: "#2d4a2d", color: "#fff", padding: "6px 10px", fontWeight: 600, fontSize: 11, textAlign: "center", whiteSpace: "nowrap" };
+  const COLS = 10; // POD + Writer + 3×(FT+RW) + TotalFT + AvgFT
+  const thBase = {
+    background: "#2d4a2d", color: "#fff", padding: "6px 8px",
+    fontWeight: 700, fontSize: 11, textAlign: "center",
+    whiteSpace: "nowrap", cursor: "pointer", userSelect: "none",
+  };
   const thLeft = { ...thBase, textAlign: "left" };
 
   return (
-    <div>
+    <div style={{ width: "0", minWidth: "100%" }}>
       <div style={{ fontSize: 14, fontWeight: 700, textAlign: "center", marginBottom: 8 }}>
         Throughput per Writer per POD (Last 3 Weeks)
       </div>
-      <div className="table-wrap">
-        <table className="ops-table" style={{ fontSize: 12, width: "100%", borderCollapse: "collapse" }}>
+      <div className="table-wrap" style={{ overflowX: "auto" }}>
+        <table className="ops-table" style={{ fontSize: 12, borderCollapse: "collapse", minWidth: 860 }}>
           <thead>
             <tr>
-              <th rowSpan={2} style={{ ...thLeft, verticalAlign: "middle" }}>POD</th>
-              <th rowSpan={2} style={{ ...thLeft, verticalAlign: "middle" }}>Writer</th>
+              <th rowSpan={2} onClick={() => handleSort("pod")} style={{ ...thLeft, verticalAlign: "middle", minWidth: 70 }}>
+                POD{sortIcon("pod")}
+              </th>
+              <th rowSpan={2} onClick={() => handleSort("writer")} style={{ ...thLeft, verticalAlign: "middle", minWidth: 130 }}>
+                Writer{sortIcon("writer")}
+              </th>
               {weeks.map((w, i) => (
-                <th key={i} colSpan={2} style={{ ...thBase, borderBottom: "1px solid rgba(255,255,255,0.3)" }}>{w.label}</th>
+                <th key={i} colSpan={2} onClick={() => handleSort(`w${i}`)} style={{ ...thBase, borderBottom: "1px solid rgba(255,255,255,0.3)" }}>
+                  {w.label}{sortIcon(`w${i}`)}
+                </th>
               ))}
-              <th rowSpan={2} style={{ ...thBase, verticalAlign: "middle" }}>Total Fresh<br/>Takes (3 wks)</th>
-              <th rowSpan={2} style={{ ...thBase, verticalAlign: "middle" }}>Avg Fresh Takes per week<br/><em style={{ fontWeight: 400 }}>Rolling, L3W</em></th>
+              <th rowSpan={2} onClick={() => handleSort("totalFt")} style={{ ...thBase, verticalAlign: "middle", minWidth: 72 }}>
+                Total FT{sortIcon("totalFt")}
+              </th>
+              <th rowSpan={2} onClick={() => handleSort("avgFt")} style={{ ...thBase, verticalAlign: "middle", minWidth: 80 }}>
+                Avg FT/wk{sortIcon("avgFt")}<br/><em style={{ fontWeight: 400, fontSize: 9 }}>Rolling L3W</em>
+              </th>
             </tr>
             <tr>
-              {weeks.map((_, i) => (
-                [
-                  <th key={`${i}ft`} style={{ ...thBase, fontSize: 10 }}>Fresh Takes</th>,
-                  <th key={`${i}rw`} style={{ ...thBase, fontSize: 10 }}>Reworks</th>,
-                ]
-              ))}
+              {weeks.map((_, i) => ([
+                <th key={`${i}ft`} onClick={() => handleSort(`w${i}ft`)} style={{ ...thBase, fontSize: 10, minWidth: 56 }}>
+                  FT{sortIcon(`w${i}ft`)}
+                </th>,
+                <th key={`${i}rw`} onClick={() => handleSort(`w${i}rw`)} style={{ ...thBase, fontSize: 10, minWidth: 56 }}>
+                  RW{sortIcon(`w${i}rw`)}
+                </th>,
+              ]))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} style={{ color: "var(--subtle)", padding: 10 }}>Loading…</td></tr>
+              <tr><td colSpan={COLS} style={{ color: "var(--subtle)", padding: 10 }}>Loading…</td></tr>
             ) : sortedPods.map(([podName, writerMap]) => {
               const podTotals = { ft: [0, 0, 0], rw: [0, 0, 0] };
-              const writers = Array.from(writerMap.entries()).sort((a, b) => {
-                const at = a[1].ft.reduce((s, v) => s + v, 0);
-                const bt = b[1].ft.reduce((s, v) => s + v, 0);
-                return bt - at || a[0].localeCompare(b[0]);
-              });
+              const writers = sortWriters(Array.from(writerMap.entries()));
 
-              const writerRows = writers.map(([writer, data]) => {
+              const rows = writers.flatMap(([writer, data]) => {
                 for (let i = 0; i < 3; i++) {
                   podTotals.ft[i] += data.ft[i];
                   podTotals.rw[i] += data.rw[i];
@@ -2052,20 +2360,96 @@ function ThroughputPerWriterTable({ allWorkflowRows = [], endDate = "", loading 
                 const totalFt = data.ft.reduce((s, v) => s + v, 0);
                 const avgFt = totalFt / 3;
                 const below = avgFt < FT_TARGET;
-                return (
-                  <tr key={writer}>
-                    <td style={{ padding: "4px 10px" }}>{podName}</td>
-                    <td style={{ padding: "4px 10px" }}>{writer}</td>
+                const rowKey = `${podName}::${writer}`;
+                const isOpen = expanded.has(rowKey);
+
+                const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                function fmtD(ymd) {
+                  if (!ymd) return "";
+                  const d = new Date(ymd + "T00:00:00Z");
+                  return `${months[d.getUTCMonth()]} ${d.getUTCDate()}`;
+                }
+
+                // Render stacked assets grouped by date for one cell
+                function cellDetail(scripts) {
+                  if (!scripts || scripts.length === 0) return <span style={{ color: "#bbb", fontSize: 11 }}>—</span>;
+                  const byDate = new Map();
+                  for (const s of [...scripts].sort((a, b) => (a.date||"").localeCompare(b.date||""))) {
+                    if (!byDate.has(s.date)) byDate.set(s.date, []);
+                    byDate.get(s.date).push(s);
+                  }
+                  return (
+                    <div style={{ textAlign: "left" }}>
+                      {Array.from(byDate.entries()).map(([date, items]) => (
+                        <div key={date} style={{ marginBottom: 5 }}>
+                          <div style={{ fontSize: 9, fontWeight: 800, color: "#2d4a2d", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>
+                            {fmtD(date)}
+                          </div>
+                          {items.map((s, si) => (
+                            <div key={si} style={{ display: "flex", alignItems: "baseline", gap: 5, paddingLeft: 2, lineHeight: 1.6, flexWrap: "wrap" }}>
+                              <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: 11, whiteSpace: "nowrap", color: "#1a3a1a" }}>{s.code || "—"}</span>
+                              {s.show && <span style={{ color: "#444", fontSize: 10, whiteSpace: "nowrap" }}>{s.show}</span>}
+                              {s.angle && <span style={{ color: "#888", fontSize: 10, whiteSpace: "nowrap" }}>· {s.angle}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+
+                // Count row — always visible
+                const countRow = (
+                  <tr key={rowKey}>
+                    <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>{podName}</td>
+                    <td style={{ padding: "5px 8px", whiteSpace: "nowrap" }}>
+                      <button
+                        onClick={() => toggleExpand(rowKey)}
+                        title={isOpen ? "Collapse" : "Expand scripts"}
+                        style={{
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          width: 17, height: 17, marginRight: 6, flexShrink: 0,
+                          border: "1.5px solid #2d4a2d", borderRadius: 3,
+                          background: isOpen ? "#2d4a2d" : "transparent",
+                          color: isOpen ? "#fff" : "#2d4a2d",
+                          fontSize: 13, fontWeight: 700, lineHeight: 1,
+                          cursor: "pointer", padding: 0, verticalAlign: "middle",
+                        }}
+                      >
+                        {isOpen ? "−" : "+"}
+                      </button>
+                      {writer}
+                    </td>
                     {data.ft.map((ft, wi) => ([
-                      <td key={`${wi}ft`} style={{ textAlign: "center", padding: "4px 8px" }}>{ft}</td>,
-                      <td key={`${wi}rw`} style={{ textAlign: "center", padding: "4px 8px" }}>{data.rw[wi]}</td>,
+                      <td key={`${wi}ft`} style={{ textAlign: "center", padding: "5px 8px", fontWeight: 600 }}>{ft}</td>,
+                      <td key={`${wi}rw`} style={{ textAlign: "center", padding: "5px 8px", fontWeight: 600 }}>{data.rw[wi]}</td>,
                     ]))}
-                    <td style={{ textAlign: "center", padding: "4px 8px", fontWeight: 600 }}>{totalFt}</td>
-                    <td style={{ textAlign: "center", padding: "4px 8px", fontWeight: 700, background: below ? "#fce4ec" : undefined, color: below ? "#b71c1c" : undefined }}>
+                    <td style={{ textAlign: "center", padding: "5px 8px", fontWeight: 700 }}>{totalFt}</td>
+                    <td style={{ textAlign: "center", padding: "5px 8px", fontWeight: 700, background: below ? "#fce4ec" : undefined, color: below ? "#b71c1c" : undefined }}>
                       {avgFt.toFixed(2)}
                     </td>
                   </tr>
                 );
+
+                // Detail row — only shown when expanded, assets stacked inside each column cell
+                const detailRow = isOpen ? (
+                  <tr key={`${rowKey}-detail`} style={{ background: "#f6f8f3", verticalAlign: "top" }}>
+                    <td style={{ padding: "6px 8px" }} />
+                    <td style={{ padding: "6px 8px" }} />
+                    {data.ft.map((_, wi) => ([
+                      <td key={`${wi}ft`} style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9" }}>
+                        {cellDetail(data.scripts[wi].ft)}
+                      </td>,
+                      <td key={`${wi}rw`} style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9" }}>
+                        {cellDetail(data.scripts[wi].rw)}
+                      </td>,
+                    ]))}
+                    <td style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9" }} />
+                    <td style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9" }} />
+                  </tr>
+                ) : null;
+
+                return [countRow, detailRow].filter(Boolean);
               });
 
               const podTotalFt = podTotals.ft.reduce((s, v) => s + v, 0);
@@ -2073,7 +2457,7 @@ function ThroughputPerWriterTable({ allWorkflowRows = [], endDate = "", loading 
 
               const totalRow = (
                 <tr key={`${podName}-total`} style={{ background: "#dde1f0", fontWeight: 700 }}>
-                  <td style={{ padding: "5px 10px", fontWeight: 700 }} colSpan={2}>{podName} TOTAL</td>
+                  <td style={{ padding: "5px 8px", fontWeight: 700, whiteSpace: "nowrap" }} colSpan={2}>{podName} TOTAL</td>
                   {podTotals.ft.map((ft, wi) => ([
                     <td key={`${wi}ft`} style={{ textAlign: "center", padding: "5px 8px" }}>{ft}</td>,
                     <td key={`${wi}rw`} style={{ textAlign: "center", padding: "5px 8px" }}>{podTotals.rw[wi]}</td>,
@@ -2083,7 +2467,7 @@ function ThroughputPerWriterTable({ allWorkflowRows = [], endDate = "", loading 
                 </tr>
               );
 
-              return [...writerRows, totalRow];
+              return [...rows, totalRow];
             })}
           </tbody>
         </table>
@@ -2110,7 +2494,7 @@ export function ReportsContent({
   const loading = leadershipOverviewLoading;
 
   return (
-    <div className="section-stack">
+    <div className="section-stack" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
       <ThroughputPerWriterTable
         allWorkflowRows={allWorkflowRows}
         endDate={weekEnd}
