@@ -767,6 +767,21 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
     <td style={{ textAlign: "center", fontWeight: bold ? 700 : 400, fontSize: 13, padding: "8px 10px" }}>{v || "—"}</td>
   );
 
+  const beatNamesCell = (scripts) => (
+    <td style={{ padding: "5px 8px", verticalAlign: "top" }}>
+      {!scripts || scripts.length === 0
+        ? <span style={{ color: "#bbb", fontSize: 12 }}>—</span>
+        : <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {scripts.map((s, i) => (
+              <div key={i} style={{ fontSize: 11, color: "#333", lineHeight: 1.5 }}>
+                {s.beat || s.show || "—"}
+              </div>
+            ))}
+          </div>
+      }
+    </td>
+  );
+
   if (loading) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>Loading…</div>;
   if (!pods.length) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>No ideation data for selected range.</div>;
 
@@ -819,17 +834,17 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
               if (!isPodOpen) return [podRow];
 
               const writerEls = pod.writers.map((w) => (
-                <tr key={`w-${pod.podName}::${w.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
-                  <td style={{ fontSize: 12, padding: "6px 10px 6px 28px", color: "var(--fg, #2c2825)" }}>
+                <tr key={`w-${pod.podName}::${w.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)", verticalAlign: "top" }}>
+                  <td style={{ fontSize: 12, padding: "7px 10px 7px 28px", color: "var(--fg, #2c2825)", fontWeight: 500, whiteSpace: "nowrap" }}>
                     {w.writerName}
                   </td>
-                  {numCell(w.counts.approved, true)}
-                  {numCell(w.counts.iterate, true)}
-                  {numCell(w.counts.reviewPending, true)}
-                  {numCell(w.counts.uploaded)}
-                  {numCell(w.counts.inProd)}
-                  {numCell(w.counts.approvedForProd)}
-                  {numCell(w.counts.completedByWriter)}
+                  {beatNamesCell(w.lists.approved)}
+                  {beatNamesCell(w.lists.iterate)}
+                  {beatNamesCell(w.lists.reviewPending)}
+                  {beatNamesCell(w.lists.uploaded)}
+                  {beatNamesCell(w.lists.inProd)}
+                  {beatNamesCell(w.lists.approvedForProd)}
+                  {beatNamesCell(w.lists.completedByWriter)}
                   {numCell(w.writing)}
                 </tr>
               ));
