@@ -631,7 +631,6 @@ function computeFourBeatsWeeks() {
 
 function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", loading = false }) {
   const [expandedPods, setExpandedPods] = useState(new Set());
-  const [expandedWriters, setExpandedWriters] = useState(new Set());
 
   const CATS = ["approved", "iterate", "reviewPending", "uploaded", "inProd", "approvedForProd", "completedByWriter"];
 
@@ -728,9 +727,6 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
   const togglePod = (name) => setExpandedPods((prev) => {
     const next = new Set(prev); next.has(name) ? next.delete(name) : next.add(name); return next;
   });
-  const toggleWriter = (key) => setExpandedWriters((prev) => {
-    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next;
-  });
 
   const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   function fmtD(ymd) {
@@ -822,53 +818,21 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
 
               if (!isPodOpen) return [podRow];
 
-              const writerEls = pod.writers.flatMap((w) => {
-                const wKey = `${pod.podName}::${w.writerName}`;
-                const isWriterOpen = expandedWriters.has(wKey);
-
-                const countRow = (
-                  <tr key={`w-${wKey}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
-                    <td style={{ fontSize: 12, padding: "6px 10px 6px 24px" }}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); toggleWriter(wKey); }}
-                        style={{
-                          display: "inline-flex", alignItems: "center", justifyContent: "center",
-                          width: 16, height: 16, marginRight: 6, flexShrink: 0,
-                          border: "1.5px solid #2d4a2d", borderRadius: 3,
-                          background: isWriterOpen ? "#2d4a2d" : "transparent",
-                          color: isWriterOpen ? "#fff" : "#2d4a2d",
-                          fontSize: 12, fontWeight: 700, cursor: "pointer", padding: 0,
-                        }}
-                      >
-                        {isWriterOpen ? "−" : "+"}
-                      </button>
-                      {w.writerName}
-                    </td>
-                    {numCell(w.counts.approved, true)}
-                    {numCell(w.counts.iterate, true)}
-                    {numCell(w.counts.reviewPending, true)}
-                    {numCell(w.counts.uploaded)}
-                    {numCell(w.counts.inProd)}
-                    {numCell(w.counts.approvedForProd)}
-                    {numCell(w.counts.completedByWriter)}
-                    {numCell(w.writing)}
-                  </tr>
-                );
-
-                const detailRow = isWriterOpen ? (
-                  <tr key={`wd-${wKey}`} style={{ background: "#f6f8f3", verticalAlign: "top" }}>
-                    <td style={{ padding: "6px 10px" }} />
-                    {CATS.map((cat) => (
-                      <td key={cat} style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9", verticalAlign: "top" }}>
-                        {statusCell(w.lists[cat])}
-                      </td>
-                    ))}
-                    <td style={{ padding: "6px 8px", borderTop: "1px dashed #cdd8c9" }} />
-                  </tr>
-                ) : null;
-
-                return [countRow, detailRow].filter(Boolean);
-              });
+              const writerEls = pod.writers.map((w) => (
+                <tr key={`w-${pod.podName}::${w.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
+                  <td style={{ fontSize: 12, padding: "6px 10px 6px 28px", color: "var(--fg, #2c2825)" }}>
+                    {w.writerName}
+                  </td>
+                  {numCell(w.counts.approved, true)}
+                  {numCell(w.counts.iterate, true)}
+                  {numCell(w.counts.reviewPending, true)}
+                  {numCell(w.counts.uploaded)}
+                  {numCell(w.counts.inProd)}
+                  {numCell(w.counts.approvedForProd)}
+                  {numCell(w.counts.completedByWriter)}
+                  {numCell(w.writing)}
+                </tr>
+              ));
 
               return [podRow, ...writerEls];
             })}
