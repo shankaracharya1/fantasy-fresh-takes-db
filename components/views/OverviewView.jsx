@@ -661,6 +661,8 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
         show: String(row.showName || "").trim(),
         beat: String(row.beatName || "").trim(),
         date: primaryDate,
+        code: String(row.beatCode || "").trim(),
+        status: String(row.scriptStatus || row.statusLabel || "").trim(),
       };
 
       // Which categories this row belongs to
@@ -782,6 +784,26 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
     </td>
   );
 
+  const codeAngleStatusCell = (scripts) => (
+    <td style={{ padding: "5px 8px", verticalAlign: "top" }}>
+      {!scripts || scripts.length === 0
+        ? <span style={{ color: "#bbb", fontSize: 12 }}>—</span>
+        : <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {scripts.map((s, i) => (
+              <div key={i} style={{ fontSize: 11, lineHeight: 1.5 }}>
+                {s.code && <span style={{ fontWeight: 700, color: "#2d4a2d" }}>{s.code}</span>}
+                {s.code && s.beat && <span style={{ color: "#aaa", margin: "0 3px" }}>·</span>}
+                {s.beat && <span style={{ color: "#444" }}>{s.beat}</span>}
+                {s.status && (
+                  <div style={{ fontSize: 10, color: "#777", marginTop: 1 }}>{s.status}</div>
+                )}
+              </div>
+            ))}
+          </div>
+      }
+    </td>
+  );
+
   if (loading) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>Loading…</div>;
   if (!pods.length) return <div style={{ fontSize: 13, color: "var(--subtle)", padding: "12px 0" }}>No ideation data for selected range.</div>;
 
@@ -842,7 +864,7 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
                   {beatNamesCell(w.lists.iterate)}
                   {beatNamesCell(w.lists.reviewPending)}
                   {beatNamesCell(w.lists.uploaded)}
-                  {beatNamesCell(w.lists.inProd)}
+                  {codeAngleStatusCell(w.lists.inProd)}
                   {beatNamesCell(w.lists.approvedForProd)}
                   {beatNamesCell(w.lists.completedByWriter)}
                   {numCell(w.writing)}
