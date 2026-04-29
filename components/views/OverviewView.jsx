@@ -639,24 +639,35 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
 
     for (const row of allBeatRows) {
       const primaryDate = String(row.primaryDate || "").slice(0, 10);
-      if (primaryDate) {
-        if (weekStart && primaryDate < weekStart) continue;
-        if (weekEnd && primaryDate > weekEnd) continue;
-      } else if (row.monthKey && row.weekInMonth) {
-        const [y, mo] = String(row.monthKey).split("-").map(Number);
-        const anchorDay = (Number(row.weekInMonth) - 1) * 7 + 1;
-        const approxDate = `${y}-${String(mo).padStart(2, "0")}-${String(anchorDay).padStart(2, "0")}`;
-        if (weekEnd && approxDate > weekEnd) continue;
-        const approxEnd = `${y}-${String(mo).padStart(2, "0")}-${String(anchorDay + 6).padStart(2, "0")}`;
-        if (weekStart && approxEnd < weekStart) continue;
-      } else {
-        continue;
+      const ss = String(row.scriptStatus || "").toLowerCase().trim();
+
+      // Production-stage statuses reflect current state — don't date-filter them
+      const isProductionStatus =
+        ss === "uploaded" ||
+        ss.includes("visual") ||
+        ss.includes("sound editing") ||
+        ss.includes("approved for production") ||
+        ss.includes("completed by writer");
+
+      if (!isProductionStatus) {
+        if (primaryDate) {
+          if (weekStart && primaryDate < weekStart) continue;
+          if (weekEnd && primaryDate > weekEnd) continue;
+        } else if (row.monthKey && row.weekInMonth) {
+          const [y, mo] = String(row.monthKey).split("-").map(Number);
+          const anchorDay = (Number(row.weekInMonth) - 1) * 7 + 1;
+          const approxDate = `${y}-${String(mo).padStart(2, "0")}-${String(anchorDay).padStart(2, "0")}`;
+          if (weekEnd && approxDate > weekEnd) continue;
+          const approxEnd = `${y}-${String(mo).padStart(2, "0")}-${String(anchorDay + 6).padStart(2, "0")}`;
+          if (weekStart && approxEnd < weekStart) continue;
+        } else {
+          continue;
+        }
       }
 
       const pod = row.podLeadName || "Unknown POD";
       const writer = String(row.writerName || "").trim() || "No owner";
       const sc = String(row.statusCategory || "");
-      const ss = String(row.scriptStatus || "").toLowerCase().trim();
       const script = {
         show: String(row.showName || "").trim(),
         beat: String(row.beatName || "").trim(),
