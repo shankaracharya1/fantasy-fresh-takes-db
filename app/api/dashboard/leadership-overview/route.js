@@ -311,6 +311,7 @@ function buildBeatRows(rows) {
       writerName: normalizeText(row?.writerName) || normalizeText(row?.beatsOwner) || "",
       statusLabel: normalizeText(row?.status || row?.beatsStatus),
       statusCategory: categorizeIdeationStatus(row?.status || row?.beatsStatus),
+      scriptCode: normalizeText(row?.scriptCode || ""),
       scriptStatus: normalizeText(row?.scriptStatus || ""),
         beatsAssignedDate: parsedAssignedDate,
         assignedDate: parsedAssignedDate,

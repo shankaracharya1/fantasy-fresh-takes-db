@@ -661,8 +661,8 @@ function IdeationWeeklyTable({ allBeatRows = [], weekStart = "", weekEnd = "", l
         show: String(row.showName || "").trim(),
         beat: String(row.beatName || "").trim(),
         date: primaryDate,
-        code: String(row.beatCode || "").trim(),
-        status: String(row.scriptStatus || row.statusLabel || "").trim(),
+        code: String(row.scriptCode || "").trim(),
+        status: String(row.scriptStatus || "").trim(),
       };
 
       // Which categories this row belongs to
