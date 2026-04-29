@@ -484,6 +484,7 @@ function getWriterLastName(name) {
 function PodThroughputRankingTable({ rows = [], loading = false }) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const [expandedPods, setExpandedPods] = useState(new Set());
+  const [expandedWriters, setExpandedWriters] = useState(new Set());
 
   const togglePod = (podName) => {
     setExpandedPods((prev) => {
@@ -494,8 +495,24 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     });
   };
 
+  const toggleWriter = (key) => {
+    setExpandedWriters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const totalFt = safeRows.reduce((sum, pod) => sum + (pod.ftCount || 0), 0);
   const totalRw = safeRows.reduce((sum, pod) => sum + (pod.rwCount || 0), 0);
+
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmtDate = (ymd) => {
+    if (!ymd) return "";
+    const d = new Date(ymd + "T00:00:00Z");
+    return `${monthNames[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  };
 
   const tableRows = [];
   for (const pod of safeRows) {
@@ -537,14 +554,60 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
 
     if (isExpanded) {
       for (const writer of writerRows) {
+        const wKey = `${pod.podLeadName}::${writer.writerName}`;
+        const isWriterOpen = expandedWriters.has(wKey);
+        const scripts = Array.isArray(writer.scripts) ? writer.scripts : [];
+
         tableRows.push(
-          <tr key={`writer-${pod.podLeadName}-${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)" }}>
-            <td style={{ paddingLeft: 28, color: "var(--subtle)", fontSize: 12 }}>• {getWriterLastName(writer.writerName)}</td>
+          <tr
+            key={`writer-${wKey}`}
+            style={{ background: "var(--bg-deep, #f7f4ef)", cursor: scripts.length > 0 ? "pointer" : undefined, userSelect: "none" }}
+            onClick={scripts.length > 0 ? (e) => { e.stopPropagation(); toggleWriter(wKey); } : undefined}
+          >
+            <td style={{ paddingLeft: 28, fontSize: 12 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {scripts.length > 0 && (
+                  <span style={{
+                    fontSize: 10, width: 14, height: 14, display: "inline-flex",
+                    alignItems: "center", justifyContent: "center",
+                    background: "var(--subtle-bg, #f0ece4)", borderRadius: 3,
+                    color: "var(--subtle)", flexShrink: 0,
+                  }}>
+                    {isWriterOpen ? "▾" : "▸"}
+                  </span>
+                )}
+                <span style={{ color: "var(--subtle)" }}>• {getWriterLastName(writer.writerName)}</span>
+              </span>
+            </td>
             <td style={{ textAlign: "center", fontSize: 12 }}>{(writer.ftCount || 0) + (writer.rwCount || 0)}</td>
             <td style={{ textAlign: "center", fontSize: 12, color: "#2d5a3d" }}>{writer.ftCount || 0}</td>
             <td style={{ textAlign: "center", fontSize: 12, color: "#c2703e" }}>{writer.rwCount || 0}</td>
           </tr>
         );
+
+        if (isWriterOpen && scripts.length > 0) {
+          for (const script of scripts) {
+            tableRows.push(
+              <tr key={`script-${wKey}-${script.assetCode}-${script.date}`} style={{ background: "#f6f8f3" }}>
+                <td style={{ paddingLeft: 48, fontSize: 11, padding: "5px 10px 5px 48px" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 700, color: "#2d4a2d", fontFamily: "monospace" }}>{script.assetCode || "—"}</span>
+                    {script.beatName && <span style={{ color: "#555" }}>· {script.beatName}</span>}
+                    <span style={{
+                      fontSize: 10, padding: "1px 5px", borderRadius: 3, fontWeight: 600,
+                      background: script.type === "ft" ? "#e8f4ea" : "#fdf0e8",
+                      color: script.type === "ft" ? "#2d5a3d" : "#c2703e",
+                    }}>
+                      {script.type === "ft" ? "FT" : "RW"}
+                    </span>
+                    {script.date && <span style={{ color: "#aaa", fontSize: 10 }}>{fmtDate(script.date)}</span>}
+                  </span>
+                </td>
+                <td /><td /><td />
+              </tr>
+            );
+          }
+        }
       }
     }
   }
