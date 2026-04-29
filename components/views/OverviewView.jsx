@@ -484,22 +484,12 @@ function getWriterLastName(name) {
 function PodThroughputRankingTable({ rows = [], loading = false }) {
   const safeRows = Array.isArray(rows) ? rows : [];
   const [expandedPods, setExpandedPods] = useState(new Set());
-  const [expandedWriters, setExpandedWriters] = useState(new Set());
 
   const togglePod = (podName) => {
     setExpandedPods((prev) => {
       const next = new Set(prev);
       if (next.has(podName)) next.delete(podName);
       else next.add(podName);
-      return next;
-    });
-  };
-
-  const toggleWriter = (key) => {
-    setExpandedWriters((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
       return next;
     });
   };
@@ -512,6 +502,21 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     if (!ymd) return "";
     const d = new Date(ymd + "T00:00:00Z");
     return `${monthNames[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  };
+
+  const scriptList = (scripts) => {
+    if (!scripts || scripts.length === 0) return <span style={{ color: "#ccc" }}>—</span>;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {scripts.map((s, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 4, fontSize: 11 }}>
+            <span style={{ fontWeight: 700, color: "#2d4a2d", fontFamily: "monospace", whiteSpace: "nowrap" }}>{s.assetCode || "—"}</span>
+            {s.beatName && <span style={{ color: "#666" }}>· {s.beatName}</span>}
+            {s.date && <span style={{ color: "#aaa", fontSize: 10, whiteSpace: "nowrap" }}>{fmtDate(s.date)}</span>}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const tableRows = [];
@@ -554,60 +559,26 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
 
     if (isExpanded) {
       for (const writer of writerRows) {
-        const wKey = `${pod.podLeadName}::${writer.writerName}`;
-        const isWriterOpen = expandedWriters.has(wKey);
         const scripts = Array.isArray(writer.scripts) ? writer.scripts : [];
+        const ftScripts = scripts.filter((s) => s.type === "ft");
+        const rwScripts = scripts.filter((s) => s.type !== "ft");
 
         tableRows.push(
-          <tr
-            key={`writer-${wKey}`}
-            style={{ background: "var(--bg-deep, #f7f4ef)", cursor: scripts.length > 0 ? "pointer" : undefined, userSelect: "none" }}
-            onClick={scripts.length > 0 ? (e) => { e.stopPropagation(); toggleWriter(wKey); } : undefined}
-          >
-            <td style={{ paddingLeft: 28, fontSize: 12 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                {scripts.length > 0 && (
-                  <span style={{
-                    fontSize: 10, width: 14, height: 14, display: "inline-flex",
-                    alignItems: "center", justifyContent: "center",
-                    background: "var(--subtle-bg, #f0ece4)", borderRadius: 3,
-                    color: "var(--subtle)", flexShrink: 0,
-                  }}>
-                    {isWriterOpen ? "▾" : "▸"}
-                  </span>
-                )}
-                <span style={{ color: "var(--subtle)" }}>• {getWriterLastName(writer.writerName)}</span>
-              </span>
+          <tr key={`writer-${pod.podLeadName}::${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)", verticalAlign: "top" }}>
+            <td style={{ paddingLeft: 28, fontSize: 12, fontWeight: 500, color: "var(--fg, #2c2825)", paddingTop: 8, paddingBottom: 8, whiteSpace: "nowrap" }}>
+              • {writer.writerName}
             </td>
-            <td style={{ textAlign: "center", fontSize: 12 }}>{(writer.ftCount || 0) + (writer.rwCount || 0)}</td>
-            <td style={{ textAlign: "center", fontSize: 12, color: "#2d5a3d" }}>{writer.ftCount || 0}</td>
-            <td style={{ textAlign: "center", fontSize: 12, color: "#c2703e" }}>{writer.rwCount || 0}</td>
+            <td style={{ textAlign: "center", fontSize: 12, paddingTop: 8 }}>
+              {(writer.ftCount || 0) + (writer.rwCount || 0)}
+            </td>
+            <td style={{ padding: "8px 10px", color: "#2d5a3d" }}>
+              {scriptList(ftScripts)}
+            </td>
+            <td style={{ padding: "8px 10px", color: "#c2703e" }}>
+              {scriptList(rwScripts)}
+            </td>
           </tr>
         );
-
-        if (isWriterOpen && scripts.length > 0) {
-          for (const script of scripts) {
-            tableRows.push(
-              <tr key={`script-${wKey}-${script.assetCode}-${script.date}`} style={{ background: "#f6f8f3" }}>
-                <td style={{ paddingLeft: 48, fontSize: 11, padding: "5px 10px 5px 48px" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 700, color: "#2d4a2d", fontFamily: "monospace" }}>{script.assetCode || "—"}</span>
-                    {script.beatName && <span style={{ color: "#555" }}>· {script.beatName}</span>}
-                    <span style={{
-                      fontSize: 10, padding: "1px 5px", borderRadius: 3, fontWeight: 600,
-                      background: script.type === "ft" ? "#e8f4ea" : "#fdf0e8",
-                      color: script.type === "ft" ? "#2d5a3d" : "#c2703e",
-                    }}>
-                      {script.type === "ft" ? "FT" : "RW"}
-                    </span>
-                    {script.date && <span style={{ color: "#aaa", fontSize: 10 }}>{fmtDate(script.date)}</span>}
-                  </span>
-                </td>
-                <td /><td /><td />
-              </tr>
-            );
-          }
-        }
       }
     }
   }
