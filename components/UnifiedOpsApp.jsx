@@ -410,8 +410,8 @@ function LifetimeAngleContent() {
 const THEME_STORAGE_KEY = "fresh-takes-theme-mode";
 const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab sync.";
 const DEFAULT_DASHBOARD_RANGE = buildDateRangeSelection({ period: "current", minDate: MIN_DASHBOARD_DATE });
-const DASHBOARD_CLIENT_REFRESH_MS = 15 * 60 * 1000;
-const DASHBOARD_CLIENT_CACHE_TTL_MS = 15 * 60 * 1000;
+const DASHBOARD_CLIENT_REFRESH_MS = 5 * 60 * 1000;
+const DASHBOARD_CLIENT_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ─── Shell-only helpers ───────────────────────────────────────────────────────
 
@@ -751,22 +751,6 @@ function readClientCache(key, ttlMs = DASHBOARD_CLIENT_CACHE_TTL_MS) {
   }
 }
 
-// Returns true if the cache entry is fresh enough to skip a background re-fetch.
-// Uses a shorter TTL (5 min) so data stays reasonably up-to-date even while cached.
-const BACKGROUND_REFETCH_SKIP_TTL_MS = 5 * 60 * 1000;
-function isCacheFreshEnoughToSkipRefetch(key) {
-  if (typeof window === "undefined") return false;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Number.isFinite(parsed.savedAt)) return false;
-    return Date.now() - parsed.savedAt < BACKGROUND_REFETCH_SKIP_TTL_MS;
-  } catch {
-    return false;
-  }
-}
-
 function writeClientCache(key, payload) {
   if (typeof window === "undefined") return;
   try {
@@ -783,6 +767,7 @@ function writeClientCache(key, payload) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const MORE_VIEWS = new Set(["details", "planner"]);
+const WRITER_PRIORITY_CACHE_VERSION = "v3";
 
 export default function UnifiedOpsApp() {
   const [activeView, setActiveView] = useState("overview");
@@ -801,6 +786,9 @@ export default function UnifiedOpsApp() {
   const [leadershipOverviewData, setLeadershipOverviewData] = useState(null);
   const [leadershipOverviewLoading, setLeadershipOverviewLoading] = useState(true);
   const [leadershipOverviewError, setLeadershipOverviewError] = useState("");
+  const [writerPriorityData, setWriterPriorityData] = useState(null);
+  const [writerPriorityLoading, setWriterPriorityLoading] = useState(false);
+  const [writerPriorityError, setWriterPriorityError] = useState("");
   const [competitionData, setCompetitionData] = useState(null);
   const [competitionLoading, setCompetitionLoading] = useState(true);
   const [analyticsData, setAnalyticsData] = useState(null);
@@ -854,13 +842,15 @@ export default function UnifiedOpsApp() {
     activeView === "leadership-overview" ||
     activeView === "pod-wise" ||
     activeView === "production" ||
-    activeView === "planner2";
+    activeView === "planner2" ||
+    activeView === "reports";
   const headerDateRangeDisabled =
     (activeView === "overview" && overviewLoading) ||
     (activeView === "leadership-overview" && leadershipOverviewLoading) ||
     (activeView === "pod-wise" && competitionLoading) ||
     (activeView === "production" && acdMetricsLoading && !acdMetricsData) ||
-    (activeView === "planner2" && planner2Loading && !planner2Data);
+    (activeView === "planner2" && planner2Loading && !planner2Data) ||
+    (activeView === "reports" && writerPriorityLoading && !writerPriorityData);
   const monthWeekOptions = useMemo(() => buildStaticMonthWeekOptions(MIN_DASHBOARD_DATE), []);
   const selectedMonthWeekOption = useMemo(
     () => monthWeekOptions.find((option) => option.id === weekFilterSelection) || monthWeekOptions[0] || null,
@@ -984,7 +974,8 @@ export default function UnifiedOpsApp() {
     Boolean(dashboardLoadingMessage) ||
     cacheRefreshing ||
     (activeView === "overview" && (overviewLoading || leadershipOverviewLoading)) ||
-    (activeView === "leadership-overview" && leadershipOverviewLoading);
+    (activeView === "leadership-overview" && leadershipOverviewLoading) ||
+    (activeView === "reports" && (leadershipOverviewLoading || writerPriorityLoading));
 
   const handleRefreshCache = useCallback(async () => {
     if (cacheRefreshing) return;
@@ -1050,10 +1041,7 @@ export default function UnifiedOpsApp() {
       }
     }
 
-    // Skip background re-fetch if cache is very fresh (tab switch within 5 min)
-    if (!isCacheFreshEnoughToSkipRefetch(cacheKey)) {
-      void loadOverviewSection({ forceLoading: !cachedPayload && !overviewData });
-    }
+    void loadOverviewSection({ forceLoading: !cachedPayload && !overviewData });
 
     // Fetch detailed overview rows (filtered by dateSubmittedByLead)
     async function loadOverviewDetail() {
@@ -1083,7 +1071,7 @@ export default function UnifiedOpsApp() {
   }, [activeView, dashboardDateRange, includeNewShowsPod, refreshNonce]);
 
   useEffect(() => {
-    if (activeView !== "leadership-overview" && activeView !== "overview") {
+    if (activeView !== "leadership-overview" && activeView !== "overview" && activeView !== "reports") {
       return undefined;
     }
 
@@ -1131,10 +1119,7 @@ export default function UnifiedOpsApp() {
       }
     }
 
-    // Skip background re-fetch if cache is very fresh (tab switch within 5 min)
-    if (!isCacheFreshEnoughToSkipRefetch(cacheKey)) {
-      void loadLeadershipOverview({ forceLoading: !cachedPayload && !leadershipOverviewData });
-    }
+    void loadLeadershipOverview({ forceLoading: !cachedPayload && !leadershipOverviewData });
     const intervalId = window.setInterval(() => {
       void loadLeadershipOverview({ forceLoading: false });
     }, DASHBOARD_CLIENT_REFRESH_MS);
@@ -1143,6 +1128,66 @@ export default function UnifiedOpsApp() {
       window.clearInterval(intervalId);
     };
   }, [activeView, dashboardDateRange, includeGuAssets, refreshNonce]);
+
+  useEffect(() => {
+    if (activeView !== "reports") {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const rangeSelection = buildDateRangeSelection(dashboardDateRange);
+    const cacheKey = `writer-priority:${WRITER_PRIORITY_CACHE_VERSION}:${rangeSelection.startDate}:${rangeSelection.endDate}`;
+    const cachedPayload = readClientCache(cacheKey);
+
+    if (cachedPayload) {
+      setWriterPriorityData(cachedPayload);
+      setWriterPriorityLoading(false);
+      setWriterPriorityError("");
+    }
+
+    async function loadWriterPriority({ forceLoading = false } = {}) {
+      setDashboardLoadingMessage("Refreshing WIP…");
+      if (forceLoading || (!writerPriorityData && !cachedPayload)) {
+        setWriterPriorityLoading(true);
+      }
+      setWriterPriorityError("");
+
+      try {
+        const response = await fetch(
+          `/api/dashboard/writer-priority?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}`,
+          { cache: "no-store" }
+        );
+        const payload = await readJson(response);
+        if (!response.ok) {
+          throw new Error(payload.error || "Unable to load Writer's Priority.");
+        }
+
+        if (!cancelled) {
+          setWriterPriorityData(payload);
+          setWriterPriorityLoading(false);
+          setDashboardLoadingMessage("");
+          writeClientCache(cacheKey, payload);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          if (!writerPriorityData && !cachedPayload) {
+            setWriterPriorityError(error?.message || "Unable to load Writer's Priority.");
+          }
+          setWriterPriorityLoading(false);
+          setDashboardLoadingMessage("");
+        }
+      }
+    }
+
+    void loadWriterPriority({ forceLoading: !cachedPayload && !writerPriorityData });
+    const intervalId = window.setInterval(() => {
+      void loadWriterPriority({ forceLoading: false });
+    }, DASHBOARD_CLIENT_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeView, dashboardDateRange, refreshNonce]);
 
 
   useEffect(() => {
@@ -1982,12 +2027,13 @@ export default function UnifiedOpsApp() {
             {activeView === "reports" ? (
               <div className="section-shell">
                 <ReportsContent
-                  detailRows={overviewDetailRows}
-                  detailLoading={overviewDetailLoading}
                   leadershipOverviewData={leadershipOverviewData}
                   leadershipOverviewLoading={leadershipOverviewLoading}
-                  overviewData={overviewData}
-                  overviewLoading={overviewLoading}
+                  startDate={normalizedHeaderRange.startDate}
+                  endDate={normalizedHeaderRange.endDate}
+                  writerPriorityData={writerPriorityData}
+                  writerPriorityLoading={writerPriorityLoading}
+                  writerPriorityError={writerPriorityError}
                 />
               </div>
             ) : null}

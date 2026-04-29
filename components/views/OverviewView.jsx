@@ -1922,21 +1922,31 @@ export function DetailedOverviewTable({ rows = [], loading = false }) {
 // ─── Reports View ─────────────────────────────────────────────────────────────
 
 export function ReportsContent({
-  detailRows = [],
-  detailLoading = false,
   leadershipOverviewData = null,
   leadershipOverviewLoading = false,
-  overviewData = null,
-  overviewLoading = false,
+  startDate = "",
+  endDate = "",
+  writerPriorityData = null,
+  writerPriorityLoading = false,
+  writerPriorityError = "",
 }) {
   const allWorkflowRows = Array.isArray(leadershipOverviewData?.allWorkflowRows) ? leadershipOverviewData.allWorkflowRows : [];
   const allAnalyticsRows = Array.isArray(leadershipOverviewData?.allAnalyticsRows) ? leadershipOverviewData.allAnalyticsRows : [];
-  const weekStart = swNormDate(overviewData?.weekStart);
-  const weekEnd = swNormDate(overviewData?.weekEnd);
-  const loading = leadershipOverviewLoading || overviewLoading;
+  const weekStart = swNormDate(startDate);
+  const weekEnd = swNormDate(endDate);
+  const loading = leadershipOverviewLoading;
 
   return (
     <div className="section-stack">
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Writer&apos;s Priority</div>
+      <WriterPriorityTable
+        data={writerPriorityData}
+        loading={writerPriorityLoading}
+        error={writerPriorityError}
+      />
+
+      <hr className="section-divider" />
+
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Show Wise</div>
       <ShowWiseTable
         allWorkflowRows={allWorkflowRows}
@@ -1945,6 +1955,300 @@ export function ReportsContent({
         weekEnd={weekEnd}
         loading={loading}
       />
+    </div>
+  );
+}
+
+function WriterPriorityTable({ data = null, loading = false, error = "" }) {
+  const dates = Array.isArray(data?.dates) ? data.dates : [];
+  const pods = Array.isArray(data?.pods) ? data.pods : [];
+  const summaries = Array.isArray(data?.summaries) ? data.summaries : [];
+  const colSpan = 1 + Math.max(dates.length, 1);
+  const [detailModal, setDetailModal] = useState(null);
+
+  function openDetailModal(title, items) {
+    setDetailModal({
+      title,
+      items: Array.isArray(items) ? items : [],
+    });
+  }
+
+  return (
+    <div className="writer-priority-board">
+      <div className="writer-priority-note">
+        Combined from Editorial, Ready for Production, Production, and Live.
+      </div>
+      <div className="writer-priority-summary-grid">
+        <WriterPrioritySummaryBox
+          title="WIP with writer's"
+          rows={summaries}
+          getSummary={(row) => row?.wipWithWriters}
+          onOpenDetails={openDetailModal}
+          emptyLabel="No WIP with writer's assets in the selected range."
+          tone="writer"
+        />
+        <WriterPrioritySummaryBox
+          title="Approved assets"
+          rows={summaries}
+          getSummary={(row) => row?.approvedAssets}
+          onOpenDetails={openDetailModal}
+          emptyLabel="No approved assets in the selected range."
+          tone="approved"
+        />
+        <WriterPrioritySummaryBox
+          title="Review pending (more then 3 days)"
+          rows={summaries}
+          getSummary={(row) => row?.reviewPendingMoreThan3Days}
+          onOpenDetails={openDetailModal}
+          emptyLabel="No review-pending assets older than 3 days."
+          tone="review"
+        />
+      </div>
+      <div className="writer-priority-table-shell">
+        <div className="table-wrap writer-priority-table-wrap" style={{ overflowX: "auto" }}>
+          <table className="ops-table overview-table writer-priority-table" style={{ minWidth: Math.max(980, 220 + dates.length * 220) }}>
+          <thead>
+            <tr>
+              <th className="writer-priority-head writer-priority-head-writer" style={{ minWidth: 180 }}>Writer</th>
+              {dates.map((date) => (
+                <th key={date.key} className="writer-priority-head writer-priority-head-date" style={{ minWidth: 220, textAlign: "center" }}>
+                  {date.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={colSpan} className="writer-priority-empty">Loading…</td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={colSpan} className="writer-priority-empty" style={{ color: "#9f2e2e" }}>{error}</td>
+              </tr>
+            ) : pods.length === 0 || dates.length === 0 ? (
+              <tr>
+                <td colSpan={colSpan} className="writer-priority-empty">No Writer&apos;s Priority rows for the selected range.</td>
+              </tr>
+            ) : (
+              pods.flatMap((pod) => {
+                const podRow = (
+                  <tr key={`pod-${pod.podLeadName}`} className="writer-priority-pod-row">
+                    <td className="writer-priority-pod-name-cell">
+                      <span className="writer-priority-pod-name">{pod.podLeadName}</span>
+                    </td>
+                    {dates.map((date) => (
+                      <td
+                        key={`pod-${pod.podLeadName}-${date.key}`}
+                        className="writer-priority-pod-cell"
+                      >
+                        <PodPriorityCell
+                          podName={pod.podLeadName}
+                          dateLabel={date.label}
+                          cell={pod.podCells?.[date.key]}
+                          onOpenDetails={openDetailModal}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                );
+
+                return [
+                  podRow,
+                  ...pod.writers.map((writer) => (
+                    <tr key={`writer-${pod.podLeadName}-${writer.writerName}`} className="writer-priority-writer-row">
+                      <td className="writer-priority-writer-name-cell">{writer.writerName}</td>
+                      {dates.map((date) => {
+                        const cellText = writer.cells?.[date.key] || "";
+                        return (
+                          <td
+                            key={`writer-${pod.podLeadName}-${writer.writerName}-${date.key}`}
+                            className={`writer-priority-writer-cell${cellText ? " has-content" : ""}`}
+                            title={cellText || undefined}
+                          >
+                            {cellText}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )),
+                ];
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+      </div>
+      {detailModal ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.42)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            zIndex: 1000,
+          }}
+          onClick={() => setDetailModal(null)}
+        >
+          <div
+            style={{
+              width: "min(720px, 100%)",
+              maxHeight: "80vh",
+              overflowY: "auto",
+              background: "var(--card, #fffdf9)",
+              borderRadius: 16,
+              border: "1px solid var(--border)",
+              boxShadow: "0 18px 50px rgba(15, 23, 42, 0.2)",
+              padding: 20,
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>{detailModal.title}</div>
+                <div style={{ fontSize: 12, color: "var(--subtle)", marginTop: 4 }}>
+                  {detailModal.items.length} item{detailModal.items.length === 1 ? "" : "s"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailModal(null)}
+                style={{
+                  border: "1px solid var(--border)",
+                  background: "var(--card, #fffdf9)",
+                  borderRadius: 999,
+                  padding: "6px 12px",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                Close
+              </button>
+            </div>
+            {detailModal.items.length === 0 ? (
+              <div style={{ fontSize: 13, color: "var(--subtle)" }}>No details for this selection.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {detailModal.items.map((item) => (
+                  <div
+                    key={`${detailModal.title}-${item}`}
+                    style={{
+                      border: "1px solid var(--border)",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                      background: "var(--surface, #f9f6f1)",
+                      fontSize: 13,
+                      lineHeight: 1.4,
+                      textAlign: "left",
+                    }}
+                  >
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function WriterPrioritySummaryBox({
+  title,
+  rows = [],
+  getSummary,
+  onOpenDetails,
+  emptyLabel = "No items.",
+  tone = "approved",
+}) {
+  const normalizedRows = Array.isArray(rows) ? rows : [];
+  const totalCount = normalizedRows.reduce((sum, row) => sum + Number(getSummary?.(row)?.count || 0), 0);
+  const toneClass =
+    tone === "review" ? "is-review" : tone === "writer" ? "is-writer" : "is-approved";
+
+  return (
+    <div className={`writer-priority-summary-card ${toneClass}`}>
+      <div className="writer-priority-summary-card-top">
+        <div>
+          <div className="writer-priority-summary-kicker">{title}</div>
+          <div className="writer-priority-summary-total">{totalCount}</div>
+        </div>
+        <div className="writer-priority-summary-chip">Week total</div>
+      </div>
+      {normalizedRows.length === 0 ? (
+        <div className="writer-priority-summary-empty">{emptyLabel}</div>
+      ) : (
+        <div className="writer-priority-summary-list">
+          {normalizedRows.map((row) => {
+            const summary = getSummary?.(row) || {};
+            const count = Number(summary?.count || 0);
+            const items = Array.isArray(summary?.items) ? summary.items : [];
+            return (
+              <div key={`${title}-${row.podLeadName}`} className="writer-priority-summary-row">
+                <div className="writer-priority-summary-row-copy">
+                  <span className="writer-priority-summary-row-name">{row.podLeadName}</span>
+                  <span className="writer-priority-summary-row-count">({count})</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={count === 0}
+                  onClick={() => onOpenDetails?.(`${title} · ${row.podLeadName}`, items)}
+                  className="writer-priority-summary-button"
+                >
+                  View details
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PodPriorityCell({ podName, dateLabel, cell = null, onOpenDetails }) {
+  const reviewItems = Array.isArray(cell?.reviewItems) ? cell.reviewItems : [];
+  const approvedItems = Array.isArray(cell?.approvedItems) ? cell.approvedItems : [];
+  const liveItems = Array.isArray(cell?.liveItems) ? cell.liveItems : [];
+  const reviewText = reviewItems.length > 0 ? `- ${reviewItems.join("\n- ")}` : "0";
+  const approvedText = approvedItems.length > 0 ? `- ${approvedItems.join("\n- ")}` : "0";
+
+  function openDetails(sectionLabel, items) {
+    onOpenDetails?.(`${podName} · ${sectionLabel} · ${dateLabel}`, items);
+  }
+
+  return (
+    <div className="writer-priority-pod-stack">
+      <div className="writer-priority-pod-block">
+        <div className="writer-priority-pod-block-title">Review Pending ({reviewItems.length})</div>
+        <div className="writer-priority-pod-block-copy" title={reviewText}>
+          {reviewText}
+        </div>
+      </div>
+      <div className="writer-priority-pod-block">
+        <div className="writer-priority-pod-block-title">Approved for Production ({approvedItems.length})</div>
+        <div className="writer-priority-pod-block-copy" title={approvedText}>
+          {approvedText}
+        </div>
+      </div>
+      <div className="writer-priority-pod-block is-live">
+        <div className="writer-priority-pod-block-title">Live ({liveItems.length})</div>
+        {liveItems.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => openDetails("Live", liveItems)}
+            className="writer-priority-live-button"
+          >
+            View details
+          </button>
+        ) : (
+          <div className="writer-priority-pod-block-copy">0</div>
+        )}
+      </div>
     </div>
   );
 }
