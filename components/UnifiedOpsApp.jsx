@@ -1712,7 +1712,7 @@ export default function UnifiedOpsApp() {
                     className={`sidebar-link${activeView === "reports" ? " active" : ""}`}
                     onClick={() => setActiveView("reports")}
                   >
-                    WIP
+                    Reports WIP
                   </button>
                   <button
                     type="button"

@@ -1919,6 +1919,179 @@ export function DetailedOverviewTable({ rows = [], loading = false }) {
   );
 }
 
+// ─── Throughput per Writer per POD (Last 3 Weeks) ────────────────────────────
+
+const POD_DISPLAY_ORDER = ["Paul", "Josh", "Nishant", "Dan", "Jacob Berman", "Aakash Ahuja"];
+
+const POD_CLIENT_ALIASES = Object.fromEntries([
+  ...["paul", "paul lee", "paul s lee", "lee"].map((k) => [k, "Paul"]),
+  ...["josh", "josh roth", "joshua", "joshua roth", "roth"].map((k) => [k, "Josh"]),
+  ...["nishant", "nishant gilatar", "gilatar"].map((k) => [k, "Nishant"]),
+  ...["dan", "dan woodward", "woodward"].map((k) => [k, "Dan"]),
+  ...["aakash", "aakash ahuja"].map((k) => [k, "Aakash Ahuja"]),
+  ...["jacob", "berman", "jacob berman"].map((k) => [k, "Jacob Berman"]),
+]);
+
+function normPodClient(value) {
+  const key = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return POD_CLIENT_ALIASES[key] || String(value || "").trim();
+}
+
+function classifyScriptType(reworkType) {
+  const rt = String(reworkType || "").trim().toLowerCase();
+  if (!rt) return null;
+  if (rt === "fresh take" || rt === "fresh takes" || rt === "new q1" || rt.startsWith("new q1 ")) return "ft";
+  return "rw";
+}
+
+function addDays(ymd, n) {
+  const d = new Date(ymd + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtShortRange(start, end) {
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const s = new Date(start + "T00:00:00Z");
+  const e = new Date(end + "T00:00:00Z");
+  if (s.getUTCMonth() === e.getUTCMonth()) {
+    return `${months[s.getUTCMonth()]} ${s.getUTCDate()}–${e.getUTCDate()}`;
+  }
+  return `${months[s.getUTCMonth()]} ${s.getUTCDate()}–${months[e.getUTCMonth()]} ${e.getUTCDate()}`;
+}
+
+function ThroughputPerWriterTable({ allWorkflowRows = [], endDate = "", loading = false }) {
+  const anchor = endDate || new Date().toISOString().slice(0, 10);
+
+  // 3 consecutive 7-day windows ending at anchor
+  const weeks = [
+    { start: addDays(anchor, -20), end: addDays(anchor, -14) },
+    { start: addDays(anchor, -13), end: addDays(anchor, -7) },
+    { start: addDays(anchor, -6),  end: anchor },
+  ].map((w, i) => ({ ...w, label: `Week ${i + 1} (${fmtShortRange(w.start, w.end)})` }));
+
+  // Build pod → writer → { ft:[w1,w2,w3], rw:[w1,w2,w3] }
+  const podMap = new Map();
+  for (const row of allWorkflowRows) {
+    const sld = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
+    if (!sld) continue;
+    const wi = weeks.findIndex((w) => sld >= w.start && sld <= w.end);
+    if (wi === -1) continue;
+    const type = classifyScriptType(row?.reworkType);
+    if (!type) continue;
+    const pod = normPodClient(row?.podLeadName);
+    if (!pod) continue;
+    const writer = String(row?.writerName || "").trim() || "Unknown";
+
+    if (!podMap.has(pod)) podMap.set(pod, new Map());
+    const wMap = podMap.get(pod);
+    if (!wMap.has(writer)) wMap.set(writer, { ft: [0, 0, 0], rw: [0, 0, 0] });
+    wMap.get(writer)[type][wi]++;
+  }
+
+  // Sort pods by display order
+  const sortedPods = Array.from(podMap.entries()).sort((a, b) => {
+    const ai = POD_DISPLAY_ORDER.indexOf(a[0]);
+    const bi = POD_DISPLAY_ORDER.indexOf(b[0]);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a[0].localeCompare(b[0]);
+  });
+
+  if (!loading && sortedPods.length === 0) return (
+    <div style={{ color: "var(--subtle)", fontSize: 13, padding: "10px 0" }}>No throughput data available for the last 3 weeks.</div>
+  );
+
+  const FT_TARGET = 1.5;
+  const thBase = { background: "#2d4a2d", color: "#fff", padding: "6px 10px", fontWeight: 600, fontSize: 11, textAlign: "center", whiteSpace: "nowrap" };
+  const thLeft = { ...thBase, textAlign: "left" };
+
+  return (
+    <div>
+      <div style={{ fontSize: 14, fontWeight: 700, textAlign: "center", marginBottom: 8 }}>
+        Throughput per Writer per POD (Last 3 Weeks)
+      </div>
+      <div className="table-wrap">
+        <table className="ops-table" style={{ fontSize: 12, width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th rowSpan={2} style={{ ...thLeft, verticalAlign: "middle" }}>POD</th>
+              <th rowSpan={2} style={{ ...thLeft, verticalAlign: "middle" }}>Writer</th>
+              {weeks.map((w, i) => (
+                <th key={i} colSpan={2} style={{ ...thBase, borderBottom: "1px solid rgba(255,255,255,0.3)" }}>{w.label}</th>
+              ))}
+              <th rowSpan={2} style={{ ...thBase, verticalAlign: "middle" }}>Total Fresh<br/>Takes (3 wks)</th>
+              <th rowSpan={2} style={{ ...thBase, verticalAlign: "middle" }}>Avg Fresh Takes per week<br/><em style={{ fontWeight: 400 }}>Rolling, L3W</em></th>
+            </tr>
+            <tr>
+              {weeks.map((_, i) => (
+                [
+                  <th key={`${i}ft`} style={{ ...thBase, fontSize: 10 }}>Fresh Takes</th>,
+                  <th key={`${i}rw`} style={{ ...thBase, fontSize: 10 }}>Reworks</th>,
+                ]
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={9} style={{ color: "var(--subtle)", padding: 10 }}>Loading…</td></tr>
+            ) : sortedPods.map(([podName, writerMap]) => {
+              const podTotals = { ft: [0, 0, 0], rw: [0, 0, 0] };
+              const writers = Array.from(writerMap.entries()).sort((a, b) => {
+                const at = a[1].ft.reduce((s, v) => s + v, 0);
+                const bt = b[1].ft.reduce((s, v) => s + v, 0);
+                return bt - at || a[0].localeCompare(b[0]);
+              });
+
+              const writerRows = writers.map(([writer, data]) => {
+                for (let i = 0; i < 3; i++) {
+                  podTotals.ft[i] += data.ft[i];
+                  podTotals.rw[i] += data.rw[i];
+                }
+                const totalFt = data.ft.reduce((s, v) => s + v, 0);
+                const avgFt = totalFt / 3;
+                const below = avgFt < FT_TARGET;
+                return (
+                  <tr key={writer}>
+                    <td style={{ padding: "4px 10px" }}>{podName}</td>
+                    <td style={{ padding: "4px 10px" }}>{writer}</td>
+                    {data.ft.map((ft, wi) => ([
+                      <td key={`${wi}ft`} style={{ textAlign: "center", padding: "4px 8px" }}>{ft}</td>,
+                      <td key={`${wi}rw`} style={{ textAlign: "center", padding: "4px 8px" }}>{data.rw[wi]}</td>,
+                    ]))}
+                    <td style={{ textAlign: "center", padding: "4px 8px", fontWeight: 600 }}>{totalFt}</td>
+                    <td style={{ textAlign: "center", padding: "4px 8px", fontWeight: 700, background: below ? "#fce4ec" : undefined, color: below ? "#b71c1c" : undefined }}>
+                      {avgFt.toFixed(2)}
+                    </td>
+                  </tr>
+                );
+              });
+
+              const podTotalFt = podTotals.ft.reduce((s, v) => s + v, 0);
+              const podAvgFt = podTotalFt / 3;
+
+              const totalRow = (
+                <tr key={`${podName}-total`} style={{ background: "#dde1f0", fontWeight: 700 }}>
+                  <td style={{ padding: "5px 10px", fontWeight: 700 }} colSpan={2}>{podName} TOTAL</td>
+                  {podTotals.ft.map((ft, wi) => ([
+                    <td key={`${wi}ft`} style={{ textAlign: "center", padding: "5px 8px" }}>{ft}</td>,
+                    <td key={`${wi}rw`} style={{ textAlign: "center", padding: "5px 8px" }}>{podTotals.rw[wi]}</td>,
+                  ]))}
+                  <td style={{ textAlign: "center", padding: "5px 8px" }}>{podTotalFt}</td>
+                  <td style={{ textAlign: "center", padding: "5px 8px" }}>{podAvgFt.toFixed(2)}</td>
+                </tr>
+              );
+
+              return [...writerRows, totalRow];
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Reports View ─────────────────────────────────────────────────────────────
 
 export function ReportsContent({
@@ -1938,6 +2111,14 @@ export function ReportsContent({
 
   return (
     <div className="section-stack">
+      <ThroughputPerWriterTable
+        allWorkflowRows={allWorkflowRows}
+        endDate={weekEnd}
+        loading={loading}
+      />
+
+      <hr className="section-divider" />
+
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Writer&apos;s Priority</div>
       <WriterPriorityTable
         data={writerPriorityData}
