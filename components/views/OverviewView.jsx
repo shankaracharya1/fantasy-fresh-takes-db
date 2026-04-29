@@ -512,7 +512,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
           <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 4, fontSize: 11 }}>
             <span style={{ fontWeight: 700, color: "#2d4a2d", fontFamily: "monospace", whiteSpace: "nowrap" }}>{s.assetCode || "—"}</span>
             {s.beatName && <span style={{ color: "#666" }}>· {s.beatName}</span>}
-            {s.date && <span style={{ color: "#aaa", fontSize: 10, whiteSpace: "nowrap" }}>{fmtDate(s.date)}</span>}
+            {s.scriptStatus && <span style={{ color: "#888", fontSize: 10, whiteSpace: "nowrap" }}>· {s.scriptStatus}</span>}
           </div>
         ))}
       </div>

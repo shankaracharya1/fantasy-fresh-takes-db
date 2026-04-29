@@ -777,6 +777,7 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
       type: isFt ? "ft" : "rw",
       date: dateUsed,
       source: normalizeText(row?.source),
+      scriptStatus: normalizeText(row?.scriptStatus || row?.status) || "",
     });
 
     if (isFt) {
