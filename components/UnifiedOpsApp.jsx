@@ -410,8 +410,8 @@ function LifetimeAngleContent() {
 const THEME_STORAGE_KEY = "fresh-takes-theme-mode";
 const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab sync.";
 const DEFAULT_DASHBOARD_RANGE = buildDateRangeSelection({ period: "current", minDate: MIN_DASHBOARD_DATE });
-const DASHBOARD_CLIENT_REFRESH_MS = 5 * 60 * 1000;
-const DASHBOARD_CLIENT_CACHE_TTL_MS = 5 * 60 * 1000;
+const DASHBOARD_CLIENT_REFRESH_MS = 15 * 60 * 1000;
+const DASHBOARD_CLIENT_CACHE_TTL_MS = 15 * 60 * 1000;
 
 // ─── Shell-only helpers ───────────────────────────────────────────────────────
 
@@ -751,6 +751,22 @@ function readClientCache(key, ttlMs = DASHBOARD_CLIENT_CACHE_TTL_MS) {
   }
 }
 
+// Returns true if the cache entry is fresh enough to skip a background re-fetch.
+// Uses a shorter TTL (5 min) so data stays reasonably up-to-date even while cached.
+const BACKGROUND_REFETCH_SKIP_TTL_MS = 5 * 60 * 1000;
+function isCacheFreshEnoughToSkipRefetch(key) {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Number.isFinite(parsed.savedAt)) return false;
+    return Date.now() - parsed.savedAt < BACKGROUND_REFETCH_SKIP_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
 function writeClientCache(key, payload) {
   if (typeof window === "undefined") return;
   try {
@@ -1034,7 +1050,10 @@ export default function UnifiedOpsApp() {
       }
     }
 
-    void loadOverviewSection({ forceLoading: !cachedPayload && !overviewData });
+    // Skip background re-fetch if cache is very fresh (tab switch within 5 min)
+    if (!isCacheFreshEnoughToSkipRefetch(cacheKey)) {
+      void loadOverviewSection({ forceLoading: !cachedPayload && !overviewData });
+    }
 
     // Fetch detailed overview rows (filtered by dateSubmittedByLead)
     async function loadOverviewDetail() {
@@ -1112,7 +1131,10 @@ export default function UnifiedOpsApp() {
       }
     }
 
-    void loadLeadershipOverview({ forceLoading: !cachedPayload && !leadershipOverviewData });
+    // Skip background re-fetch if cache is very fresh (tab switch within 5 min)
+    if (!isCacheFreshEnoughToSkipRefetch(cacheKey)) {
+      void loadLeadershipOverview({ forceLoading: !cachedPayload && !leadershipOverviewData });
+    }
     const intervalId = window.setInterval(() => {
       void loadLeadershipOverview({ forceLoading: false });
     }, DASHBOARD_CLIENT_REFRESH_MS);
