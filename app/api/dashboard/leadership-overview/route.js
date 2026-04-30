@@ -789,6 +789,32 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
     }
   }
 
+  // Separate live pass: count ALL live-tab rows by stageDate (finalUploadDate fallback),
+  // not just those with strictLeadSubmittedDate. This catches scripts uploaded without a lead date.
+  const liveCountMap = new Map(); // key: "pod::writer" → { assetCodes: Set, scripts: [] }
+  for (const row of Array.isArray(workflowRows) ? workflowRows : []) {
+    if (String(row?.source || "") !== "live") continue;
+    const uploadDate = String(row?.stageDate || row?.finalUploadDate || row?.strictLeadSubmittedDate || "").slice(0, 10);
+    if (!uploadDate || uploadDate < startDate || uploadDate > endDate) continue;
+    const podKey = normalizeText(normalizePodLeadName(row?.podLeadName || row?.podLeadRaw) || row?.podLeadName || row?.podLeadRaw) || "Unknown POD";
+    const writerKey = normalizeText(resolveWriterName(row?.writerName)) || "Unknown Writer";
+    const mapKey = `${podKey}::${writerKey}`;
+    if (!liveCountMap.has(mapKey)) liveCountMap.set(mapKey, { podKey, writerKey, assetCodes: new Set(), scripts: [] });
+    const entry = liveCountMap.get(mapKey);
+    const code = String(row?.assetCode || "").trim();
+    if (code && !entry.assetCodes.has(code.toLowerCase())) {
+      entry.assetCodes.add(code.toLowerCase());
+      entry.scripts.push({
+        assetCode: normalizeText(row?.assetCode) || "",
+        beatName: normalizeText(row?.beatName) || "",
+        scriptStatus: normalizeText(row?.scriptStatus || row?.status) || "Uploaded",
+        type: classifyFtRw(row?.reworkType) === "ft" ? "ft" : "rw",
+        date: uploadDate,
+        source: "live",
+      });
+    }
+  }
+
   return Array.from(podMap.values())
     .sort((a, b) => b.totalScripts - a.totalScripts || a.podLeadName.localeCompare(b.podLeadName))
     .map((pod) => {
@@ -883,7 +909,9 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
         .sort((a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName))
         .map((w) => {
           const scripts = (w.scripts || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.assetCode || "").localeCompare(b.assetCode || ""));
-          return { ...w, scripts, liveCount: scripts.filter((s) => String(s.scriptStatus || "").toLowerCase() === "uploaded").length };
+          const liveEntry = liveCountMap.get(`${pod.podLeadName}::${w.writerName}`);
+          const liveScripts = liveEntry ? liveEntry.scripts : [];
+          return { ...w, scripts, liveScripts, liveCount: liveScripts.length };
         });
 
       return {
