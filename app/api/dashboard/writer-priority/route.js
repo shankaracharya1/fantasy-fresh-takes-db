@@ -102,7 +102,14 @@ function getApprovedForProductionDate(source, row) {
     return "";
   }
 
-  return pickFirstIsoDate(row?.approvedForProdDate, row?.etaToStartProd);
+  const status = normalizeStatus(row?.scriptStatus || row?.status);
+  return pickFirstIsoDate(
+    row?.approvedForProdDate,
+    row?.etaToStartProd,
+    isStatusApprovedForProduction(status) ? row?.dateSubmittedByLead : "",
+    isStatusApprovedForProduction(status) ? row?.leadSubmittedDate : "",
+    isStatusApprovedForProduction(status) ? row?.strictLeadSubmittedDate : ""
+  );
 }
 
 function makeRecordKey(row) {
