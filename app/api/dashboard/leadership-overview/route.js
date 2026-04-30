@@ -453,6 +453,7 @@ function buildWorkflowRows({ editorialRows, readyRows, productionRows, liveRows 
       etaToStartProd: normalizeText(row?.etaToStartProd),
       etaPromoCompletion: normalizeText(row?.etaPromoCompletion),
       finalUploadDate: normalizeText(row?.finalUploadDate),
+      reworkGaCode: normalizeText(row?.reworkGaCode),
       cpiUsd: row?.cpiUsd,
       threeSecPlayPct: row?.threeSecPlayPct,
       thruPlaysPct: row?.thruPlaysPct,
@@ -1012,6 +1013,32 @@ export async function GET(request) {
     const currentWeekUpdateRows = buildCurrentWeekUpdateRows(beatRows, filteredWorkflowRows, weekSelection);
     const podThroughputRows = buildPodThroughputRowsForRange(filteredWorkflowRows, weekSelection.weekStart, weekSelection.weekEnd);
 
+    // Build GU rework map from raw live rows (before asset-code filtering, so GU codes are included)
+    // Maps: original GA/GI/GU code → GU code it was reworked into (covers GA→GU, GI→GU, GU→GU chains)
+    const liveReworkMap = {};
+    for (const row of liveResult?.rows || []) {
+      const reworkCode = normalizeText(row?.reworkGaCode || "").toUpperCase();
+      const assetCode = normalizeText(row?.assetCode || "").toUpperCase();
+      if (reworkCode && assetCode.startsWith("GU")) {
+        liveReworkMap[reworkCode] = assetCode;
+      }
+    }
+
+    // Collect GU rows with full field data for CPI×CPS table
+    // Raw live rows use dateSubmittedByLead (not strictLeadSubmittedDate which is only on processed workflow rows)
+    const liveGuRows = (liveResult?.rows || [])
+      .filter((row) => normalizeText(row?.assetCode || "").toUpperCase().startsWith("GU"))
+      .map((row) => ({
+        assetCode: normalizeText(row?.assetCode || "").toUpperCase(),
+        showName: normalizeText(row?.showName || ""),
+        beatName: normalizeText(row?.beatName || ""),
+        cpiUsd: row?.cpiUsd ?? null,
+        strictLeadSubmittedDate: normalizeText(row?.dateSubmittedByLead || ""),
+        reworkGaCode: normalizeText(row?.reworkGaCode || "").toUpperCase(),
+        podLeadName: normalizeText(row?.podLeadRaw || row?.podLeadName || ""),
+        writerName: normalizeText(row?.writerName || ""),
+      }));
+
     return NextResponse.json({
       ok: true,
       period: startDate || endDate ? "range" : period,
@@ -1038,6 +1065,8 @@ export async function GET(request) {
       liveSourceError: liveResult?.error || "",
       currentWeekUpdateRows,
       podThroughputRows,
+      liveReworkMap,
+      liveGuRows,
     });
   } catch (error) {
     return NextResponse.json({

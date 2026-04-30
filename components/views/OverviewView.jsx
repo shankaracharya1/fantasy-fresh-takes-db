@@ -1554,24 +1554,41 @@ export function ShowWiseTable({ allWorkflowRows = [], allAnalyticsRows = [], wee
       const showKey = show.toLowerCase();
 
       if (source === "editorial" || source === "ready_for_production" || source === "production") {
-        const dateCheck = swNormDate(row.strictLeadSubmittedDate || row.leadSubmittedDate || row.stageDate);
+        const dateCheck = swNormDate(row.strictLeadSubmittedDate);
         if (!swInRange(dateCheck, weekStart, weekEnd)) continue;
         // Editorial rows must also be Approved for Production by CL
         if (source === "editorial" && !swIsApproved(row.scriptStatus || row.status)) continue;
 
         const podEntry = getOrCreate(podMap, podKey, () => ({ podName: pod, writers: new Set(), showMap: new Map() }));
         if (row.writerName) podEntry.writers.add(String(row.writerName).trim());
-        const showEntry = getOrCreate(podEntry.showMap, showKey, () => ({ showName: show, submitToProd: 0, live: 0, successBeats: new Set(), promisingBeats: new Set() }));
-        if (swIsApproved(row.scriptStatus || row.status)) showEntry.submitToProd++;
+        const showEntry = getOrCreate(podEntry.showMap, showKey, () => ({ showName: show, submitToProd: 0, live: 0, seenSubmitCodes: new Set(), seenLiveCodes: new Set(), duplicateCodes: new Set(), successBeats: new Set(), promisingBeats: new Set() }));
+        if (!showEntry.seenSubmitCodes) showEntry.seenSubmitCodes = new Set();
+        if (!showEntry.duplicateCodes) showEntry.duplicateCodes = new Set();
+        const assetKey = String(row.assetCode || "").trim().toLowerCase();
+        if (assetKey && showEntry.seenSubmitCodes.has(assetKey)) { showEntry.duplicateCodes.add(assetKey.toUpperCase()); continue; }
+        if (assetKey) showEntry.seenSubmitCodes.add(assetKey);
+        showEntry.submitToProd++;
       }
 
       if (source === "live") {
-        const liveDate = swNormDate(row.finalUploadDate || row.stageDate);
+        const liveDate = swNormDate(row.strictLeadSubmittedDate);
         if (!swInRange(liveDate, weekStart, weekEnd)) continue;
 
         const podEntry = getOrCreate(podMap, podKey, () => ({ podName: pod, writers: new Set(), showMap: new Map() }));
         if (row.writerName) podEntry.writers.add(String(row.writerName).trim());
-        const showEntry = getOrCreate(podEntry.showMap, showKey, () => ({ showName: show, submitToProd: 0, live: 0, successBeats: new Set(), promisingBeats: new Set() }));
+        const showEntry = getOrCreate(podEntry.showMap, showKey, () => ({ showName: show, submitToProd: 0, live: 0, seenSubmitCodes: new Set(), seenLiveCodes: new Set(), successBeats: new Set(), promisingBeats: new Set() }));
+        if (!showEntry.seenLiveCodes) showEntry.seenLiveCodes = new Set();
+        if (!showEntry.seenSubmitCodes) showEntry.seenSubmitCodes = new Set();
+        if (!showEntry.duplicateCodes) showEntry.duplicateCodes = new Set();
+        const assetKey = String(row.assetCode || "").trim().toLowerCase();
+        if (assetKey && showEntry.seenLiveCodes.has(assetKey)) continue;
+        if (assetKey) showEntry.seenLiveCodes.add(assetKey);
+        if (assetKey && !showEntry.seenSubmitCodes.has(assetKey)) {
+          showEntry.seenSubmitCodes.add(assetKey);
+          showEntry.submitToProd++;
+        } else if (assetKey) {
+          showEntry.duplicateCodes.add(assetKey.toUpperCase());
+        }
         showEntry.live++;
       }
     }
@@ -1599,7 +1616,7 @@ export function ShowWiseTable({ allWorkflowRows = [], allAnalyticsRows = [], wee
       }
       if (!showEntry) continue;
       if (cpi < 6) showEntry.successBeats.add(beatLabel);
-      if (cpi < 10) showEntry.promisingBeats.add(beatLabel);
+      if (cpi >= 6 && cpi <= 10) showEntry.promisingBeats.add(beatLabel);
     }
 
     return Array.from(podMap.values())
@@ -2519,6 +2536,355 @@ function ThroughputPerWriterTable({ allWorkflowRows = [], endDate = "", loading 
   );
 }
 
+// ─── CPI x CPS Table ──────────────────────────────────────────────────────────
+
+function cpiCpsWeekLabel(dateStr) {
+  if (!dateStr) return "Unknown";
+  const parts = String(dateStr).split("-");
+  if (parts.length < 3) return "Unknown";
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  const weekNum = Math.ceil(day / 7);
+  const monthName = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][month - 1] || "";
+  return `${monthName} wk ${weekNum}`;
+}
+
+function cpiCpsWeekSortKey(dateStr) {
+  if (!dateStr) return "9999-99";
+  const parts = String(dateStr).split("-");
+  const month = parts[1] || "99";
+  const day = Number(parts[2] || 99);
+  return `${parts[0] || "9999"}-${month}-${String(Math.ceil(day / 7)).padStart(2, "0")}`;
+}
+
+function formatCpiVal(v) {
+  const n = Number(v);
+  if (!v && v !== 0) return "—";
+  if (!Number.isFinite(n)) return String(v);
+  return `$${n.toFixed(2)}`;
+}
+
+function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}, weekStart = "", weekEnd = "" }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [cpsMap, setCpsMap] = useState(null); // null = not fetched yet
+
+  const fetchCpsData = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/dashboard/cps-data");
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || "Failed to load CPS data");
+      const map = new Map();
+      for (const r of json.rows) {
+        if (r.trackerCode) map.set(r.trackerCode.toUpperCase(), r.cpsValue);
+      }
+      setCpsMap(map);
+    } catch (e) {
+      setError(String(e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Build map: any code (GA/GI/GU) → GU code it was reworked into
+  // Covers GA→GU, GI→GU, and GU→GU chains
+  const reworkGaMap = useMemo(() => {
+    const m = new Map();
+    for (const row of allWorkflowRows) {
+      const reworkCode = String(row.reworkGaCode || "").trim().toUpperCase();
+      const assetCode = String(row.assetCode || "").trim().toUpperCase();
+      if (reworkCode && assetCode) m.set(reworkCode, assetCode);
+    }
+    for (const [k, v] of Object.entries(liveReworkMap)) {
+      if (k && v) m.set(k.toUpperCase(), v.toUpperCase());
+    }
+    return m;
+  }, [allWorkflowRows, liveReworkMap]);
+
+  // Build week → POD → Writer → Show → scripts structure
+  // Show is unique per writer; includes GA/GI from allWorkflowRows + GU from liveGuRows
+  const weekGroups = useMemo(() => {
+    if (!cpsMap) return [];
+    const seen = new Set();
+    const weekMap = new Map();
+
+    const addScript = (weekKey, weekLabel, pod, writer, showName, script) => {
+      if (!weekMap.has(weekKey)) weekMap.set(weekKey, { label: weekLabel, podMap: new Map() });
+      const { podMap } = weekMap.get(weekKey);
+      if (!podMap.has(pod)) podMap.set(pod, new Map());
+      const writerMap = podMap.get(pod);
+      if (!writerMap.has(writer)) writerMap.set(writer, new Map());
+      const showMap = writerMap.get(writer);
+      if (!showMap.has(showName)) showMap.set(showName, []);
+      showMap.get(showName).push(script);
+    };
+
+    const buildScript = (row, code) => {
+      const guCode = (reworkGaMap.get(code) || "").toUpperCase();
+      const giGuCode = guCode.startsWith("GU") ? guCode : "";
+      return {
+        code,
+        angle: String(row.beatName || "").trim(),
+        cpiOnCpi: row.cpiUsd != null ? row.cpiUsd : "",
+        giToGu: giGuCode,
+        cpiOnCps: cpsMap.get(code) || "",
+        cpiOnCpsGu: giGuCode ? (cpsMap.get(giGuCode) || "") : "",
+      };
+    };
+
+    // GA/GI rows
+    for (const row of allWorkflowRows) {
+      if (String(row.source || "") !== "live") continue;
+      const d = swNormDate(row.strictLeadSubmittedDate);
+      if (!swInRange(d, weekStart, weekEnd)) continue;
+      const code = String(row.assetCode || "").trim().toUpperCase();
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      addScript(
+        cpiCpsWeekSortKey(d), cpiCpsWeekLabel(d),
+        String(row.podLeadName || "").trim() || "Unknown POD",
+        String(row.writerName || "").trim() || "Unknown",
+        String(row.showName || "").trim() || "Unknown Show",
+        buildScript(row, code)
+      );
+    }
+
+    // GU rows (GU→GU rework check included via reworkGaMap)
+    for (const row of liveGuRows) {
+      const d = swNormDate(row.strictLeadSubmittedDate);
+      if (!swInRange(d, weekStart, weekEnd)) continue;
+      const code = String(row.assetCode || "").trim().toUpperCase();
+      if (!code || seen.has(code)) continue;
+      seen.add(code);
+      addScript(
+        cpiCpsWeekSortKey(d), cpiCpsWeekLabel(d),
+        String(row.podLeadName || "").trim() || "Unknown POD",
+        String(row.writerName || "").trim() || "Unknown",
+        String(row.showName || "").trim() || "Unknown Show",
+        buildScript(row, code)
+      );
+    }
+
+    return Array.from(weekMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, { label, podMap }]) => {
+        const pods = Array.from(podMap.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([podName, writerMap]) => {
+            const writers = Array.from(writerMap.entries())
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([writerName, showMap]) => {
+                const shows = Array.from(showMap.entries())
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([showName, scripts]) => ({ showName, scripts }));
+                const writerTotal = shows.reduce((sum, s) => sum + s.scripts.length, 0);
+                return { writerName, shows, writerTotal };
+              });
+            const podTotal = writers.reduce((sum, w) => sum + w.writerTotal, 0);
+            return { podName, writers, podTotal };
+          });
+        const weekTotal = pods.reduce((sum, p) => sum + p.podTotal, 0);
+        const allScripts = pods.flatMap((p) => p.writers.flatMap((w) => w.shows.flatMap((s) => s.scripts)));
+        const total = {
+          codes: allScripts.length,
+          withCpi: allScripts.filter((r) => r.cpiOnCpi !== "").length,
+          withGiGu: allScripts.filter((r) => r.giToGu !== "").length,
+          withCps: allScripts.filter((r) => r.cpiOnCps !== "").length,
+          withCpsGu: allScripts.filter((r) => r.cpiOnCpsGu !== "").length,
+        };
+        return { label, pods, weekTotal, total };
+      });
+  }, [allWorkflowRows, liveGuRows, cpsMap, reworkGaMap, weekStart, weekEnd]);
+
+  const COL = 10; // Week | POD | Writer | Show | Angle | Code | CPI on CPI | GI>GU | CPI on CPS | CPI on CPS GU
+
+  // Per-POD expand: Set of "weekLabel::podName"
+  const [expandedPods, setExpandedPods] = useState(new Set());
+  const togglePod = (key) => setExpandedPods((prev) => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  const podToggleBtn = (podKey, isExpanded) => (
+    <button
+      type="button"
+      onClick={() => togglePod(podKey)}
+      style={{
+        marginLeft: 6, fontSize: 11, fontWeight: 700, padding: "1px 5px",
+        border: "1px solid var(--accent, #c2703e)", borderRadius: 3,
+        background: "transparent", color: "var(--accent, #c2703e)",
+        cursor: "pointer", lineHeight: 1,
+      }}
+    >
+      {isExpanded ? "−" : "+"}
+    </button>
+  );
+
+  const headerRow = (
+    <tr style={{ background: "var(--header-bg, #e8e0d4)", borderTop: "2px solid var(--border)" }}>
+      <th style={{ padding: "5px 8px", width: 80, fontSize: 11 }}></th>
+      <th style={{ padding: "5px 8px", fontSize: 11 }} colSpan={2}>POD / Writer</th>
+      <th style={{ padding: "5px 8px", fontSize: 11 }}>Show</th>
+      <th style={{ padding: "5px 8px", fontSize: 11 }}>Angle</th>
+      <th style={{ padding: "5px 8px", fontSize: 11 }}>Code</th>
+      <th style={{ padding: "5px 8px", fontSize: 11, textAlign: "right" }}>CPI on CPI</th>
+      <th style={{ padding: "5px 8px", fontSize: 11, textAlign: "center" }}>GI &gt; GU</th>
+      <th style={{ padding: "5px 8px", fontSize: 11, textAlign: "right" }}>CPI on CPS</th>
+      <th style={{ padding: "5px 8px", fontSize: 11, textAlign: "right" }}>CPI on CPS GU</th>
+    </tr>
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>CPI × CPS</div>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--subtle)", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={cpsMap !== null}
+            disabled={loading}
+            onChange={(e) => { if (e.target.checked) fetchCpsData(); else setCpsMap(null); }}
+            style={{ cursor: "pointer" }}
+          />
+          Include CPS sheet
+        </label>
+        {loading && <span style={{ fontSize: 12, color: "var(--subtle)" }}>Loading…</span>}
+        {error && <span style={{ fontSize: 12, color: "#c0392b" }}>{error}</span>}
+      </div>
+
+      {cpsMap !== null && (
+        <div className="table-wrap">
+          <table className="ops-table overview-table" style={{ tableLayout: "auto" }}>
+            <tbody>
+              {weekGroups.length === 0 ? (
+                <tr><td colSpan={COL} style={{ color: "var(--subtle)", fontSize: 13, padding: "10px 8px" }}>No data for selected date range.</td></tr>
+              ) : weekGroups.map((group) => {
+                // Week rowspan = sum of each pod's displayed rows (1 if collapsed, podTotal if expanded)
+                const weekDisplayRows = group.pods.reduce((sum, pod) => {
+                  const podKey = `${group.label}::${pod.podName}`;
+                  return sum + (expandedPods.has(podKey) ? pod.podTotal : 1);
+                }, 0);
+
+                let isFirstPodOfWeek = true;
+                return (
+                  <Fragment key={group.label}>
+                    {headerRow}
+                    {group.pods.map((pod) => {
+                      const podKey = `${group.label}::${pod.podName}`;
+                      const isExpanded = expandedPods.has(podKey);
+                      const podScripts = pod.writers.flatMap((w) => w.shows.flatMap((s) => s.scripts));
+                      const renderWeekCell = isFirstPodOfWeek;
+                      isFirstPodOfWeek = false;
+
+                      if (!isExpanded) {
+                        // Collapsed: single summary row per POD
+                        return (
+                          <tr key={podKey} style={{ verticalAlign: "middle" }}>
+                            {renderWeekCell && (
+                              <td rowSpan={weekDisplayRows} style={{ padding: "5px 8px", fontWeight: 700, fontSize: 12, verticalAlign: "middle", borderRight: "1px solid var(--border)", color: "#c2703e", whiteSpace: "nowrap" }}>
+                                {group.label}
+                              </td>
+                            )}
+                            <td colSpan={2} style={{ padding: "5px 8px", fontSize: 12, fontWeight: 600 }}>
+                              {pod.podName}{podToggleBtn(podKey, false)}
+                            </td>
+                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center", color: "var(--subtle)" }}>
+                              {new Set(pod.writers.flatMap((w) => w.shows.map((s) => s.showName))).size} shows
+                            </td>
+                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center", color: "var(--subtle)" }}>—</td>
+                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center" }}>{podScripts.length}</td>
+                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{podScripts.filter((s) => s.cpiOnCpi !== "").length}</td>
+                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center" }}>{podScripts.filter((s) => s.giToGu !== "").length}</td>
+                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{podScripts.filter((s) => s.cpiOnCps !== "").length}</td>
+                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{podScripts.filter((s) => s.cpiOnCpsGu !== "").length}</td>
+                          </tr>
+                        );
+                      }
+
+                      // Expanded: build flat rows for this pod with rowspan metadata
+                      const podFlatRows = [];
+                      let isFirstOfPod = true;
+                      for (const writer of pod.writers) {
+                        let isFirstOfWriter = true;
+                        for (const show of writer.shows) {
+                          for (let si = 0; si < show.scripts.length; si++) {
+                            podFlatRows.push({
+                              s: show.scripts[si],
+                              isFirstOfPod, podRowspan: pod.podTotal,
+                              isFirstOfWriter, writerName: writer.writerName, writerRowspan: writer.writerTotal,
+                              isFirstOfShow: si === 0, showName: show.showName, showRowspan: show.scripts.length,
+                            });
+                            isFirstOfPod = false;
+                            isFirstOfWriter = false;
+                          }
+                        }
+                      }
+
+                      return (
+                        <Fragment key={podKey}>
+                          {podFlatRows.map((row, i) => {
+                            const isGu = row.s.code.startsWith("GU");
+                            return (
+                              <tr key={`${podKey}::${row.writerName}::${row.showName}::${row.s.code}`}
+                                style={{ background: i % 2 === 0 ? "transparent" : "var(--subtle-bg, #f7f4ef)", verticalAlign: "top" }}>
+                                {renderWeekCell && i === 0 && (
+                                  <td rowSpan={weekDisplayRows} style={{ padding: "5px 8px", fontWeight: 700, fontSize: 12, verticalAlign: "middle", borderRight: "1px solid var(--border)", color: "#c2703e", whiteSpace: "nowrap" }}>
+                                    {group.label}
+                                  </td>
+                                )}
+                                {row.isFirstOfPod && (
+                                  <td rowSpan={row.podRowspan} style={{ padding: "5px 8px", fontSize: 12, fontWeight: 600, verticalAlign: "top", borderRight: "1px solid var(--border)" }}>
+                                    {pod.podName}{podToggleBtn(podKey, true)}
+                                  </td>
+                                )}
+                                {row.isFirstOfWriter && (
+                                  <td rowSpan={row.writerRowspan} style={{ padding: "5px 8px", fontSize: 12, verticalAlign: "top", borderRight: "1px solid var(--border)", color: "var(--subtle)" }}>
+                                    {row.writerName}
+                                  </td>
+                                )}
+                                {row.isFirstOfShow && (
+                                  <td rowSpan={row.showRowspan} style={{ padding: "5px 8px", fontSize: 12, verticalAlign: "top", borderRight: "1px solid var(--border)" }}>
+                                    {row.showName}
+                                  </td>
+                                )}
+                                <td style={{ padding: "5px 8px", fontSize: 12 }}>{row.s.angle || "—"}</td>
+                                <td style={{ padding: "5px 8px", fontSize: 11, fontWeight: 600, color: isGu ? "#5a7fb5" : "#2d4a2d" }}>{row.s.code}</td>
+                                <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{formatCpiVal(row.s.cpiOnCpi)}</td>
+                                <td style={{ padding: "5px 8px", fontSize: 11, textAlign: "center", fontWeight: 700, color: row.s.giToGu ? "#5a7fb5" : "#ccc" }}>{row.s.giToGu || "—"}</td>
+                                <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{formatCpiVal(row.s.cpiOnCps)}</td>
+                                <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right", fontVariantNumeric: "tabular-nums", color: row.s.cpiOnCpsGu ? "#5a7fb5" : "inherit" }}>{formatCpiVal(row.s.cpiOnCpsGu)}</td>
+                              </tr>
+                            );
+                          })}
+                        </Fragment>
+                      );
+                    })}
+                    {/* Total row per week */}
+                    <tr style={{ borderTop: "2px solid var(--border)", background: "var(--subtle-bg, #f0ece4)", fontWeight: 700 }}>
+                      <td style={{ padding: "5px 8px", fontSize: 12 }}>Total</td>
+                      <td colSpan={2} style={{ padding: "5px 8px", fontSize: 12 }}></td>
+                      <td style={{ padding: "5px 8px", fontSize: 12 }}></td>
+                      <td style={{ padding: "5px 8px", fontSize: 12 }}></td>
+                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center" }}>{group.total.codes}</td>
+                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{group.total.withCpi}</td>
+                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center" }}>{group.total.withGiGu}</td>
+                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{group.total.withCps}</td>
+                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{group.total.withCpsGu}</td>
+                    </tr>
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Reports View ─────────────────────────────────────────────────────────────
 
 export function ReportsContent({
@@ -2532,6 +2898,8 @@ export function ReportsContent({
 }) {
   const allWorkflowRows = Array.isArray(leadershipOverviewData?.allWorkflowRows) ? leadershipOverviewData.allWorkflowRows : [];
   const allAnalyticsRows = Array.isArray(leadershipOverviewData?.allAnalyticsRows) ? leadershipOverviewData.allAnalyticsRows : [];
+  const liveReworkMap = leadershipOverviewData?.liveReworkMap || {};
+  const liveGuRows = Array.isArray(leadershipOverviewData?.liveGuRows) ? leadershipOverviewData.liveGuRows : [];
   const weekStart = swNormDate(startDate);
   const weekEnd = swNormDate(endDate);
   const loading = leadershipOverviewLoading;
@@ -2563,6 +2931,10 @@ export function ReportsContent({
         weekEnd={weekEnd}
         loading={loading}
       />
+
+      <hr className="section-divider" />
+
+      <CpiCpsTable allWorkflowRows={allWorkflowRows} liveGuRows={liveGuRows} liveReworkMap={liveReworkMap} weekStart={weekStart} weekEnd={weekEnd} />
     </div>
   );
 }
