@@ -534,8 +534,9 @@ const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab 
 // NOTE: DEFAULT_DASHBOARD_RANGE intentionally removed — was computed at module load time, causing
 // server/client hydration mismatches when the server process stayed alive across day boundaries.
 // All usages now use lazy useState initializers so server and client compute the same value.
-const DASHBOARD_CLIENT_REFRESH_MS = 5 * 60 * 1000;
-const DASHBOARD_CLIENT_CACHE_TTL_MS = 5 * 60 * 1000;
+// Hard cache: data stays for 4 hours and is ONLY evicted when the user clicks Sync.
+// There is no background auto-refresh — the setInterval approach has been removed.
+const DASHBOARD_CLIENT_CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 // ─── Shell-only helpers ───────────────────────────────────────────────────────
 
@@ -888,6 +889,21 @@ function writeClientCache(key, payload) {
   } catch {}
 }
 
+// Clears all dashboard localStorage entries so the next fetch gets fresh data.
+// Called by handleRefreshCache (Sync button) before bumping the nonce.
+function clearClientCache() {
+  if (typeof window === "undefined") return;
+  try {
+    const prefixes = ["overview:", "leadership-overview:", "writer-priority:", "pod-wise-performance:", "planner2:"];
+    const toRemove = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && prefixes.some((p) => key.startsWith(p))) toRemove.push(key);
+    }
+    toRemove.forEach((k) => window.localStorage.removeItem(k));
+  } catch {}
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const MORE_VIEWS = new Set(["details", "planner"]);
@@ -965,6 +981,13 @@ export default function UnifiedOpsApp() {
   const [dashboardLoadingMessage, setDashboardLoadingMessage] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [cacheRefreshing, setCacheRefreshing] = useState(false);
+  // Tab-switch guards: track the params key for which we have in-memory data.
+  // When activeView changes but params didn't change, loadKey === ref → skip fetch.
+  const overviewLoadedKeyRef = useRef(null);
+  const leadershipLoadedKeyRef = useRef(null);
+  const writerPriorityLoadedKeyRef = useRef(null);
+  const competitionLoadedKeyRef = useRef(null);
+  const planner2LoadedKeyRef = useRef(null);
   const [planner2Data, setPlanner2Data] = useState(null);
   const [planner2Loading, setPlanner2Loading] = useState(false);
   const [planner2Error, setPlanner2Error] = useState("");
@@ -1130,7 +1153,18 @@ export default function UnifiedOpsApp() {
     setCacheRefreshing(true);
     try {
       await fetch("/api/dashboard/refresh-cache", { method: "POST", cache: "no-store" });
-      // Bump nonce → triggers all data-fetching useEffects to re-run with empty caches
+      // Clear all client-side localStorage caches
+      clearClientCache();
+      // Reset loaded-key refs so every effect re-fetches despite data being in state
+      overviewLoadedKeyRef.current = null;
+      leadershipLoadedKeyRef.current = null;
+      writerPriorityLoadedKeyRef.current = null;
+      competitionLoadedKeyRef.current = null;
+      planner2LoadedKeyRef.current = null;
+      // Reset one-shot data that has no nonce in its guard
+      setPodTasksData(null);
+      setPodTrendData(null);
+      // Bump nonce → triggers all data-fetching useEffects to re-run
       setRefreshNonce((n) => n + 1);
     } catch {
       // Ignore — data will still load on next natural expiry
@@ -1144,9 +1178,9 @@ export default function UnifiedOpsApp() {
       return undefined;
     }
 
-    let cancelled = false;
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
     const cacheKey = `overview:${rangeSelection.startDate}:${rangeSelection.endDate}:${includeNewShowsPod ? "with-new" : "bau"}`;
+    const loadKey = `${cacheKey}:${yearsParam}:nonce=${refreshNonce}`;
 
     const cachedPayload = readClientCache(cacheKey);
     if (cachedPayload) {
@@ -1155,11 +1189,15 @@ export default function UnifiedOpsApp() {
       setOverviewError("");
     }
 
-    async function loadOverviewSection({ forceLoading = false } = {}) {
+    // Skip network fetch if data is already in memory for this exact set of params.
+    // This prevents a refetch every time the user switches tabs.
+    if (overviewLoadedKeyRef.current === loadKey) return undefined;
+
+    let cancelled = false;
+
+    async function loadOverviewSection() {
       setDashboardLoadingMessage("Refreshing Overview…");
-      if (forceLoading || (!overviewData && !cachedPayload)) {
-        setOverviewLoading(true);
-      }
+      if (!cachedPayload) setOverviewLoading(true);
       setOverviewError("");
 
       try {
@@ -1177,19 +1215,18 @@ export default function UnifiedOpsApp() {
           setOverviewLoading(false);
           setDashboardLoadingMessage("");
           writeClientCache(cacheKey, overviewPayload);
+          overviewLoadedKeyRef.current = loadKey;
         }
       } catch (error) {
         if (!cancelled) {
-          if (!overviewData && !cachedPayload) {
-            setOverviewError(error.message || "Unable to load Overview metrics.");
-          }
+          if (!cachedPayload) setOverviewError(error.message || "Unable to load Overview metrics.");
           setOverviewLoading(false);
           setDashboardLoadingMessage("");
         }
       }
     }
 
-    void loadOverviewSection({ forceLoading: !cachedPayload && !overviewData });
+    void loadOverviewSection();
 
     // Fetch detailed overview rows (filtered by dateSubmittedByLead)
     async function loadOverviewDetail() {
@@ -1209,13 +1246,7 @@ export default function UnifiedOpsApp() {
     }
     void loadOverviewDetail();
 
-    const intervalId = window.setInterval(() => {
-      void loadOverviewSection({ forceLoading: false });
-    }, DASHBOARD_CLIENT_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
+    return () => { cancelled = true; };
   }, [activeView, dashboardDateRange, includeNewShowsPod, refreshNonce, yearsParam]);
 
   useEffect(() => {
@@ -1223,9 +1254,9 @@ export default function UnifiedOpsApp() {
       return undefined;
     }
 
-    let cancelled = false;
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
     const cacheKey = `leadership-overview:${rangeSelection.startDate}:${rangeSelection.endDate}:include-gu-${includeGuAssets ? "1" : "0"}`;
+    const loadKey = `${cacheKey}:${yearsParam}:nonce=${refreshNonce}`;
 
     const cachedPayload = readClientCache(cacheKey);
     if (cachedPayload) {
@@ -1234,11 +1265,15 @@ export default function UnifiedOpsApp() {
       setLeadershipOverviewError("");
     }
 
-    async function loadLeadershipOverview({ forceLoading = false } = {}) {
+    // Skip network fetch if data is already in memory for this exact set of params.
+    // This prevents a refetch every time the user switches between tabs that share this data.
+    if (leadershipLoadedKeyRef.current === loadKey) return undefined;
+
+    let cancelled = false;
+
+    async function loadLeadershipOverview() {
       setDashboardLoadingMessage("Refreshing Overview…");
-      if (forceLoading || (!leadershipOverviewData && !cachedPayload)) {
-        setLeadershipOverviewLoading(true);
-      }
+      if (!cachedPayload) setLeadershipOverviewLoading(true);
       setLeadershipOverviewError("");
 
       try {
@@ -1255,26 +1290,19 @@ export default function UnifiedOpsApp() {
           setLeadershipOverviewLoading(false);
           setDashboardLoadingMessage("");
           writeClientCache(cacheKey, payload);
+          leadershipLoadedKeyRef.current = loadKey;
         }
       } catch (error) {
         if (!cancelled) {
-          if (!leadershipOverviewData && !cachedPayload) {
-            setLeadershipOverviewError(error?.message || "Unable to load Overview.");
-          }
+          if (!cachedPayload) setLeadershipOverviewError(error?.message || "Unable to load Overview.");
           setLeadershipOverviewLoading(false);
           setDashboardLoadingMessage("");
         }
       }
     }
 
-    void loadLeadershipOverview({ forceLoading: !cachedPayload && !leadershipOverviewData });
-    const intervalId = window.setInterval(() => {
-      void loadLeadershipOverview({ forceLoading: false });
-    }, DASHBOARD_CLIENT_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
+    void loadLeadershipOverview();
+    return () => { cancelled = true; };
   }, [activeView, dashboardDateRange, includeGuAssets, refreshNonce, yearsParam]);
 
   useEffect(() => {
@@ -1282,9 +1310,9 @@ export default function UnifiedOpsApp() {
       return undefined;
     }
 
-    let cancelled = false;
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
     const cacheKey = `writer-priority:${WRITER_PRIORITY_CACHE_VERSION}:${rangeSelection.startDate}:${rangeSelection.endDate}`;
+    const loadKey = `${cacheKey}:nonce=${refreshNonce}`;
     const cachedPayload = readClientCache(cacheKey);
 
     if (cachedPayload) {
@@ -1293,11 +1321,13 @@ export default function UnifiedOpsApp() {
       setWriterPriorityError("");
     }
 
-    async function loadWriterPriority({ forceLoading = false } = {}) {
+    if (writerPriorityLoadedKeyRef.current === loadKey) return undefined;
+
+    let cancelled = false;
+
+    async function loadWriterPriority() {
       setDashboardLoadingMessage("Refreshing WIP…");
-      if (forceLoading || (!writerPriorityData && !cachedPayload)) {
-        setWriterPriorityLoading(true);
-      }
+      if (!cachedPayload) setWriterPriorityLoading(true);
       setWriterPriorityError("");
 
       try {
@@ -1315,26 +1345,19 @@ export default function UnifiedOpsApp() {
           setWriterPriorityLoading(false);
           setDashboardLoadingMessage("");
           writeClientCache(cacheKey, payload);
+          writerPriorityLoadedKeyRef.current = loadKey;
         }
       } catch (error) {
         if (!cancelled) {
-          if (!writerPriorityData && !cachedPayload) {
-            setWriterPriorityError(error?.message || "Unable to load Writer's Priority.");
-          }
+          if (!cachedPayload) setWriterPriorityError(error?.message || "Unable to load Writer's Priority.");
           setWriterPriorityLoading(false);
           setDashboardLoadingMessage("");
         }
       }
     }
 
-    void loadWriterPriority({ forceLoading: !cachedPayload && !writerPriorityData });
-    const intervalId = window.setInterval(() => {
-      void loadWriterPriority({ forceLoading: false });
-    }, DASHBOARD_CLIENT_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
+    void loadWriterPriority();
+    return () => { cancelled = true; };
   }, [activeView, dashboardDateRange, refreshNonce]);
 
 
@@ -1343,20 +1366,22 @@ export default function UnifiedOpsApp() {
       return undefined;
     }
 
-    let cancelled = false;
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
     const cacheKey = `pod-wise-performance:${podPerformanceRangeMode}:${podPerformanceScope}:${rangeSelection.startDate}:${rangeSelection.endDate}`;
+    const loadKey = `${cacheKey}:nonce=${refreshNonce}`;
     const cachedPayload = readClientCache(cacheKey);
     if (cachedPayload) {
       setCompetitionData(cachedPayload);
       setCompetitionLoading(false);
     }
 
-    async function loadCompetition({ forceLoading = false } = {}) {
+    if (competitionLoadedKeyRef.current === loadKey) return undefined;
+
+    let cancelled = false;
+
+    async function loadCompetition() {
       setDashboardLoadingMessage("Refreshing Pod Wise…");
-      if (forceLoading || (!competitionData && !cachedPayload)) {
-        setCompetitionLoading(true);
-      }
+      if (!cachedPayload) setCompetitionLoading(true);
       try {
         const response = await fetch(
           podPerformanceRangeMode === "lifetime"
@@ -1373,13 +1398,10 @@ export default function UnifiedOpsApp() {
           setCompetitionData(payload);
           setDashboardLoadingMessage("");
           writeClientCache(cacheKey, payload);
+          competitionLoadedKeyRef.current = loadKey;
         }
       } catch {
-        if (!cancelled) {
-          if (!competitionData && !cachedPayload) {
-            setCompetitionData(null);
-          }
-        }
+        if (!cancelled && !cachedPayload) setCompetitionData(null);
       } finally {
         if (!cancelled) {
           setCompetitionLoading(false);
@@ -1388,14 +1410,8 @@ export default function UnifiedOpsApp() {
       }
     }
 
-    void loadCompetition({ forceLoading: !cachedPayload && !competitionData });
-    const intervalId = window.setInterval(() => {
-      void loadCompetition({ forceLoading: false });
-    }, DASHBOARD_CLIENT_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
+    void loadCompetition();
+    return () => { cancelled = true; };
   }, [activeView, podWiseView, dashboardDateRange, podPerformanceRangeMode, podPerformanceScope, refreshNonce]);
 
 
@@ -1465,9 +1481,9 @@ export default function UnifiedOpsApp() {
       return undefined;
     }
 
-    let cancelled = false;
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
     const cacheKey = `planner2:${rangeSelection.startDate}:${rangeSelection.endDate}`;
+    const loadKey = `${cacheKey}:nonce=${refreshNonce}`;
     const cachedPayload = readClientCache(cacheKey);
     if (cachedPayload) {
       setPlanner2Data(cachedPayload);
@@ -1475,11 +1491,13 @@ export default function UnifiedOpsApp() {
       setPlanner2Error("");
     }
 
-    async function loadPlanner2({ forceLoading = false } = {}) {
+    if (planner2LoadedKeyRef.current === loadKey) return undefined;
+
+    let cancelled = false;
+
+    async function loadPlanner2() {
       setDashboardLoadingMessage("Refreshing Planner…");
-      if (forceLoading || (!planner2Data && !cachedPayload)) {
-        setPlanner2Loading(true);
-      }
+      if (!cachedPayload) setPlanner2Loading(true);
       setPlanner2Error("");
 
       try {
@@ -1496,10 +1514,11 @@ export default function UnifiedOpsApp() {
           setPlanner2Data(payload);
           setDashboardLoadingMessage("");
           writeClientCache(cacheKey, payload);
+          planner2LoadedKeyRef.current = loadKey;
         }
       } catch (error) {
         if (!cancelled) {
-          if (!planner2Data && !cachedPayload) {
+          if (!cachedPayload) {
             setPlanner2Data({
               ok: true,
               weekLabel: formatWeekRangeLabel(rangeSelection.startDate, rangeSelection.endDate),
@@ -1525,14 +1544,8 @@ export default function UnifiedOpsApp() {
       }
     }
 
-    void loadPlanner2({ forceLoading: !cachedPayload && !planner2Data });
-    const intervalId = window.setInterval(() => {
-      void loadPlanner2({ forceLoading: false });
-    }, DASHBOARD_CLIENT_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
+    void loadPlanner2();
+    return () => { cancelled = true; };
   }, [activeView, dashboardDateRange, refreshNonce]);
 
 

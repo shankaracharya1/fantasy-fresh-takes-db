@@ -957,7 +957,7 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
 // On a cache hit the function returns immediately — zero build* functions run.
 // Sync (/api/dashboard/refresh-cache) writes an invalidation token so the next
 // request always re-computes fresh data regardless of the TTL.
-const RESPONSE_CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes
+const RESPONSE_CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours — hard cache, evicted only by Sync
 const INVALIDATION_TOKEN_PATH = "response-cache/__invalidated-at.json";
 
 // In-memory copy of the invalidation timestamp (avoids Supabase read on every hit).
