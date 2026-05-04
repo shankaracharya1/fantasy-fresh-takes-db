@@ -29,6 +29,8 @@ function normalizeRow(row, source) {
     dateSubmittedByLead: row.dateSubmittedByLead || null,
     source,
     sourceLabel: SOURCE_LABEL[source] || source,
+    assetCode: (row.assetCode || "").toUpperCase(),
+    reworkGaCode: (row.reworkGaCode || "").toUpperCase(),
   };
 }
 

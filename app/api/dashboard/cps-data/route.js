@@ -8,44 +8,25 @@ const SHEET_ID = "1FbP_aQMe37UzHrvPPQSDu3qJoGHzzPENWV66GkzPRZw";
 const GID = "580169117";
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
 
-function parseCSV(text) {
-  const lines = text.split(/\r?\n/);
-  if (lines.length < 2) return [];
-
-  // Parse a single CSV line respecting quoted fields
-  const parseLine = (line) => {
-    const fields = [];
-    let cur = "";
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
-        else inQuotes = !inQuotes;
-      } else if (ch === "," && !inQuotes) {
-        fields.push(cur.trim());
-        cur = "";
-      } else {
-        cur += ch;
-      }
+// Parse a single CSV line respecting quoted fields
+function parseLine(line) {
+  const fields = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === "," && !inQuotes) {
+      fields.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
     }
-    fields.push(cur.trim());
-    return fields;
-  };
-
-  const headers = parseLine(lines[0]);
-  const rows = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const values = parseLine(line);
-    const obj = {};
-    headers.forEach((h, idx) => { obj[h.trim()] = (values[idx] || "").trim(); });
-    rows.push(obj);
   }
-
-  return rows;
+  fields.push(cur.trim());
+  return fields;
 }
 
 function findCol(headers, candidates) {
@@ -61,27 +42,51 @@ function findCol(headers, candidates) {
   return null;
 }
 
+// Strip leading $ and parse as number string, e.g. "$21.2" → "21.2"
+function parseCpsValue(raw) {
+  return (raw || "").replace(/^\$/, "").trim();
+}
+
 export async function GET() {
   try {
     const res = await fetch(CSV_URL, { cache: "no-store" });
     if (!res.ok) throw new Error(`CSV fetch failed: ${res.status}`);
     const text = await res.text();
-    const rawRows = parseCSV(text);
+    const lines = text.split(/\r?\n/);
 
-    if (!rawRows.length) {
-      return NextResponse.json({ ok: true, rows: [] });
+    // The sheet has 2 preamble rows before the real header.
+    // Find the header row by looking for "Tracker Code" in the first 10 lines.
+    let headerIdx = -1;
+    for (let i = 0; i < Math.min(lines.length, 10); i++) {
+      if (lines[i].toLowerCase().includes("tracker code")) {
+        headerIdx = i;
+        break;
+      }
+    }
+    if (headerIdx === -1) {
+      return NextResponse.json({ ok: false, error: "Header row with 'Tracker Code' not found", rows: [] });
     }
 
-    const headers = Object.keys(rawRows[0]);
+    const headers = parseLine(lines[headerIdx]);
     const trackerCodeCol = findCol(headers, ["Tracker Code", "Tracker code", "tracker code", "Ad Code", "Asset Code"]);
     const cpsCol = findCol(headers, ["CPI on CPS", "Cpi on Cps", "cpi on cps"]);
 
-    const rows = rawRows
-      .map((row) => ({
-        trackerCode: trackerCodeCol ? (row[trackerCodeCol] || "").trim().toUpperCase() : "",
-        cpsValue: cpsCol ? (row[cpsCol] || "").trim() : "",
-      }))
-      .filter((r) => r.trackerCode);
+    if (!trackerCodeCol || !cpsCol) {
+      return NextResponse.json({ ok: false, error: `Columns not found — trackerCode: ${trackerCodeCol}, cps: ${cpsCol}`, rows: [] });
+    }
+
+    const trackerIdx = headers.indexOf(trackerCodeCol);
+    const cpsIdx = headers.indexOf(cpsCol);
+    const rows = [];
+
+    for (let i = headerIdx + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const values = parseLine(line);
+      const trackerCode = (values[trackerIdx] || "").trim().toUpperCase();
+      const cpsValue = parseCpsValue(values[cpsIdx] || "");
+      if (trackerCode) rows.push({ trackerCode, cpsValue });
+    }
 
     return NextResponse.json({ ok: true, rows });
   } catch (err) {
