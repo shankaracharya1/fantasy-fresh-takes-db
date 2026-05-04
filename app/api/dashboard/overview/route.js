@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readJsonObject } from "../../../../lib/storage.js";
+import { readJsonObject, writeJsonObject } from "../../../../lib/storage.js";
 import {
   GOOD_TO_GO_BEATS_TARGET,
   TARGET_FLOOR,
@@ -37,6 +37,45 @@ const CONFIG_PATH = "config/writer-config.json";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
+
+// ─── Response-level cache ─────────────────────────────────────────────────────
+const OVERVIEW_CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours — evicted by Sync only
+
+// In-memory invalidation token (shared with leadership-overview via same Supabase file)
+const INVALIDATION_TOKEN_PATH = "response-cache/__invalidated-at.json";
+let _invTs = 0;
+let _invCheckedAt = 0;
+const INV_MEMORY_TTL = 60 * 1000;
+
+async function getInvTs() {
+  if (Date.now() - _invCheckedAt < INV_MEMORY_TTL) return _invTs;
+  try {
+    const d = await readJsonObject(INVALIDATION_TOKEN_PATH);
+    _invTs = Number(d?.invalidatedAt || 0);
+  } catch { _invTs = 0; }
+  _invCheckedAt = Date.now();
+  return _invTs;
+}
+
+function overviewCacheKey(startDate, endDate, period, includeNewShowsPod, yearsParam) {
+  const key = `${startDate || ""}__${endDate || ""}__${period || ""}__${includeNewShowsPod ? "np1" : "np0"}__${yearsParam}`;
+  return `response-cache/overview__${key.replace(/[^a-z0-9_]/gi, "_")}.json`;
+}
+
+async function readOverviewCache(path) {
+  try {
+    const data = await readJsonObject(path);
+    if (!data?.cachedAt || !data?.payload) return null;
+    if (Date.now() - Number(data.cachedAt) > OVERVIEW_CACHE_TTL_MS) return null;
+    const inv = await getInvTs();
+    if (Number(data.cachedAt) < inv) return null;
+    return data.payload;
+  } catch { return null; }
+}
+
+async function writeOverviewCache(path, payload) {
+  try { await writeJsonObject(path, { cachedAt: Date.now(), payload }); } catch {}
+}
 
 function makePlannerWeekPath(weekKey) {
   return `weeks/${weekKey}.json`;
@@ -985,6 +1024,11 @@ export async function GET(request) {
       return !d || selectedYears.some((y) => d.startsWith(y));
     });
 
+  // ── Response cache check ────────────────────────────────────────────────────
+  const cachePath = overviewCacheKey(startDate, endDate, period, includeNewShowsPod, yearsParam);
+  const cached = await readOverviewCache(cachePath);
+  if (cached) return NextResponse.json(cached);
+
   try {
     // Fetch editorial + RFP workflow rows for the breakdown table (shared across all periods)
     const [editorialWorkflowResult, rfpWorkflowResult] = await Promise.all([
@@ -1012,7 +1056,7 @@ export async function GET(request) {
       const liveRows = filterLiveByYear(_liveRowsRange);
       analyticsResult.rows = filterLiveByYear(analyticsResult.rows);
       const rangeSelection = buildDateRangeSelection({ startDate, endDate });
-      return NextResponse.json({
+      const payload = {
         ...buildRangePayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, rangeSelection, {
           editorialRows: editorialWorkflowResult.rows,
           readyRows: rfpWorkflowResult.rows,
@@ -1020,7 +1064,9 @@ export async function GET(request) {
         }),
         analyticsSourceError: analyticsResult.error,
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: rangeSelection.startDate, endDate: rangeSelection.endDate, liveRows }),
-      });
+      };
+      await writeOverviewCache(cachePath, payload);
+      return NextResponse.json(payload);
     }
 
     if (period === "last") {
@@ -1039,7 +1085,7 @@ export async function GET(request) {
       const liveRows = filterLiveByYear(_liveRowsLast);
       analyticsResult.rows = filterLiveByYear(analyticsResult.rows);
       const lastWeekSelection = getWeekSelection("last");
-      return NextResponse.json({
+      const payload = {
         ...buildLastWeekPayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, {
           editorialRows: editorialWorkflowResult.rows,
           readyRows: rfpWorkflowResult.rows,
@@ -1047,7 +1093,9 @@ export async function GET(request) {
         }),
         analyticsSourceError: analyticsResult.error,
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: lastWeekSelection.weekStart, endDate: lastWeekSelection.weekEnd, liveRows }),
-      });
+      };
+      await writeOverviewCache(cachePath, payload);
+      return NextResponse.json(payload);
     }
 
     const plannerState = await loadPlannerWeek(period, { includeNewShowsPod });
@@ -1068,7 +1116,7 @@ export async function GET(request) {
           .catch(() => ({ rows: [] })),
       ]);
       const liveRows = filterLiveByYear(_liveRowsCurrent);
-      return NextResponse.json({
+      const payload = {
         ...buildCurrentWeekPayload(plannerState, {
           editorialRows: editorialWorkflowResult.rows,
           readyRows: rfpWorkflowResult.rows,
@@ -1078,7 +1126,9 @@ export async function GET(request) {
           ideationSourceError: ideationResult.error,
         }),
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: plannerState.weekSelection.weekStart, endDate: plannerState.weekSelection.weekEnd, liveRows }),
-      });
+      };
+      await writeOverviewCache(cachePath, payload);
+      return NextResponse.json(payload);
     }
 
     if (period === "next") {
@@ -1097,13 +1147,15 @@ export async function GET(request) {
           .catch(() => ({ rows: [] })),
       ]);
       const lwFreshTakeRows = buildReleasedFreshTakeAttemptsForPeriod(liveResult.rows, "last");
-      return NextResponse.json({
+      const payload = {
         ...buildNextWeekPayload(plannerState, ideationResult.rows, productionResult.rows, {
           ideationSourceError: ideationResult.error,
           prevFreshTakeCount: lwFreshTakeRows.length,
         }),
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: plannerState.weekSelection.weekStart, endDate: plannerState.weekSelection.weekEnd, liveRows: liveResult.rows }),
-      });
+      };
+      await writeOverviewCache(cachePath, payload);
+      return NextResponse.json(payload);
     }
   } catch (error) {
     return NextResponse.json(

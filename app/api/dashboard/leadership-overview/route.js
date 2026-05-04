@@ -1161,8 +1161,9 @@ export async function GET(request) {
       liveReworkMap,
       liveGuRows,
     };
-    // Fire-and-forget: persist response so next identical request is instant
-    void writeResponseCache(cachePath, responsePayload);
+    // Await the cache write — "void" doesn't work in serverless because the
+    // function terminates after return before the async write can complete.
+    await writeResponseCache(cachePath, responsePayload);
     return NextResponse.json(responsePayload);
   } catch (error) {
     return NextResponse.json({
