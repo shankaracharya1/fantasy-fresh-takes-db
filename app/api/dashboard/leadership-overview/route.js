@@ -92,31 +92,40 @@ function buildWriterNameResolver(rows) {
     if (writerName.includes(" ")) registerPossibleWriters(writerName);
   }
 
+  const resolveCache = new Map();
   return function resolveWriterName(rawValue) {
+    if (resolveCache.has(rawValue)) return resolveCache.get(rawValue);
     const cleaned = normalizeText(rawValue);
-    if (!cleaned) return "Unknown Writer";
+    if (!cleaned) { resolveCache.set(rawValue, "Unknown Writer"); return "Unknown Writer"; }
     const aliased = normalizeWriterName(cleaned);
     const aliasedKey = normalizeKey(aliased);
-    if (exactMap.has(aliasedKey)) return exactMap.get(aliasedKey);
-
-    const key = normalizeKey(aliased);
-    if (exactMap.has(key)) return exactMap.get(key);
-
-    const prefixMatches = prefixCandidates.filter((candidate) => candidate.key.startsWith(key));
-    if (prefixMatches.length === 1) return prefixMatches[0].displayName;
-
-    const firstWordMatches = prefixCandidates.filter((candidate) => {
-      if (candidate.displayName.includes(",")) return false;
-      return candidate.key.split(" ")[0] === key;
-    });
-    if (firstWordMatches.length === 1) return firstWordMatches[0].displayName;
-
-    const tokenMatches = tokenMap.get(key);
-    if (tokenMatches && tokenMatches.size === 1) {
-      return Array.from(tokenMatches)[0];
+    let result = aliased;
+    if (exactMap.has(aliasedKey)) {
+      result = exactMap.get(aliasedKey);
+    } else {
+      const key = normalizeKey(aliased);
+      if (exactMap.has(key)) {
+        result = exactMap.get(key);
+      } else {
+        const prefixMatches = prefixCandidates.filter((candidate) => candidate.key.startsWith(key));
+        if (prefixMatches.length === 1) {
+          result = prefixMatches[0].displayName;
+        } else {
+          const firstWordMatches = prefixCandidates.filter((candidate) => {
+            if (candidate.displayName.includes(",")) return false;
+            return candidate.key.split(" ")[0] === key;
+          });
+          if (firstWordMatches.length === 1) {
+            result = firstWordMatches[0].displayName;
+          } else {
+            const tokenMatches = tokenMap.get(key);
+            if (tokenMatches && tokenMatches.size === 1) result = Array.from(tokenMatches)[0];
+          }
+        }
+      }
     }
-
-    return aliased;
+    resolveCache.set(rawValue, result);
+    return result;
   };
 }
 
@@ -525,19 +534,32 @@ function buildFallbackWorkflowFromLiveRows(liveRows) {
   return { editorialRows, readyRows, productionRows };
 }
 
-function findWorkflowMatches(ideationRow, workflowRows) {
+// Build O(1) lookup indices over workflowRows so findWorkflowMatchesFast avoids O(n) scans per beat.
+function buildWorkflowIndex(workflowRows) {
+  const byCode = new Map();   // normalizedCode → row[]
+  const byShow = new Map();   // normalizedShowName → row[]
+  for (const row of Array.isArray(workflowRows) ? workflowRows : []) {
+    const addToMap = (m, k, row) => { if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(row); };
+    addToMap(byCode, normalizeKey(row?.scriptCode), row);
+    addToMap(byCode, normalizeKey(row?.assetCode), row);
+    addToMap(byShow, normalizeKey(row?.showName), row);
+  }
+  return { byCode, byShow };
+}
+
+function findWorkflowMatches(ideationRow, workflowRows, index) {
+  // Accept pre-built index when available; build on demand as fallback (preserves backward compatibility).
+  const idx = index || buildWorkflowIndex(workflowRows);
   const beatCode = normalizeKey(ideationRow?.beatCode);
   const showKey = normalizeKey(ideationRow?.showName);
   const beatName = normalizeText(ideationRow?.beatName);
 
   if (beatCode) {
-    const exactCodeMatches = workflowRows.filter(
-      (row) => normalizeKey(row?.scriptCode) === beatCode || normalizeKey(row?.assetCode) === beatCode
-    );
+    const exactCodeMatches = idx.byCode.get(beatCode) || [];
     if (exactCodeMatches.length > 0) return exactCodeMatches;
   }
 
-  const sameShowRows = workflowRows.filter((row) => normalizeKey(row?.showName) === showKey);
+  const sameShowRows = idx.byShow.get(showKey) || [];
   if (sameShowRows.length === 0) return [];
 
   const matchedAngle = matchAngleName(beatName, sameShowRows.map((row) => row?.beatName).filter(Boolean));
@@ -555,12 +577,13 @@ function getBestWorkflowMatch(matches) {
 }
 
 function buildApprovedMatchedRows(beatRows, workflowRows) {
+  const index = buildWorkflowIndex(workflowRows);
   return beatRows
     .filter((row) => row.statusCategory === "approved")
-    .map((row, index) => {
-      const bestMatch = getBestWorkflowMatch(findWorkflowMatches(row, workflowRows));
+    .map((row, i) => {
+      const bestMatch = getBestWorkflowMatch(findWorkflowMatches(row, workflowRows, index));
       return {
-        id: `approved-match-${index + 1}`,
+        id: `approved-match-${i + 1}`,
         monthKey: row.monthKey,
         monthLabel: row.monthLabel,
         weekInMonth: row.weekInMonth,
@@ -685,8 +708,9 @@ function buildCurrentWeekUpdateRows(beatRows, workflowRows, weekSelection) {
     return grouped.get(key);
   };
 
+  const workflowIndex = buildWorkflowIndex(workflowRows);
   for (const beat of beatRows.filter((row) => isDateWithinWeek(row.completedDate, weekSelection))) {
-    const bestMatch = getBestWorkflowMatch(findWorkflowMatches(beat, workflowRows));
+    const bestMatch = getBestWorkflowMatch(findWorkflowMatches(beat, workflowRows, workflowIndex));
     ensureRow(bestMatch?.podLeadName || beat.podLeadName, bestMatch?.writerName || beat.writerName).beats += 1;
   }
 
