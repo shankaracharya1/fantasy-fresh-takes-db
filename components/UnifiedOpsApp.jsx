@@ -996,7 +996,7 @@ export default function UnifiedOpsApp() {
     if (typeof window === "undefined") return null;
     try { return parseInt(window.localStorage.getItem("last-synced-at"), 10) || null; } catch { return null; }
   });
-  const [syncNotice, setSyncNotice] = useState(false);
+  const [syncConfirmPending, setSyncConfirmPending] = useState(false);
   // Tab-switch guards: track the params key for which we have in-memory data.
   // When activeView changes but params didn't change, loadKey === ref → skip fetch.
   const overviewLoadedKeyRef = useRef(null);
@@ -1169,11 +1169,10 @@ export default function UnifiedOpsApp() {
     setCacheRefreshing(true);
     try {
       await fetch("/api/dashboard/refresh-cache", { method: "POST", cache: "no-store" });
-      // Record sync time and show post-sync notice
+      // Record sync time
       const now = Date.now();
       setLastSyncedAt(now);
       try { window.localStorage.setItem("last-synced-at", String(now)); } catch {}
-      setSyncNotice(true);
       // Clear all client-side localStorage caches
       clearClientCache();
       // Reset loaded-key refs so every effect re-fetches despite data being in state
@@ -1681,12 +1680,6 @@ export default function UnifiedOpsApp() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
-  // Auto-dismiss sync notice after 25 seconds
-  useEffect(() => {
-    if (!syncNotice) return undefined;
-    const timer = window.setTimeout(() => setSyncNotice(false), 25000);
-    return () => window.clearTimeout(timer);
-  }, [syncNotice]);
 
   async function copySection(node, label) {
     setCopyingSection(label);
@@ -2113,7 +2106,7 @@ export default function UnifiedOpsApp() {
                 <button
                   type="button"
                   className={`topbar-sync-btn${cacheRefreshing ? " is-spinning" : ""}`}
-                  onClick={handleRefreshCache}
+                  onClick={() => { if (!cacheRefreshing) setSyncConfirmPending(true); }}
                   disabled={cacheRefreshing}
                   title="Sync — fetches latest data from Google Sheets, bypassing cache"
                   aria-label="Sync data from Google Sheets"
@@ -2303,24 +2296,33 @@ export default function UnifiedOpsApp() {
 
       <Notice notice={notice} />
 
-      {/* Post-sync notice — shown after clicking Sync button */}
-      {syncNotice && (
+      {/* Sync confirmation modal — shown before running the sync */}
+      {syncConfirmPending && (
         <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.35)" }}>
           <div style={{ background: "#fff9f4", borderRadius: 16, padding: "32px 36px", maxWidth: 400, width: "90%", boxShadow: "0 8px 40px rgba(0,0,0,0.18)", textAlign: "center" }}>
-            <div style={{ fontSize: 36, marginBottom: 12 }}>🔄</div>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
-              Cache cleared — syncing with Google Sheets
+              Sync with Google Sheets?
             </div>
             <div style={{ fontSize: 13, color: "#6b5c4a", lineHeight: 1.6, marginBottom: 24 }}>
-              The first load will take <strong>30–40 seconds</strong> while we fetch fresh data directly from the sheet. Please be patient.
+              This will <strong>clear the cache</strong> and fetch fresh data from the sheet. The first load will take <strong>30–40 seconds</strong>. Please be patient while the dashboard reloads.
             </div>
-            <button
-              type="button"
-              onClick={() => setSyncNotice(false)}
-              style={{ padding: "9px 28px", borderRadius: 8, border: "none", background: "#c2703e", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer" }}
-            >
-              Got it
-            </button>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <button
+                type="button"
+                onClick={() => setSyncConfirmPending(false)}
+                style={{ padding: "9px 22px", borderRadius: 8, border: "1.5px solid #ddd0be", background: "transparent", fontSize: 13, fontWeight: 600, color: "#6b5c4a", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSyncConfirmPending(false); handleRefreshCache(); }}
+                style={{ padding: "9px 22px", borderRadius: 8, border: "none", background: "#c2703e", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer" }}
+              >
+                Yes, Sync
+              </button>
+            </div>
           </div>
         </div>
       )}
