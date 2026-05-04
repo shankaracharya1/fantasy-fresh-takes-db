@@ -904,6 +904,17 @@ function clearClientCache() {
   } catch {}
 }
 
+function formatSyncTime(ts) {
+  if (!ts) return null;
+  const d = new Date(ts);
+  const today = new Date();
+  const isToday = d.toDateString() === today.toDateString();
+  const time = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+  if (isToday) return time;
+  const date = d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  return `${date}, ${time}`;
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const MORE_VIEWS = new Set(["details", "planner"]);
@@ -981,6 +992,11 @@ export default function UnifiedOpsApp() {
   const [dashboardLoadingMessage, setDashboardLoadingMessage] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [cacheRefreshing, setCacheRefreshing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState(() => {
+    if (typeof window === "undefined") return null;
+    try { return parseInt(window.localStorage.getItem("last-synced-at"), 10) || null; } catch { return null; }
+  });
+  const [syncNotice, setSyncNotice] = useState(false);
   // Tab-switch guards: track the params key for which we have in-memory data.
   // When activeView changes but params didn't change, loadKey === ref → skip fetch.
   const overviewLoadedKeyRef = useRef(null);
@@ -1153,6 +1169,11 @@ export default function UnifiedOpsApp() {
     setCacheRefreshing(true);
     try {
       await fetch("/api/dashboard/refresh-cache", { method: "POST", cache: "no-store" });
+      // Record sync time and show post-sync notice
+      const now = Date.now();
+      setLastSyncedAt(now);
+      try { window.localStorage.setItem("last-synced-at", String(now)); } catch {}
+      setSyncNotice(true);
       // Clear all client-side localStorage caches
       clearClientCache();
       // Reset loaded-key refs so every effect re-fetches despite data being in state
@@ -1660,6 +1681,13 @@ export default function UnifiedOpsApp() {
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  // Auto-dismiss sync notice after 25 seconds
+  useEffect(() => {
+    if (!syncNotice) return undefined;
+    const timer = window.setTimeout(() => setSyncNotice(false), 25000);
+    return () => window.clearTimeout(timer);
+  }, [syncNotice]);
+
   async function copySection(node, label) {
     setCopyingSection(label);
 
@@ -2081,19 +2109,26 @@ export default function UnifiedOpsApp() {
             ) : null}
             </div>
             <div className="app-topbar-end">
-              <button
-                type="button"
-                className={`topbar-sync-btn${cacheRefreshing ? " is-spinning" : ""}`}
-                onClick={handleRefreshCache}
-                disabled={cacheRefreshing}
-                title="Sync — fetches latest data from Google Sheets, bypassing cache"
-                aria-label="Sync data from Google Sheets"
-              >
-                <svg className="topbar-sync-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.76-4.24L9 6h6V0l-1.35 2.35Z" fill="currentColor"/>
-                </svg>
-                <span>{cacheRefreshing ? "Syncing…" : "Sync"}</span>
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                <button
+                  type="button"
+                  className={`topbar-sync-btn${cacheRefreshing ? " is-spinning" : ""}`}
+                  onClick={handleRefreshCache}
+                  disabled={cacheRefreshing}
+                  title="Sync — fetches latest data from Google Sheets, bypassing cache"
+                  aria-label="Sync data from Google Sheets"
+                >
+                  <svg className="topbar-sync-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.76-4.24L9 6h6V0l-1.35 2.35Z" fill="currentColor"/>
+                  </svg>
+                  <span>{cacheRefreshing ? "Syncing…" : "Sync"}</span>
+                </button>
+                {lastSyncedAt && !cacheRefreshing && (
+                  <span suppressHydrationWarning style={{ fontSize: 10, color: "var(--subtle)", whiteSpace: "nowrap", lineHeight: 1 }}>
+                    Last synced {formatSyncTime(lastSyncedAt)}
+                  </span>
+                )}
+              </div>
               <label className="theme-switch" aria-label="Toggle dark mode">
                 <input
                   type="checkbox"
@@ -2267,6 +2302,29 @@ export default function UnifiedOpsApp() {
       </div>
 
       <Notice notice={notice} />
+
+      {/* Post-sync notice — shown after clicking Sync button */}
+      {syncNotice && (
+        <div
+          className="floating-notice"
+          style={{ maxWidth: 340, display: "flex", flexDirection: "column", gap: 6 }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.3 }}>
+              Cache cleared — syncing with Google Sheets
+            </span>
+            <button
+              type="button"
+              onClick={() => setSyncNotice(false)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--subtle)", fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0, marginTop: 1 }}
+              aria-label="Dismiss"
+            >×</button>
+          </div>
+          <span style={{ fontWeight: 400, fontSize: 12, color: "var(--subtle)", lineHeight: 1.5 }}>
+            First load will take <strong style={{ color: "var(--ink)" }}>30–40 seconds</strong>. Please be patient while we fetch fresh data from the sheet.
+          </span>
+        </div>
+      )}
 
       {/* Year warning modal */}
       {yearWarningPending && (
