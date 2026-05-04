@@ -1920,6 +1920,9 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                   );
 
                   if (isPodCollapsed) {
+                    const podHitRate = pod.totalAttempts > 0
+                      ? `${((pod.totalSuccess / pod.totalAttempts) * 100).toFixed(1)}%`
+                      : "—";
                     return [(
                       <tr key={`pod-collapsed-${pod.podName}`} style={{ background: "var(--subtle-bg, #f0ece4)" }}>
                         <td style={{ fontWeight: 700, fontSize: 13, borderRight: "1px solid var(--border)", paddingTop: 8, paddingBottom: 8 }}>
@@ -1928,11 +1931,13 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                             <span>{pod.podName}</span>
                           </div>
                         </td>
-                        <td colSpan={2} style={{ fontStyle: "italic", color: "var(--subtle)", fontSize: 12, fontWeight: 600 }}>Total</td>
-                        <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalBeats}</td>
+                        <td style={{ fontStyle: "italic", color: "var(--subtle)", fontSize: 12, fontWeight: 600 }}>Total</td>
+                        <td style={{ fontWeight: 700, fontSize: 12 }}>{pod.totalShows}</td>
+                        <td style={{ fontWeight: 700, fontSize: 12 }}>{pod.totalBeats}</td>
                         <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalAttempts}</td>
                         <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{pod.totalSuccess}</td>
-                        <td colSpan={2} />
+                        <td style={{ textAlign: "right", fontWeight: 700, fontSize: 12 }}>{podHitRate}</td>
+                        <td />
                       </tr>
                     )];
                   }
@@ -1990,10 +1995,17 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                             )}
                             <td className="genai-beat-name">
                               <span>{beat.beatName || "-"}</span>
-                              {beat.ftCount > 0 && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "#dcfce7", color: "#15803d" }}>FT</span>}
-                              {beat.rwCount > 0 && <span style={{ marginLeft: 4, fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "#fef3c7", color: "#b45309" }}>RW</span>}
                             </td>
-                            <td className="genai-num-cell" style={{ textAlign: "right" }}>{formatMetricValue(beat.attempts)}</td>
+                            <td className="genai-num-cell" style={{ textAlign: "right" }}>
+                              <span style={{ fontWeight: 700 }}>{formatMetricValue(beat.attempts)}</span>
+                              {(beat.ftCount > 0 || beat.rwCount > 0) && (
+                                <span style={{ display: "block", fontSize: 9, color: "var(--subtle)", lineHeight: 1.3, marginTop: 1, whiteSpace: "nowrap" }}>
+                                  {beat.ftCount > 0 && <span style={{ color: "#2d5a3d", fontWeight: 700 }}>{beat.ftCount} FT</span>}
+                                  {beat.ftCount > 0 && beat.rwCount > 0 && <span style={{ margin: "0 2px", color: "var(--subtle)" }}>·</span>}
+                                  {beat.rwCount > 0 && <span style={{ color: "#c2703e", fontWeight: 700 }}>{beat.rwCount} RW</span>}
+                                </span>
+                              )}
+                            </td>
                             <td className="genai-num-cell" style={{ textAlign: "right" }}>
                               {beat.successCount > 0
                                 ? <span className="genai-success-badge">{formatMetricValue(beat.successCount)}</span>
@@ -2028,8 +2040,13 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                             rows.push(
                               <tr key={`${angleKey}-${ad.assetCode}`} className={ad.success ? "overview-genai-expanded-row overview-genai-ad-success" : "overview-genai-expanded-row"}>
                                 <td className="genai-asset-code-cell" style={{ paddingLeft: 16 }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                                     <span className="genai-asset-code">{ad.assetCode || "-"}</span>
+                                    {ad.scriptType && (
+                                      <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, lineHeight: 1.4, background: ad.scriptType === "ft" ? "rgba(45,90,61,0.12)" : "rgba(194,112,62,0.12)", color: ad.scriptType === "ft" ? "#2d5a3d" : "#c2703e" }}>
+                                        {ad.scriptType === "ft" ? "FT" : "RW"}
+                                      </span>
+                                    )}
                                     {ad.success && <span className="genai-hit-tag">HIT</span>}
                                   </div>
                                 </td>
@@ -2558,9 +2575,9 @@ function cpiCpsWeekSortKey(dateStr) {
 }
 
 function formatCpiVal(v) {
-  const n = Number(v);
-  if (!v && v !== 0) return "—";
-  if (!Number.isFinite(n)) return String(v);
+  if (v === "" || v == null) return "—";
+  const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[$,\s]/g, ""));
+  if (!Number.isFinite(n)) return "—";
   return `$${n.toFixed(2)}`;
 }
 
@@ -2603,8 +2620,8 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
     return m;
   }, [allWorkflowRows, liveReworkMap]);
 
-  // Build week → POD → Writer → Show → scripts structure
-  // Show is unique per writer; includes GA/GI from allWorkflowRows + GU from liveGuRows
+  // Build week → POD → Writer → Show → Angle (unique) → scripts structure
+  // Angles with the same name under the same show are grouped into one entry
   const weekGroups = useMemo(() => {
     if (!cpsMap) return [];
     const seen = new Set();
@@ -2617,54 +2634,59 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
       const writerMap = podMap.get(pod);
       if (!writerMap.has(writer)) writerMap.set(writer, new Map());
       const showMap = writerMap.get(writer);
-      if (!showMap.has(showName)) showMap.set(showName, []);
-      showMap.get(showName).push(script);
+      if (!showMap.has(showName)) showMap.set(showName, new Map());
+      const angleMap = showMap.get(showName);
+      const aN = script.angle || "—";
+      if (!angleMap.has(aN)) angleMap.set(aN, []);
+      angleMap.get(aN).push(script);
     };
 
     const buildScript = (row, code) => {
       const guCode = (reworkGaMap.get(code) || "").toUpperCase();
       const giGuCode = guCode.startsWith("GU") ? guCode : "";
+      const reworkCode = (row.reworkGaCode || "").toUpperCase();
+      const rt = String(row.reworkType || "").trim().toLowerCase();
+      const isExcluded = rt.startsWith("fresh take "); // "Fresh Take PS" etc — not FT, not RW
+      const isFt = !isExcluded && (rt === "fresh take" || rt === "fresh takes");
       return {
         code,
         angle: String(row.beatName || "").trim(),
         cpiOnCpi: row.cpiUsd != null ? row.cpiUsd : "",
-        giToGu: giGuCode,
+        reworkCode,                                     // "Script code to be reworked GA code"
         cpiOnCps: cpsMap.get(code) || "",
         cpiOnCpsGu: giGuCode ? (cpsMap.get(giGuCode) || "") : "",
+        isFt,
+        isExcluded,
       };
     };
 
-    // GA/GI rows
+    // GA/GI rows — fallback to finalUploadDate if lead submission date is missing
     for (const row of allWorkflowRows) {
       if (String(row.source || "") !== "live") continue;
-      const d = swNormDate(row.strictLeadSubmittedDate);
+      const d = swNormDate(row.strictLeadSubmittedDate || row.finalUploadDate);
       if (!swInRange(d, weekStart, weekEnd)) continue;
       const code = String(row.assetCode || "").trim().toUpperCase();
       if (!code || seen.has(code)) continue;
       seen.add(code);
-      addScript(
-        cpiCpsWeekSortKey(d), cpiCpsWeekLabel(d),
+      addScript(cpiCpsWeekSortKey(d), cpiCpsWeekLabel(d),
         String(row.podLeadName || "").trim() || "Unknown POD",
         String(row.writerName || "").trim() || "Unknown",
         String(row.showName || "").trim() || "Unknown Show",
-        buildScript(row, code)
-      );
+        buildScript(row, code));
     }
 
-    // GU rows (GU→GU rework check included via reworkGaMap)
+    // GU rows — fallback to finalUploadDate if lead submission date is missing
     for (const row of liveGuRows) {
-      const d = swNormDate(row.strictLeadSubmittedDate);
+      const d = swNormDate(row.strictLeadSubmittedDate || row.finalUploadDate);
       if (!swInRange(d, weekStart, weekEnd)) continue;
       const code = String(row.assetCode || "").trim().toUpperCase();
       if (!code || seen.has(code)) continue;
       seen.add(code);
-      addScript(
-        cpiCpsWeekSortKey(d), cpiCpsWeekLabel(d),
+      addScript(cpiCpsWeekSortKey(d), cpiCpsWeekLabel(d),
         String(row.podLeadName || "").trim() || "Unknown POD",
         String(row.writerName || "").trim() || "Unknown",
         String(row.showName || "").trim() || "Unknown Show",
-        buildScript(row, code)
-      );
+        buildScript(row, code));
     }
 
     return Array.from(weekMap.entries())
@@ -2678,27 +2700,56 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
               .map(([writerName, showMap]) => {
                 const shows = Array.from(showMap.entries())
                   .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([showName, scripts]) => ({ showName, scripts }));
-                const writerTotal = shows.reduce((sum, s) => sum + s.scripts.length, 0);
-                return { writerName, shows, writerTotal };
+                  .map(([showName, angleMap]) => {
+                    const angles = Array.from(angleMap.entries())
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([angleName, scripts]) => ({ angleName, scripts }));
+                    return { showName, angles };
+                  });
+                return { writerName, shows };
               });
-            const podTotal = writers.reduce((sum, w) => sum + w.writerTotal, 0);
-            return { podName, writers, podTotal };
+            return { podName, writers };
           });
-        const weekTotal = pods.reduce((sum, p) => sum + p.podTotal, 0);
-        const allScripts = pods.flatMap((p) => p.writers.flatMap((w) => w.shows.flatMap((s) => s.scripts)));
+        const allScripts = pods.flatMap((p) => p.writers.flatMap((w) => w.shows.flatMap((s) => s.angles.flatMap((a) => a.scripts))));
         const total = {
           codes: allScripts.length,
-          withCpi: allScripts.filter((r) => r.cpiOnCpi !== "").length,
-          withGiGu: allScripts.filter((r) => r.giToGu !== "").length,
-          withCps: allScripts.filter((r) => r.cpiOnCps !== "").length,
-          withCpsGu: allScripts.filter((r) => r.cpiOnCpsGu !== "").length,
+          shows: new Set(pods.flatMap((p) => p.writers.flatMap((w) => w.shows.map((s) => s.showName)))).size,
         };
-        return { label, pods, weekTotal, total };
+        return { label, pods, total };
       });
   }, [allWorkflowRows, liveGuRows, cpsMap, reworkGaMap, weekStart, weekEnd]);
 
-  const COL = 10; // Week | POD | Writer | Show | Angle | Code | CPI on CPI | GI>GU | CPI on CPS | CPI on CPS GU
+  // Diagnostic stats: count scripts with data and how many are low-perf
+  const diagStats = useMemo(() => {
+    const allScripts = weekGroups.flatMap((g) => g.pods.flatMap((p) => p.writers.flatMap((w) => w.shows.flatMap((s) => s.angles.flatMap((a) => a.scripts)))));
+    const withCpi = allScripts.filter((s) => s.cpiOnCpi !== "").length;
+    const withCps = allScripts.filter((s) => s.cpiOnCps !== "").length;
+    const lowPerf = allScripts.filter((s) => {
+      const cpiV = s.cpiOnCpi !== "" ? parseFloat(s.cpiOnCpi) : null;
+      return cpiV !== null && cpiV < 10;
+    }).length;
+    return { total: allScripts.length, withCpi, withCps, lowPerf, cpsEntries: cpsMap ? cpsMap.size : 0 };
+  }, [weekGroups, cpsMap]);
+
+  const COL = 5; // Week | POD | Writer | Show | Angle
+
+  // Helper: any script with CPI on CPI < $10 → highlight the outer row green
+  const scriptHasLowCpi = (s) => {
+    const cpiV = s.cpiOnCpi !== "" ? parseFloat(s.cpiOnCpi) : null;
+    return cpiV !== null && cpiV < 10;
+  };
+  const podHasLowPerf = (pod) =>
+    pod.writers.flatMap((w) => w.shows.flatMap((s) => s.angles.flatMap((a) => a.scripts))).some(scriptHasLowCpi);
+  const writerHasLowPerf = (writer) =>
+    writer.shows.flatMap((s) => s.angles.flatMap((a) => a.scripts)).some(scriptHasLowCpi);
+  const angleHasLowPerf = (angle) => angle.scripts.some(scriptHasLowCpi);
+
+  // Helper: individual script row highlight (both conditions)
+  const scriptIsLowPerf = (s) => {
+    const cpiV = s.cpiOnCpi !== "" ? parseFloat(s.cpiOnCpi) : null;
+    const cpsV = s.cpiOnCps !== "" ? parseFloat(s.cpiOnCps) : null;
+    return cpiV !== null && cpsV !== null && cpiV < 10 && cpsV < 24;
+  };
 
   // Per-POD expand: Set of "weekLabel::podName"
   const [expandedPods, setExpandedPods] = useState(new Set());
@@ -2708,10 +2759,26 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
     return next;
   });
 
-  const podToggleBtn = (podKey, isExpanded) => (
+  // Per-angle expand: Set of "writerName::showName::angleName"
+  const [expandedAngles, setExpandedAngles] = useState(new Set());
+  const mkAngleKey = (writerName, showName, angleName) => `${writerName}::${showName}::${angleName}`;
+  const toggleAngle = (key) => setExpandedAngles((prev) => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  // Row count helpers — expanded angle: 1 angle row + 1 detail container row (nested table inside)
+  // Each angle is always 1 outer row; detail expands inside the Angle <td>
+  const angleRows = () => 1;
+  const showRows = (writerName, show) => show.angles.reduce((sum, a) => sum + angleRows(writerName, show.showName, a), 0);
+  const writerRows = (writer) => writer.shows.reduce((sum, show) => sum + showRows(writer.writerName, show), 0);
+  const podRows = (pod) => pod.writers.reduce((sum, writer) => sum + writerRows(writer), 0);
+
+  const toggleBtn = (onClick, isExpanded) => (
     <button
       type="button"
-      onClick={() => togglePod(podKey)}
+      onClick={onClick}
       style={{
         marginLeft: 6, fontSize: 11, fontWeight: 700, padding: "1px 5px",
         border: "1px solid var(--accent, #c2703e)", borderRadius: 3,
@@ -2729,11 +2796,6 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
       <th style={{ padding: "5px 8px", fontSize: 11 }} colSpan={2}>POD / Writer</th>
       <th style={{ padding: "5px 8px", fontSize: 11 }}>Show</th>
       <th style={{ padding: "5px 8px", fontSize: 11 }}>Angle</th>
-      <th style={{ padding: "5px 8px", fontSize: 11 }}>Code</th>
-      <th style={{ padding: "5px 8px", fontSize: 11, textAlign: "right" }}>CPI on CPI</th>
-      <th style={{ padding: "5px 8px", fontSize: 11, textAlign: "center" }}>GI &gt; GU</th>
-      <th style={{ padding: "5px 8px", fontSize: 11, textAlign: "right" }}>CPI on CPS</th>
-      <th style={{ padding: "5px 8px", fontSize: 11, textAlign: "right" }}>CPI on CPS GU</th>
     </tr>
   );
 
@@ -2753,6 +2815,11 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
         </label>
         {loading && <span style={{ fontSize: 12, color: "var(--subtle)" }}>Loading…</span>}
         {error && <span style={{ fontSize: 12, color: "#c0392b" }}>{error}</span>}
+        {cpsMap !== null && !loading && (
+          <span style={{ fontSize: 11, color: "var(--subtle)", fontFamily: "monospace" }}>
+            CPS entries: {diagStats.cpsEntries} | codes in range: {diagStats.total} | with CPI data: {diagStats.withCpi} | with CPS data: {diagStats.withCps} | <span style={{ color: diagStats.lowPerf > 0 ? "#16a34a" : "#c0392b", fontWeight: 600 }}>CPI&lt;$10: {diagStats.lowPerf}</span>
+          </span>
+        )}
       </div>
 
       {cpsMap !== null && (
@@ -2763,9 +2830,10 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
                 <tr><td colSpan={COL} style={{ color: "var(--subtle)", fontSize: 13, padding: "10px 8px" }}>No data for selected date range.</td></tr>
               ) : weekGroups.map((group) => {
                 // Week rowspan = sum of each pod's displayed rows (1 if collapsed, podTotal if expanded)
+                // Week rowspan: collapsed pod = 1 row, expanded pod = dynamic (accounts for angle detail rows)
                 const weekDisplayRows = group.pods.reduce((sum, pod) => {
                   const podKey = `${group.label}::${pod.podName}`;
-                  return sum + (expandedPods.has(podKey) ? pod.podTotal : 1);
+                  return sum + (expandedPods.has(podKey) ? podRows(pod) : 1);
                 }, 0);
 
                 let isFirstPodOfWeek = true;
@@ -2774,62 +2842,66 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
                     {headerRow}
                     {group.pods.map((pod) => {
                       const podKey = `${group.label}::${pod.podName}`;
-                      const isExpanded = expandedPods.has(podKey);
-                      const podScripts = pod.writers.flatMap((w) => w.shows.flatMap((s) => s.scripts));
+                      const isPodExpanded = expandedPods.has(podKey);
+                      const podAngleCount = pod.writers.flatMap((w) => w.shows.flatMap((s) => s.angles)).length;
+                      const podShowCount = new Set(pod.writers.flatMap((w) => w.shows.map((s) => s.showName))).size;
                       const renderWeekCell = isFirstPodOfWeek;
                       isFirstPodOfWeek = false;
 
-                      if (!isExpanded) {
-                        // Collapsed: single summary row per POD
+                      if (!isPodExpanded) {
+                        // Collapsed POD: single summary row
+                        const _podLowPerf = podHasLowPerf(pod);
                         return (
-                          <tr key={podKey} style={{ verticalAlign: "middle" }}>
+                          <tr key={podKey} style={{ verticalAlign: "middle", background: _podLowPerf ? "#d1fae5" : undefined }}>
                             {renderWeekCell && (
                               <td rowSpan={weekDisplayRows} style={{ padding: "5px 8px", fontWeight: 700, fontSize: 12, verticalAlign: "middle", borderRight: "1px solid var(--border)", color: "#c2703e", whiteSpace: "nowrap" }}>
                                 {group.label}
                               </td>
                             )}
                             <td colSpan={2} style={{ padding: "5px 8px", fontSize: 12, fontWeight: 600 }}>
-                              {pod.podName}{podToggleBtn(podKey, false)}
+                              {pod.podName}{toggleBtn(() => togglePod(podKey), false)}
                             </td>
-                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center", color: "var(--subtle)" }}>
-                              {new Set(pod.writers.flatMap((w) => w.shows.map((s) => s.showName))).size} shows
-                            </td>
-                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center", color: "var(--subtle)" }}>—</td>
-                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center" }}>{podScripts.length}</td>
-                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{podScripts.filter((s) => s.cpiOnCpi !== "").length}</td>
-                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center" }}>{podScripts.filter((s) => s.giToGu !== "").length}</td>
-                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{podScripts.filter((s) => s.cpiOnCps !== "").length}</td>
-                            <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{podScripts.filter((s) => s.cpiOnCpsGu !== "").length}</td>
+                            <td style={{ padding: "5px 8px", fontSize: 12, color: "var(--subtle)" }}>{podShowCount} shows</td>
+                            <td style={{ padding: "5px 8px", fontSize: 12, color: "var(--subtle)" }}>{podAngleCount} angles</td>
                           </tr>
                         );
                       }
 
-                      // Expanded: build flat rows for this pod with rowspan metadata
-                      const podFlatRows = [];
+                      // Expanded POD: iterate Writer → Show → Angle (unique) → detail rows
+                      const _isPodLowPerf = podHasLowPerf(pod);
+                      const podAngleRows = [];
                       let isFirstOfPod = true;
                       for (const writer of pod.writers) {
                         let isFirstOfWriter = true;
                         for (const show of writer.shows) {
-                          for (let si = 0; si < show.scripts.length; si++) {
-                            podFlatRows.push({
-                              s: show.scripts[si],
-                              isFirstOfPod, podRowspan: pod.podTotal,
-                              isFirstOfWriter, writerName: writer.writerName, writerRowspan: writer.writerTotal,
-                              isFirstOfShow: si === 0, showName: show.showName, showRowspan: show.scripts.length,
+                          let isFirstOfShow = true;
+                          for (const angle of show.angles) {
+                            const aKey = mkAngleKey(writer.writerName, show.showName, angle.angleName);
+                            const isExpanded = expandedAngles.has(aKey);
+                            podAngleRows.push({
+                              angle, aKey, isExpanded,
+                              writerName: writer.writerName,
+                              showName: show.showName,
+                              isFirstOfPod, podRowspan: podRows(pod),
+                              isFirstOfWriter, writerRowspan: writerRows(writer),
+                              isFirstOfShow, showRowspan: showRows(writer.writerName, show),
                             });
                             isFirstOfPod = false;
                             isFirstOfWriter = false;
+                            isFirstOfShow = false;
                           }
                         }
                       }
 
                       return (
                         <Fragment key={podKey}>
-                          {podFlatRows.map((row, i) => {
-                            const isGu = row.s.code.startsWith("GU");
-                            return (
-                              <tr key={`${podKey}::${row.writerName}::${row.showName}::${row.s.code}`}
-                                style={{ background: i % 2 === 0 ? "transparent" : "var(--subtle-bg, #f7f4ef)", verticalAlign: "top" }}>
+                          {podAngleRows.map((row, i) => (
+                            <Fragment key={`${podKey}::${row.writerName}::${row.showName}::${row.angle.angleName}`}>
+                              {/* One row per unique angle */}
+                              {(() => {
+                                const _isAngleLow = angleHasLowPerf(row.angle);
+                                return (
+                              <tr style={{ background: _isAngleLow ? "#d1fae5" : (i % 2 === 0 ? "transparent" : "var(--subtle-bg, #f7f4ef)"), verticalAlign: "top" }}>
                                 {renderWeekCell && i === 0 && (
                                   <td rowSpan={weekDisplayRows} style={{ padding: "5px 8px", fontWeight: 700, fontSize: 12, verticalAlign: "middle", borderRight: "1px solid var(--border)", color: "#c2703e", whiteSpace: "nowrap" }}>
                                     {group.label}
@@ -2837,7 +2909,7 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
                                 )}
                                 {row.isFirstOfPod && (
                                   <td rowSpan={row.podRowspan} style={{ padding: "5px 8px", fontSize: 12, fontWeight: 600, verticalAlign: "top", borderRight: "1px solid var(--border)" }}>
-                                    {pod.podName}{podToggleBtn(podKey, true)}
+                                    {pod.podName}{toggleBtn(() => togglePod(podKey), true)}
                                   </td>
                                 )}
                                 {row.isFirstOfWriter && (
@@ -2850,15 +2922,54 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
                                     {row.showName}
                                   </td>
                                 )}
-                                <td style={{ padding: "5px 8px", fontSize: 12 }}>{row.s.angle || "—"}</td>
-                                <td style={{ padding: "5px 8px", fontSize: 11, fontWeight: 600, color: isGu ? "#5a7fb5" : "#2d4a2d" }}>{row.s.code}</td>
-                                <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{formatCpiVal(row.s.cpiOnCpi)}</td>
-                                <td style={{ padding: "5px 8px", fontSize: 11, textAlign: "center", fontWeight: 700, color: row.s.giToGu ? "#5a7fb5" : "#ccc" }}>{row.s.giToGu || "—"}</td>
-                                <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{formatCpiVal(row.s.cpiOnCps)}</td>
-                                <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right", fontVariantNumeric: "tabular-nums", color: row.s.cpiOnCpsGu ? "#5a7fb5" : "inherit" }}>{formatCpiVal(row.s.cpiOnCpsGu)}</td>
+                                <td style={{ padding: "5px 8px", fontSize: 12, verticalAlign: "top" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                                    {row.angle.angleName}{toggleBtn(() => toggleAngle(row.aKey), row.isExpanded)}
+                                  </div>
+                                  {row.isExpanded && (
+                                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, marginTop: 6, background: "var(--bg-deep, #eee8e0)", borderRadius: 4 }}>
+                                      <thead>
+                                        <tr style={{ background: "var(--header-bg, #ddd5c8)" }}>
+                                          <th style={{ padding: "3px 8px", textAlign: "left", fontWeight: 700, color: "var(--subtle)", whiteSpace: "nowrap" }}>Code (GI / GA / GU)</th>
+                                          <th style={{ padding: "3px 8px", textAlign: "right", fontWeight: 700, color: "var(--subtle)", whiteSpace: "nowrap" }}>CPI on CPI</th>
+                                          <th style={{ padding: "3px 8px", textAlign: "center", fontWeight: 700, color: "var(--subtle)", whiteSpace: "nowrap" }}>Rework</th>
+                                          <th style={{ padding: "3px 8px", textAlign: "right", fontWeight: 700, color: "var(--subtle)", whiteSpace: "nowrap" }}>CPI on CPS</th>
+                                          <th style={{ padding: "3px 8px", textAlign: "right", fontWeight: 700, color: "var(--subtle)", whiteSpace: "nowrap" }}>CPI on CPS GU</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {row.angle.scripts.map((s) => {
+                                          const isGu = s.code.startsWith("GU");
+                                          const _cpiVal = s.cpiOnCpi !== "" ? parseFloat(String(s.cpiOnCpi).replace(/[$,]/g, "")) : null;
+                                          const isLowPerf = _cpiVal !== null && Number.isFinite(_cpiVal) && _cpiVal < 10;
+                                          return (
+                                            <tr key={s.code} style={isLowPerf ? { background: "#fef9c3" } : undefined}>
+                                              <td style={{ padding: "3px 8px", fontWeight: 600, color: isGu ? "#5a7fb5" : "#2d4a2d", whiteSpace: "nowrap" }}>
+                                                <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                                  {s.code}
+                                                  {!s.isExcluded && (
+                                                    <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 4px", borderRadius: 3, lineHeight: 1.4, background: s.isFt ? "rgba(45,90,61,0.12)" : "rgba(194,112,62,0.12)", color: s.isFt ? "#2d5a3d" : "#c2703e" }}>
+                                                      {s.isFt ? "FT" : "RW"}
+                                                    </span>
+                                                  )}
+                                                </span>
+                                              </td>
+                                              <td style={{ padding: "3px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{formatCpiVal(s.cpiOnCpi)}</td>
+                                              <td style={{ padding: "3px 8px", textAlign: "center", fontWeight: 600, color: s.reworkCode ? "#5a7fb5" : "#ccc", fontFamily: s.reworkCode ? "monospace" : "inherit" }}>{s.reworkCode || "—"}</td>
+                                              <td style={{ padding: "3px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{formatCpiVal(s.cpiOnCps)}</td>
+                                              <td style={{ padding: "3px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: s.cpiOnCpsGu ? "#5a7fb5" : "inherit" }}>{formatCpiVal(s.cpiOnCpsGu)}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </td>
                               </tr>
-                            );
-                          })}
+                                );
+                              })()}
+                            </Fragment>
+                          ))}
                         </Fragment>
                       );
                     })}
@@ -2866,13 +2977,8 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
                     <tr style={{ borderTop: "2px solid var(--border)", background: "var(--subtle-bg, #f0ece4)", fontWeight: 700 }}>
                       <td style={{ padding: "5px 8px", fontSize: 12 }}>Total</td>
                       <td colSpan={2} style={{ padding: "5px 8px", fontSize: 12 }}></td>
-                      <td style={{ padding: "5px 8px", fontSize: 12 }}></td>
-                      <td style={{ padding: "5px 8px", fontSize: 12 }}></td>
-                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center" }}>{group.total.codes}</td>
-                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{group.total.withCpi}</td>
-                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "center" }}>{group.total.withGiGu}</td>
-                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{group.total.withCps}</td>
-                      <td style={{ padding: "5px 8px", fontSize: 12, textAlign: "right" }}>{group.total.withCpsGu}</td>
+                      <td style={{ padding: "5px 8px", fontSize: 12, color: "var(--subtle)" }}>{new Set(group.pods.flatMap(p => p.writers.flatMap(w => w.shows.map(s => s.showName)))).size} shows</td>
+                      <td style={{ padding: "5px 8px", fontSize: 12, color: "var(--subtle)" }}>{group.total.codes} codes</td>
                     </tr>
                   </Fragment>
                 );
@@ -2886,6 +2992,32 @@ function CpiCpsTable({ allWorkflowRows = [], liveGuRows = [], liveReworkMap = {}
 }
 
 // ─── Reports View ─────────────────────────────────────────────────────────────
+
+function CollapsibleSection({ title, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 8, width: "100%",
+          background: "none", border: "none", cursor: "pointer", padding: "6px 0", marginBottom: open ? 10 : 0,
+        }}
+      >
+        <span style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 18, height: 18, borderRadius: 4, border: "1.5px solid var(--border)",
+          fontSize: 13, fontWeight: 700, color: "var(--subtle)", flexShrink: 0,
+          transition: "transform 0.15s",
+          transform: open ? "rotate(0deg)" : "rotate(-90deg)",
+        }}>▾</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--fg)" }}>{title}</span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
 
 export function ReportsContent({
   leadershipOverviewData = null,
@@ -2905,36 +3037,42 @@ export function ReportsContent({
   const loading = leadershipOverviewLoading;
 
   return (
-    <div className="section-stack" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-      <ThroughputPerWriterTable
-        allWorkflowRows={allWorkflowRows}
-        endDate={weekEnd}
-        loading={loading}
-      />
+    <div className="section-stack" style={{ gridTemplateColumns: "minmax(0, 1fr)", gap: 0 }}>
+      <CollapsibleSection title="Throughput Per Writer">
+        <ThroughputPerWriterTable
+          allWorkflowRows={allWorkflowRows}
+          endDate={weekEnd}
+          loading={loading}
+        />
+      </CollapsibleSection>
 
       <hr className="section-divider" />
 
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Writer&apos;s Priority</div>
-      <WriterPriorityTable
-        data={writerPriorityData}
-        loading={writerPriorityLoading}
-        error={writerPriorityError}
-      />
+      <CollapsibleSection title="Writer's Priority">
+        <WriterPriorityTable
+          data={writerPriorityData}
+          loading={writerPriorityLoading}
+          error={writerPriorityError}
+        />
+      </CollapsibleSection>
 
       <hr className="section-divider" />
 
-      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Show Wise</div>
-      <ShowWiseTable
-        allWorkflowRows={allWorkflowRows}
-        allAnalyticsRows={allAnalyticsRows}
-        weekStart={weekStart}
-        weekEnd={weekEnd}
-        loading={loading}
-      />
+      <CollapsibleSection title="Show Wise">
+        <ShowWiseTable
+          allWorkflowRows={allWorkflowRows}
+          allAnalyticsRows={allAnalyticsRows}
+          weekStart={weekStart}
+          weekEnd={weekEnd}
+          loading={loading}
+        />
+      </CollapsibleSection>
 
       <hr className="section-divider" />
 
-      <CpiCpsTable allWorkflowRows={allWorkflowRows} liveGuRows={liveGuRows} liveReworkMap={liveReworkMap} weekStart={weekStart} weekEnd={weekEnd} />
+      <CollapsibleSection title="CPI × CPS">
+        <CpiCpsTable allWorkflowRows={allWorkflowRows} liveGuRows={liveGuRows} liveReworkMap={liveReworkMap} weekStart={weekStart} weekEnd={weekEnd} />
+      </CollapsibleSection>
     </div>
   );
 }

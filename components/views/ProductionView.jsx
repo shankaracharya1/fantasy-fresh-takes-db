@@ -195,6 +195,7 @@ function ProductionPipelineTable({ rows = [], loading = false }) {
 function classifyFtRw(reworkType) {
   const rt = String(reworkType || "").trim().toLowerCase();
   if (!rt) return null;
+  if (rt.startsWith("fresh take ")) return null; // "Fresh Take PS" etc — excluded from both FT and RW
   if (rt === "fresh take" || rt === "fresh takes" || rt.startsWith("new q1") || rt.startsWith("ft")) return "ft";
   return "rw";
 }

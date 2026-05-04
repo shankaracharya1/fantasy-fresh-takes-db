@@ -247,26 +247,84 @@ const LIFECYCLE_STAGES = [
   { id: "production",    label: "Production",      color: "#16a34a", bg: "#f0fdf4" },
 ];
 
+const STAGE_PRIORITY = { live: 4, production: 3, ready_for_prod: 2, editorial: 1 };
+
+const REWORK_CARD_STYLE = {
+  background: "#2a2d3e",
+  border: "1.5px solid #3d4158",
+  borderRadius: 10,
+  padding: "14px 22px",
+  textAlign: "center",
+  minWidth: 110,
+  flexShrink: 0,
+};
+
+// Horizontal flow: linear chain = inline, branching = stacked branches
+function ReworkFlowNode({ node, depth = 0 }) {
+  const prefix = (node.assetCode || "").slice(0, 2).toUpperCase();
+  const codeColor = prefix === "GU" ? "#93c5fd" : prefix === "GA" ? "#fdba74" : "#f1f5f9";
+  const label = depth === 0 ? "Original" : `R${depth}`;
+
+  const card = (
+    <div style={REWORK_CARD_STYLE}>
+      <div style={{ fontWeight: 800, fontSize: 14, color: codeColor, fontFamily: "monospace", letterSpacing: "0.02em" }}>
+        {node.assetCode}
+      </div>
+      <div style={{ fontSize: 11, color: "#8b8fa8", marginTop: 4 }}>{label}</div>
+    </div>
+  );
+
+  if (node.children.length === 0) {
+    return card;
+  }
+
+  if (node.children.length === 1) {
+    // Linear: show inline
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        {card}
+        <span style={{ color: "#5a5d70", fontSize: 20, lineHeight: 1 }}>→</span>
+        <ReworkFlowNode node={node.children[0]} depth={depth + 1} />
+      </div>
+    );
+  }
+
+  // Branching: parent then each child as its own row
+  return (
+    <div>
+      <div style={{ marginBottom: 12 }}>{card}</div>
+      {node.children.map((child) => (
+        <div key={child.assetCode} style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: 16, marginBottom: 8 }}>
+          <span style={{ color: "#5a5d70", fontSize: 20, lineHeight: 1 }}>→</span>
+          <ReworkFlowNode node={child} depth={depth + 1} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function LifetimeAngleContent() {
   const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [showFilter, setShowFilter] = useState("");
   const [angleFilter, setAngleFilter] = useState("");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
 
-  // Fetch all lifecycle data (no end date = full lifetime)
+  // Fetch lifecycle data filtered by date range
   useEffect(() => {
     setLoading(true);
     setFetched(false);
     const params = new URLSearchParams();
     if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
     fetch(`/api/dashboard/overview-detail?${params}`)
       .then((r) => r.json())
       .then((d) => { setRows(Array.isArray(d.rows) ? d.rows : []); setFetched(true); })
       .catch(() => { setRows([]); setFetched(true); })
       .finally(() => setLoading(false));
-  }, [startDate]);
+  }, [startDate, endDate]);
 
   const showNames = useMemo(() =>
     [...new Set(rows.map((r) => r.showName).filter(Boolean))].sort()
@@ -299,6 +357,49 @@ function LifetimeAngleContent() {
     return m;
   }, [lifecycle]);
 
+  // Build rework chain tree from all rows for this angle
+  const reworkTree = useMemo(() => {
+    if (!angleFilter) return [];
+    const angleRows = rows.filter(
+      (r) => (!showFilter || r.showName === showFilter) && r.beatName === angleFilter && r.assetCode
+    );
+    // Merge multiple rows per assetCode (same code can appear in editorial + live etc.)
+    const codeMap = new Map();
+    for (const r of angleRows) {
+      const code = r.assetCode.toUpperCase();
+      if (!codeMap.has(code)) {
+        codeMap.set(code, { ...r, assetCode: code, children: [] });
+      } else {
+        const existing = codeMap.get(code);
+        // Upgrade to higher lifecycle stage if more complete
+        if ((STAGE_PRIORITY[r.source] || 0) > (STAGE_PRIORITY[existing.source] || 0)) {
+          const { children } = existing;
+          Object.assign(existing, r, { assetCode: code, children });
+        }
+        // Always capture reworkGaCode from whichever row has it (Live tab)
+        if (r.reworkGaCode && !existing.reworkGaCode) existing.reworkGaCode = r.reworkGaCode.toUpperCase();
+      }
+    }
+    // Link parents and children
+    const roots = [];
+    for (const [, node] of codeMap) {
+      const parentKey = (node.reworkGaCode || "").toUpperCase();
+      const parent = parentKey ? codeMap.get(parentKey) : null;
+      if (parent) {
+        parent.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    // Sort by date at every level
+    const sortByDate = (nodes) => {
+      nodes.sort((a, b) => (a.dateSubmittedByLead || "").localeCompare(b.dateSubmittedByLead || ""));
+      nodes.forEach((n) => sortByDate(n.children));
+      return nodes;
+    };
+    return sortByDate(roots);
+  }, [rows, showFilter, angleFilter]);
+
   const fLabel = { fontSize: 11, fontWeight: 700, color: "var(--subtle)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 6, display: "block" };
   const fInput = { padding: "9px 12px", borderRadius: 8, border: "1.5px solid var(--border)", background: "var(--card, #fffdf9)", fontSize: 13, color: "var(--ink)", fontFamily: "inherit", outline: "none", width: "100%", boxSizing: "border-box" };
   const fSelect = { ...fInput, appearance: "none", backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`, backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center", paddingRight: 32 };
@@ -316,6 +417,10 @@ function LifetimeAngleContent() {
         <div style={{ flex: "0 0 160px" }}>
           <label style={fLabel}>Start Date</label>
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={fInput} />
+        </div>
+        <div style={{ flex: "0 0 160px" }}>
+          <label style={fLabel}>End Date</label>
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={fInput} min={startDate || undefined} />
         </div>
         <div style={{ flex: "1 1 200px" }}>
           <label style={fLabel}>Show Name</label>
@@ -399,6 +504,23 @@ function LifetimeAngleContent() {
               </tbody>
             </table>
           </div>
+
+          {/* Rework Chain Flow */}
+          {reworkTree.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Rework Chain</div>
+              <div style={{ fontSize: 12, color: "var(--subtle)", marginBottom: 16 }}>
+                How scripts evolved through rework iterations — Original is the first script, R1/R2… are subsequent reworks.
+              </div>
+              <div style={{ background: "#1e2030", borderRadius: 14, padding: "28px 32px", overflowX: "auto" }}>
+                {reworkTree.map((root, i) => (
+                  <div key={root.assetCode} style={{ marginBottom: i < reworkTree.length - 1 ? 24 : 0 }}>
+                    <ReworkFlowNode node={root} depth={0} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -409,7 +531,9 @@ function LifetimeAngleContent() {
 
 const THEME_STORAGE_KEY = "fresh-takes-theme-mode";
 const EMPTY_ACD_MESSAGE = "No valid ACD output data available yet from Live tab sync.";
-const DEFAULT_DASHBOARD_RANGE = buildDateRangeSelection({ period: "current", minDate: MIN_DASHBOARD_DATE });
+// NOTE: DEFAULT_DASHBOARD_RANGE intentionally removed — was computed at module load time, causing
+// server/client hydration mismatches when the server process stayed alive across day boundaries.
+// All usages now use lazy useState initializers so server and client compute the same value.
 const DASHBOARD_CLIENT_REFRESH_MS = 5 * 60 * 1000;
 const DASHBOARD_CLIENT_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -772,10 +896,30 @@ const WRITER_PRIORITY_CACHE_VERSION = "v3";
 export default function UnifiedOpsApp() {
   const [activeView, setActiveView] = useState("overview");
   const [moreExpanded, setMoreExpanded] = useState(false);
+  const [selectedYears, setSelectedYears] = useState(["2026"]);
+  const [yearWarningPending, setYearWarningPending] = useState(null);
+  const toggleYear = (year) => {
+    const isAdding = !selectedYears.includes(year);
+    if (isAdding && year !== "2026") {
+      // Warn before including non-2026 years — they significantly slow the dashboard
+      setYearWarningPending(year);
+      return;
+    }
+    setSelectedYears((prev) =>
+      prev.includes(year) ? prev.filter((y) => y !== year) : [...prev, year]
+    );
+  };
+  const confirmYearWarning = () => {
+    if (yearWarningPending) {
+      setSelectedYears((prev) => [...prev, yearWarningPending]);
+      setYearWarningPending(null);
+    }
+  };
+  const yearsParam = selectedYears.join(",") || "2026";
   const [themeMode, setThemeMode] = useState("light");
-  const [dashboardDateRange, setDashboardDateRange] = useState({
-    startDate: DEFAULT_DASHBOARD_RANGE.startDate,
-    endDate: DEFAULT_DASHBOARD_RANGE.endDate,
+  const [dashboardDateRange, setDashboardDateRange] = useState(() => {
+    const r = buildDateRangeSelection({ period: "current", minDate: MIN_DASHBOARD_DATE });
+    return { startDate: r.startDate, endDate: r.endDate };
   });
   const [plannerBoardSnapshot, setPlannerBoardSnapshot] = useState(null);
   const [overviewData, setOverviewData] = useState(null);
@@ -824,9 +968,13 @@ export default function UnifiedOpsApp() {
   const [planner2Data, setPlanner2Data] = useState(null);
   const [planner2Loading, setPlanner2Loading] = useState(false);
   const [planner2Error, setPlanner2Error] = useState("");
-  const [lastNonQuickRange, setLastNonQuickRange] = useState(DEFAULT_DASHBOARD_RANGE);
-  const [weekFilterSelection, setWeekFilterSelection] = useState(
-    getMonthWeekSelectionByDate(DEFAULT_DASHBOARD_RANGE.startDate).id
+  const [lastNonQuickRange, setLastNonQuickRange] = useState(() =>
+    buildDateRangeSelection({ period: "current", minDate: MIN_DASHBOARD_DATE })
+  );
+  const [weekFilterSelection, setWeekFilterSelection] = useState(() =>
+    getMonthWeekSelectionByDate(
+      buildDateRangeSelection({ period: "current", minDate: MIN_DASHBOARD_DATE }).startDate
+    ).id
   );
   const [dateFilterMode, setDateFilterMode] = useState("custom");
   const [weekDropdownOpen, setWeekDropdownOpen] = useState(false);
@@ -1016,7 +1164,7 @@ export default function UnifiedOpsApp() {
 
       try {
         const overviewResponse = await fetch(
-          `/api/dashboard/overview?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}&includeNewShowsPod=${includeNewShowsPod}`,
+          `/api/dashboard/overview?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}&includeNewShowsPod=${includeNewShowsPod}&years=${encodeURIComponent(yearsParam)}`,
           { cache: "no-store" }
         );
         const overviewPayload = await readJson(overviewResponse);
@@ -1068,7 +1216,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange, includeNewShowsPod, refreshNonce]);
+  }, [activeView, dashboardDateRange, includeNewShowsPod, refreshNonce, yearsParam]);
 
   useEffect(() => {
     if (activeView !== "leadership-overview" && activeView !== "overview" && activeView !== "reports") {
@@ -1094,7 +1242,7 @@ export default function UnifiedOpsApp() {
       setLeadershipOverviewError("");
 
       try {
-        const response = await fetch(`/api/dashboard/leadership-overview?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}&includeGuAssets=${includeGuAssets ? "true" : "false"}`, {
+        const response = await fetch(`/api/dashboard/leadership-overview?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}&includeGuAssets=${includeGuAssets ? "true" : "false"}&years=${encodeURIComponent(yearsParam)}`, {
           cache: "no-store",
         });
         const payload = await readJson(response);
@@ -1127,7 +1275,7 @@ export default function UnifiedOpsApp() {
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeView, dashboardDateRange, includeGuAssets, refreshNonce]);
+  }, [activeView, dashboardDateRange, includeGuAssets, refreshNonce, yearsParam]);
 
   useEffect(() => {
     if (activeView !== "reports") {
@@ -1736,8 +1884,35 @@ export default function UnifiedOpsApp() {
               <h1 className="app-topbar-title">{activeViewLabelMap[activeView] || "Dashboard"}</h1>
             </div>
             <div className="app-topbar-right">
+              {/* Year filter — matches topbar date-field pattern */}
+              <div className="app-topbar-date-field" style={{ marginRight: 4 }}>
+                <span className="app-topbar-date-label">Live data fetch</span>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {["2025", "2026"].map((year) => {
+                    const active = selectedYears.includes(year);
+                    return (
+                      <button
+                        key={year}
+                        type="button"
+                        onClick={() => toggleYear(year)}
+                        className={`app-topbar-quick-btn${active ? " is-active" : ""}`}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                      >
+                        {active && (
+                          <svg width="9" height="9" viewBox="0 0 11 11" fill="none" style={{ flexShrink: 0 }}>
+                            <path d="M2 5.5L4.5 8L9 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                        {year}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               {headerSupportsDateRange ? (
                 <div className="app-topbar-range" data-share-ignore="true">
+                  {/* Divider between year filter and date controls — inside app-topbar-range so align-items:center applies */}
+                  <div style={{ width: 1, height: 24, alignSelf: "center", background: "var(--border, #e2d9cc)", margin: "0 2px", flexShrink: 0 }} />
                   <div
                     ref={weekDropdownRef}
                     className={`week-picker-wrap${headerDateRangeUsesWeekPreset ? " is-active" : ""}${weekDropdownOpen ? " is-open" : ""}`}
@@ -1812,7 +1987,7 @@ export default function UnifiedOpsApp() {
                       </div>
                     )}
                   </div>
-                <span className="topbar-range-divider" aria-hidden="true">|</span>
+                <div style={{ width: 1, height: 24, alignSelf: "center", background: "var(--border, #e2d9cc)", margin: "0 2px", flexShrink: 0 }} />
                 <div className={`date-field-wrap${headerDateRangeUsesManualDates ? " is-active" : ""}`}>
                   <span className="app-topbar-date-label">Start date</span>
                   <button
@@ -2077,6 +2252,37 @@ export default function UnifiedOpsApp() {
       </div>
 
       <Notice notice={notice} />
+
+      {/* Year warning modal */}
+      {yearWarningPending && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.35)" }}>
+          <div style={{ background: "#fff9f4", borderRadius: 16, padding: "32px 36px", maxWidth: 400, width: "90%", boxShadow: "0 8px 40px rgba(0,0,0,0.18)", textAlign: "center" }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>⚠️</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
+              Include {yearWarningPending} data?
+            </div>
+            <div style={{ fontSize: 13, color: "#6b5c4a", lineHeight: 1.6, marginBottom: 24 }}>
+              Adding <strong>{yearWarningPending}</strong> will load significantly more data from the Live sheet. The dashboard may become <strong>slower to load</strong> and less responsive.
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <button
+                type="button"
+                onClick={() => setYearWarningPending(null)}
+                style={{ padding: "9px 22px", borderRadius: 8, border: "1.5px solid #ddd0be", background: "transparent", fontSize: 13, fontWeight: 600, color: "#6b5c4a", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmYearWarning}
+                style={{ padding: "9px 22px", borderRadius: 8, border: "none", background: "#c2703e", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer" }}
+              >
+                Yes, include {yearWarningPending}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -408,7 +408,9 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
       if (weekStart && date < weekStart) return false;
       if (weekEnd && date > weekEnd) return false;
       const rt = String(row?.reworkType || "").trim().toLowerCase();
-      return rt !== "" && rt !== "fresh take" && rt !== "fresh takes";
+      // Exclude blank, FT labels, and "Fresh Take PS" / any "fresh take *" variant
+      if (!rt || rt === "fresh take" || rt === "fresh takes" || rt.startsWith("fresh take ")) return false;
+      return true;
     });
   }, [allWorkflowRows, weekStart, weekEnd]);
 
@@ -428,6 +430,8 @@ export function BeatsSummaryCards({ leadershipOverviewData, loading }) {
       if (weekStart && leadDate < weekStart) continue;
       if (weekEnd && leadDate > weekEnd) continue;
       const rt = String(row?.reworkType || "").trim().toLowerCase();
+      // Skip "Fresh Take PS" and any other "fresh take *" variants — excluded from both FT and RW
+      if (rt.startsWith("fresh take ")) continue;
       const isFT = rt === "fresh take" || rt === "fresh takes";
       if (source === "ready_for_production") { counts.ready++; isFT ? counts.readyFT++ : counts.readyRW++; }
       else if (source === "production")      { counts.production++; isFT ? counts.productionFT++ : counts.productionRW++; }

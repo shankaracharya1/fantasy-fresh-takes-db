@@ -142,6 +142,7 @@ const BREAKDOWN_POD_ORDER = ["Dan", "Josh", "Nishant", "Paul"];
 function classifyFtRw(reworkType) {
   const rt = String(reworkType || "").trim().toLowerCase();
   if (!rt) return null; // unknown — don't count in either bucket
+  if (rt.startsWith("fresh take ")) return null; // e.g. "Fresh Take PS" — excluded from both FT and RW
   if (rt === "fresh take" || rt === "fresh takes" || rt.startsWith("new q1") || rt.startsWith("ft")) return "ft";
   return "rw";
 }
@@ -313,6 +314,7 @@ function makeFuzzyBeatKey(showName, beatName) {
 
 function classifyScriptType(reworkType) {
   const rt = String(reworkType || "").trim().toLowerCase();
+  if (rt.startsWith("fresh take ")) return null; // "Fresh Take PS" etc — excluded from both counts
   return rt === "fresh take" || rt === "fresh takes" || rt.startsWith("new q1") ? "FT" : "RW";
 }
 
@@ -419,10 +421,11 @@ function buildPodThroughputForRange({ editorialRows = [], readyRows = [], produc
     if (scriptType === "FT") {
       pod.ftCount += 1;
       writer.ftCount += 1;
-    } else {
+    } else if (scriptType === "RW") {
       pod.rwCount += 1;
       writer.rwCount += 1;
     }
+    // null = "Fresh Take PS" or similar — excluded from both counts
   }
 
   return Array.from(podMap.values())
@@ -973,6 +976,15 @@ export async function GET(request) {
   const endDate = url.searchParams.get("endDate");
   const includeNewShowsPod = url.searchParams.get("includeNewShowsPod") === "true";
 
+  // Year filter applied to live rows (by Final Upload Date); default 2026
+  const yearsParam = url.searchParams.get("years") || "2026";
+  const selectedYears = yearsParam.split(",").map((y) => y.trim()).filter(Boolean);
+  const filterLiveByYear = (rows) =>
+    (rows || []).filter((row) => {
+      const d = String(row?.finalUploadDate || row?.liveDate || "").trim();
+      return !d || selectedYears.some((y) => d.startsWith(y));
+    });
+
   try {
     // Fetch editorial + RFP workflow rows for the breakdown table (shared across all periods)
     const [editorialWorkflowResult, rfpWorkflowResult] = await Promise.all([
@@ -985,7 +997,7 @@ export async function GET(request) {
     ]);
 
     if (startDate || endDate) {
-      const [{ rows: liveRows }, analyticsResult, ideationResult, productionResult] = await Promise.all([
+      const [{ rows: _liveRowsRange }, analyticsResult, ideationResult, productionResult] = await Promise.all([
         fetchLiveTabRows(),
         fetchAnalyticsLiveTabRows()
           .then((result) => ({ rows: result?.rows || [], error: "" }))
@@ -997,6 +1009,8 @@ export async function GET(request) {
           .then((result) => ({ rows: result?.rows || [] }))
           .catch(() => ({ rows: [] })),
       ]);
+      const liveRows = filterLiveByYear(_liveRowsRange);
+      analyticsResult.rows = filterLiveByYear(analyticsResult.rows);
       const rangeSelection = buildDateRangeSelection({ startDate, endDate });
       return NextResponse.json({
         ...buildRangePayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, rangeSelection, {
@@ -1010,7 +1024,7 @@ export async function GET(request) {
     }
 
     if (period === "last") {
-      const [{ rows: liveRows }, analyticsResult, ideationResult, productionResult] = await Promise.all([
+      const [{ rows: _liveRowsLast }, analyticsResult, ideationResult, productionResult] = await Promise.all([
         fetchLiveTabRows(),
         fetchAnalyticsLiveTabRows()
           .then((result) => ({ rows: result?.rows || [], error: "" }))
@@ -1022,6 +1036,8 @@ export async function GET(request) {
           .then((result) => ({ rows: result?.rows || [] }))
           .catch(() => ({ rows: [] })),
       ]);
+      const liveRows = filterLiveByYear(_liveRowsLast);
+      analyticsResult.rows = filterLiveByYear(analyticsResult.rows);
       const lastWeekSelection = getWeekSelection("last");
       return NextResponse.json({
         ...buildLastWeekPayload(liveRows, analyticsResult.rows, ideationResult.rows, productionResult.rows, {
@@ -1037,7 +1053,7 @@ export async function GET(request) {
     const plannerState = await loadPlannerWeek(period, { includeNewShowsPod });
 
     if (period === "current") {
-      const [{ rows: liveRows }, ideationResult, productionResult] = await Promise.all([
+      const [{ rows: _liveRowsCurrent }, ideationResult, productionResult] = await Promise.all([
         fetchLiveTabRows(),
         fetchIdeationTabRows()
           .then((result) => ({ rows: result?.rows || [], error: "" }))
@@ -1051,6 +1067,7 @@ export async function GET(request) {
           .then((result) => ({ rows: result?.rows || [] }))
           .catch(() => ({ rows: [] })),
       ]);
+      const liveRows = filterLiveByYear(_liveRowsCurrent);
       return NextResponse.json({
         ...buildCurrentWeekPayload(plannerState, {
           editorialRows: editorialWorkflowResult.rows,
@@ -1073,7 +1090,7 @@ export async function GET(request) {
             error: error?.message || "The Ideation tracker tab is not accessible. Check the sheet sharing settings.",
           })),
         fetchLiveTabRows()
-          .then((result) => ({ rows: result?.rows || [] }))
+          .then((result) => ({ rows: filterLiveByYear(result?.rows || []) }))
           .catch(() => ({ rows: [] })),
         fetchProductionWorkflowRows()
           .then((result) => ({ rows: result?.rows || [] }))

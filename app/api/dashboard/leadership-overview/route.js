@@ -706,6 +706,7 @@ function buildCurrentWeekUpdateRows(beatRows, workflowRows, weekSelection) {
 function classifyFtRw(reworkType) {
   const rt = String(reworkType || "").trim().toLowerCase();
   if (!rt) return null;
+  if (rt.startsWith("fresh take ")) return null; // "Fresh Take PS" etc — excluded from both FT and RW
   if (isFreshTakesLabel(rt) || rt === "new q1" || rt.startsWith("new q1 ")) return "ft";
   return "rw";
 }
@@ -934,6 +935,15 @@ export async function GET(request) {
   const includeGuAssets = String(url.searchParams.get("includeGuAssets") || "").toLowerCase() === "true";
   const weekSelection = startDate || endDate ? buildDateRangeSelection({ startDate, endDate, period }) : getWeekSelection(period);
 
+  // Year filter: default 2026 only; UI can pass e.g. years=2025,2026
+  const yearsParam = url.searchParams.get("years") || "2026";
+  const selectedYears = yearsParam.split(",").map((y) => y.trim()).filter(Boolean);
+  const liveRowMatchesYear = (row) => {
+    const d = normalizeText(row?.finalUploadDate || "");
+    if (!d) return true; // keep in-progress rows with no date
+    return selectedYears.some((y) => d.startsWith(y));
+  };
+
   try {
     const [ideationResult, editorialResult, readyResult, productionResult, liveResult, analyticsResult] = await Promise.all([
       fetchIdeationTabRows()
@@ -959,6 +969,13 @@ export async function GET(request) {
         .then((value) => ({ rows: value?.rows || [], error: "" }))
         .catch((error) => ({ rows: [], error: error?.message || "Analytics source unavailable for Full Gen AI." })),
     ]);
+
+    // Apply year filter to live rows (by Final Upload Date)
+    if (liveResult?.rows) liveResult.rows = liveResult.rows.filter(liveRowMatchesYear);
+    if (analyticsResult?.rows) analyticsResult.rows = analyticsResult.rows.filter((row) => {
+      const d = normalizeText(row?.liveDate || row?.finalUploadDate || "");
+      return !d || selectedYears.some((y) => d.startsWith(y));
+    });
 
     const fallbackFromLive = buildFallbackWorkflowFromLiveRows(liveResult?.rows || []);
     const workflowEditorialRows =
@@ -1034,6 +1051,7 @@ export async function GET(request) {
         beatName: normalizeText(row?.beatName || ""),
         cpiUsd: row?.cpiUsd ?? null,
         strictLeadSubmittedDate: normalizeText(row?.dateSubmittedByLead || ""),
+        finalUploadDate: normalizeText(row?.finalUploadDate || row?.liveDate || ""),
         reworkGaCode: normalizeText(row?.reworkGaCode || "").toUpperCase(),
         podLeadName: normalizeText(row?.podLeadRaw || row?.podLeadName || ""),
         writerName: normalizeText(row?.writerName || ""),
