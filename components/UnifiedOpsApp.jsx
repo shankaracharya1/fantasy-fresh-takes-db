@@ -2305,24 +2305,23 @@ export default function UnifiedOpsApp() {
 
       {/* Post-sync notice — shown after clicking Sync button */}
       {syncNotice && (
-        <div
-          className="floating-notice"
-          style={{ maxWidth: 340, display: "flex", flexDirection: "column", gap: 6 }}
-        >
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-            <span style={{ fontWeight: 700, fontSize: 13, lineHeight: 1.3 }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.35)" }}>
+          <div style={{ background: "#fff9f4", borderRadius: 16, padding: "32px 36px", maxWidth: 400, width: "90%", boxShadow: "0 8px 40px rgba(0,0,0,0.18)", textAlign: "center" }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>🔄</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#1a1a1a", marginBottom: 8 }}>
               Cache cleared — syncing with Google Sheets
-            </span>
+            </div>
+            <div style={{ fontSize: 13, color: "#6b5c4a", lineHeight: 1.6, marginBottom: 24 }}>
+              The first load will take <strong>30–40 seconds</strong> while we fetch fresh data directly from the sheet. Please be patient.
+            </div>
             <button
               type="button"
               onClick={() => setSyncNotice(false)}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "var(--subtle)", fontSize: 16, lineHeight: 1, padding: 0, flexShrink: 0, marginTop: 1 }}
-              aria-label="Dismiss"
-            >×</button>
+              style={{ padding: "9px 28px", borderRadius: 8, border: "none", background: "#c2703e", fontSize: 13, fontWeight: 700, color: "#fff", cursor: "pointer" }}
+            >
+              Got it
+            </button>
           </div>
-          <span style={{ fontWeight: 400, fontSize: 12, color: "var(--subtle)", lineHeight: 1.5 }}>
-            First load will take <strong style={{ color: "var(--ink)" }}>30–40 seconds</strong>. Please be patient while we fetch fresh data from the sheet.
-          </span>
         </div>
       )}
 
