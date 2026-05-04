@@ -14,6 +14,7 @@ import {
 } from "../../../../lib/live-tab.js";
 import { matchAngleName } from "../../../../lib/fuzzy-match.js";
 import { buildDateRangeSelection, formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
+import { readJsonObject, writeJsonObject } from "../../../../lib/storage.js";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -951,6 +952,51 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
     });
 }
 
+// ─── Response-level cache ────────────────────────────────────────────────────
+// Caches the fully-processed API response in Supabase for RESPONSE_CACHE_TTL_MS.
+// On a cache hit the function returns immediately — zero build* functions run.
+// Sync (/api/dashboard/refresh-cache) writes an invalidation token so the next
+// request always re-computes fresh data regardless of the TTL.
+const RESPONSE_CACHE_TTL_MS = 20 * 60 * 1000; // 20 minutes
+const INVALIDATION_TOKEN_PATH = "response-cache/__invalidated-at.json";
+
+// In-memory copy of the invalidation timestamp (avoids Supabase read on every hit).
+let _invalidationTs = 0;
+let _invalidationCheckedAt = 0;
+const INVALIDATION_MEMORY_TTL = 60 * 1000; // re-read Supabase at most once per minute
+
+async function getInvalidationTs() {
+  if (Date.now() - _invalidationCheckedAt < INVALIDATION_MEMORY_TTL) return _invalidationTs;
+  try {
+    const d = await readJsonObject(INVALIDATION_TOKEN_PATH);
+    _invalidationTs = Number(d?.invalidatedAt || 0);
+  } catch { _invalidationTs = 0; }
+  _invalidationCheckedAt = Date.now();
+  return _invalidationTs;
+}
+
+function responseCacheKey(weekStart, weekEnd, yearsParam, includeGuAssets) {
+  const key = `${weekStart}__${weekEnd}__${yearsParam}__${includeGuAssets ? "gu1" : "gu0"}`;
+  return `response-cache/leadership-overview__${key.replace(/[^a-z0-9_]/gi, "_")}.json`;
+}
+
+async function readResponseCache(path) {
+  try {
+    const data = await readJsonObject(path);
+    if (!data || !data.cachedAt || !data.payload) return null;
+    if (Date.now() - Number(data.cachedAt) > RESPONSE_CACHE_TTL_MS) return null;
+    const invalidatedAt = await getInvalidationTs();
+    if (Number(data.cachedAt) < invalidatedAt) return null; // Sync was pressed after this was cached
+    return data.payload;
+  } catch { return null; }
+}
+
+async function writeResponseCache(path, payload) {
+  try { await writeJsonObject(path, { cachedAt: Date.now(), payload }); } catch {}
+}
+
+export { INVALIDATION_TOKEN_PATH };
+
 export async function GET(request) {
   const url = new URL(request.url);
   const period = normalizeWeekView(url.searchParams.get("period") || "current");
@@ -962,6 +1008,11 @@ export async function GET(request) {
   // Year filter: default 2026 only; UI can pass e.g. years=2025,2026
   const yearsParam = url.searchParams.get("years") || "2026";
   const selectedYears = yearsParam.split(",").map((y) => y.trim()).filter(Boolean);
+
+  // ── Response cache check (skip ALL computation on hit) ───────────────────
+  const cachePath = responseCacheKey(weekSelection.weekStart, weekSelection.weekEnd, yearsParam, includeGuAssets);
+  const cached = await readResponseCache(cachePath);
+  if (cached) return NextResponse.json(cached);
   const liveRowMatchesYear = (row) => {
     const d = normalizeText(row?.finalUploadDate || "");
     if (!d) return true; // keep in-progress rows with no date
@@ -1081,7 +1132,7 @@ export async function GET(request) {
         writerName: normalizeText(row?.writerName || ""),
       }));
 
-    return NextResponse.json({
+    const responsePayload = {
       ok: true,
       period: startDate || endDate ? "range" : period,
       selectedWeekKey: weekSelection.weekKey,
@@ -1109,7 +1160,10 @@ export async function GET(request) {
       podThroughputRows,
       liveReworkMap,
       liveGuRows,
-    });
+    };
+    // Fire-and-forget: persist response so next identical request is instant
+    void writeResponseCache(cachePath, responsePayload);
+    return NextResponse.json(responsePayload);
   } catch (error) {
     return NextResponse.json({
       ok: true,
