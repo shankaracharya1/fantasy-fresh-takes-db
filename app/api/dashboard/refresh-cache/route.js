@@ -1,5 +1,6 @@
 import { evictInMemorySheetCache, expireSupabaseSheetCache, IDEATION_TAB_NAME, EDITORIAL_TAB_NAME, READY_FOR_PRODUCTION_TAB_NAME, PRODUCTION_TAB_NAME, LIVE_TAB_NAME } from "../../../../lib/live-tab.js";
 import { writeJsonObject } from "../../../../lib/storage.js";
+import { evictInMemoryResponseCache } from "../../../../lib/response-cache.js";
 
 const ALL_SHEET_NAMES = [
   IDEATION_TAB_NAME,
@@ -23,6 +24,7 @@ export async function POST() {
   try {
     // Evict all in-memory caches (instant)
     evictInMemorySheetCache();
+    evictInMemoryResponseCache();
 
     // Expire all Supabase sheet caches + invalidate response-level caches in parallel
     await Promise.allSettled([

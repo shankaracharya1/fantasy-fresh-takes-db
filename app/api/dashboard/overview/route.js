@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { readJsonObject, writeJsonObject } from "../../../../lib/storage.js";
+import { readInMemResponseCache, writeInMemResponseCache } from "../../../../lib/response-cache.js";
 import {
   GOOD_TO_GO_BEATS_TARGET,
   TARGET_FLOOR,
@@ -1026,8 +1027,15 @@ export async function GET(request) {
 
   // ── Response cache check ────────────────────────────────────────────────────
   const cachePath = overviewCacheKey(startDate, endDate, period, includeNewShowsPod, yearsParam);
+  // 1. In-memory cache (~0ms)
+  const memCached = readInMemResponseCache(cachePath);
+  if (memCached) return NextResponse.json(memCached);
+  // 2. Supabase persistent cache (~500ms–2s, cross-instance)
   const cached = await readOverviewCache(cachePath);
-  if (cached) return NextResponse.json(cached);
+  if (cached) {
+    writeInMemResponseCache(cachePath, cached);
+    return NextResponse.json(cached);
+  }
 
   try {
     // Fetch editorial + RFP workflow rows for the breakdown table (shared across all periods)
@@ -1065,6 +1073,7 @@ export async function GET(request) {
         analyticsSourceError: analyticsResult.error,
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: rangeSelection.startDate, endDate: rangeSelection.endDate, liveRows }),
       };
+      writeInMemResponseCache(cachePath, payload);
       await writeOverviewCache(cachePath, payload);
       return NextResponse.json(payload);
     }
@@ -1094,6 +1103,7 @@ export async function GET(request) {
         analyticsSourceError: analyticsResult.error,
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: lastWeekSelection.weekStart, endDate: lastWeekSelection.weekEnd, liveRows }),
       };
+      writeInMemResponseCache(cachePath, payload);
       await writeOverviewCache(cachePath, payload);
       return NextResponse.json(payload);
     }
@@ -1127,6 +1137,7 @@ export async function GET(request) {
         }),
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: plannerState.weekSelection.weekStart, endDate: plannerState.weekSelection.weekEnd, liveRows }),
       };
+      writeInMemResponseCache(cachePath, payload);
       await writeOverviewCache(cachePath, payload);
       return NextResponse.json(payload);
     }
@@ -1154,6 +1165,7 @@ export async function GET(request) {
         }),
         podBreakdownRows: buildPodBreakdownRows(editorialWorkflowResult.rows, rfpWorkflowResult.rows, productionResult.rows, { startDate: plannerState.weekSelection.weekStart, endDate: plannerState.weekSelection.weekEnd, liveRows: liveResult.rows }),
       };
+      writeInMemResponseCache(cachePath, payload);
       await writeOverviewCache(cachePath, payload);
       return NextResponse.json(payload);
     }

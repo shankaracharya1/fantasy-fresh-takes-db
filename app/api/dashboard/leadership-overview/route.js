@@ -15,6 +15,7 @@ import {
 import { matchAngleName } from "../../../../lib/fuzzy-match.js";
 import { buildDateRangeSelection, formatWeekRangeLabel, getWeekSelection, normalizeWeekView } from "../../../../lib/week-view.js";
 import { readJsonObject, writeJsonObject } from "../../../../lib/storage.js";
+import { readInMemResponseCache, writeInMemResponseCache } from "../../../../lib/response-cache.js";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -1011,8 +1012,15 @@ export async function GET(request) {
 
   // ── Response cache check (skip ALL computation on hit) ───────────────────
   const cachePath = responseCacheKey(weekSelection.weekStart, weekSelection.weekEnd, yearsParam, includeGuAssets);
+  // 1. In-memory cache: ~0ms, works for all requests on the same Fluid Compute instance
+  const memCached = readInMemResponseCache(cachePath);
+  if (memCached) return NextResponse.json(memCached);
+  // 2. Supabase cache: ~500ms–2s, survives cold starts between instances
   const cached = await readResponseCache(cachePath);
-  if (cached) return NextResponse.json(cached);
+  if (cached) {
+    writeInMemResponseCache(cachePath, cached); // warm up memory cache for next hit
+    return NextResponse.json(cached);
+  }
   const liveRowMatchesYear = (row) => {
     const d = normalizeText(row?.finalUploadDate || "");
     if (!d) return true; // keep in-progress rows with no date
@@ -1161,8 +1169,9 @@ export async function GET(request) {
       liveReworkMap,
       liveGuRows,
     };
-    // Await the cache write — "void" doesn't work in serverless because the
-    // function terminates after return before the async write can complete.
+    // Write in-memory cache instantly (always works for warm instances)
+    writeInMemResponseCache(cachePath, responsePayload);
+    // Also persist to Supabase for cross-instance cache sharing (best-effort)
     await writeResponseCache(cachePath, responsePayload);
     return NextResponse.json(responsePayload);
   } catch (error) {
