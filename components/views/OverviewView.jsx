@@ -496,7 +496,6 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
 
   const totalFt = safeRows.reduce((sum, pod) => sum + (pod.ftCount || 0), 0);
   const totalRw = safeRows.reduce((sum, pod) => sum + (pod.rwCount || 0), 0);
-  const totalLive = safeRows.reduce((sum, pod) => sum + (pod.liveCount || 0), 0);
 
   const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const fmtDate = (ymd) => {
@@ -555,7 +554,15 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
         <td style={{ fontWeight: 700, textAlign: "center" }}>{(pod.ftCount || 0) + (pod.rwCount || 0)}</td>
         <td style={{ fontWeight: 700, textAlign: "center", color: "#2d5a3d" }}>{pod.ftCount || 0}</td>
         <td style={{ fontWeight: 700, textAlign: "center", color: "#c2703e" }}>{pod.rwCount || 0}</td>
-        <td style={{ fontWeight: 700, textAlign: "center", color: "#5a7fb5" }}>{pod.liveCount || 0}</td>
+        {(() => {
+          const podTotal = (pod.ftCount || 0) + (pod.rwCount || 0);
+          const podFtPct = podTotal > 0 ? Math.round((pod.ftCount || 0) / podTotal * 100) : null;
+          return (
+            <td style={{ fontWeight: 700, textAlign: "center", color: podFtPct === null ? "var(--subtle)" : podFtPct >= 75 ? "#2d5a3d" : "#c0392b" }}>
+              {podFtPct !== null ? `${podFtPct}%` : "—"}
+            </td>
+          );
+        })()}
       </tr>
     );
 
@@ -564,7 +571,8 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
         const scripts = Array.isArray(writer.scripts) ? writer.scripts : [];
         const ftScripts = scripts.filter((s) => s.type === "ft");
         const rwScripts = scripts.filter((s) => s.type !== "ft");
-        const liveScripts = Array.isArray(writer.liveScripts) ? writer.liveScripts : scripts.filter((s) => String(s.scriptStatus || "").toLowerCase() === "uploaded");
+        const writerTotal = (writer.ftCount || 0) + (writer.rwCount || 0);
+        const writerFtPct = writerTotal > 0 ? Math.round((writer.ftCount || 0) / writerTotal * 100) : null;
 
         tableRows.push(
           <tr key={`writer-${pod.podLeadName}::${writer.writerName}`} style={{ background: "var(--bg-deep, #f7f4ef)", verticalAlign: "top" }}>
@@ -572,7 +580,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
               • {writer.writerName}
             </td>
             <td style={{ textAlign: "center", fontSize: 12, paddingTop: 8 }}>
-              {(writer.ftCount || 0) + (writer.rwCount || 0)}
+              {writerTotal}
             </td>
             <td style={{ padding: "8px 10px", color: "#2d5a3d" }}>
               {scriptList(ftScripts)}
@@ -580,8 +588,8 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
             <td style={{ padding: "8px 10px", color: "#c2703e" }}>
               {scriptList(rwScripts)}
             </td>
-            <td style={{ padding: "8px 10px", color: "#5a7fb5" }}>
-              {scriptList(liveScripts)}
+            <td style={{ textAlign: "center", fontWeight: 700, color: writerFtPct === null ? "var(--subtle)" : writerFtPct >= 75 ? "#2d5a3d" : "#c0392b" }}>
+              {writerFtPct !== null ? `${writerFtPct}%` : "—"}
             </td>
           </tr>
         );
@@ -603,7 +611,7 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
               <th style={{ textAlign: "center" }}>Total Script</th>
               <th style={{ textAlign: "center" }}>Fresh Take</th>
               <th style={{ textAlign: "center" }}>Rework</th>
-              <th style={{ textAlign: "center" }}>Live</th>
+              <th style={{ textAlign: "center" }}>% Fresh Take</th>
             </tr>
           </thead>
           <tbody>
@@ -617,7 +625,9 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
                   <td style={{ fontWeight: 700, textAlign: "center" }}>{totalFt + totalRw}</td>
                   <td style={{ fontWeight: 700, textAlign: "center", color: "#2d5a3d" }}>{totalFt}</td>
                   <td style={{ fontWeight: 700, textAlign: "center", color: "#c2703e" }}>{totalRw}</td>
-                  <td style={{ fontWeight: 700, textAlign: "center", color: "#5a7fb5" }}>{totalLive}</td>
+                  <td style={{ fontWeight: 700, textAlign: "center", color: (totalFt + totalRw) > 0 && Math.round(totalFt / (totalFt + totalRw) * 100) >= 75 ? "#2d5a3d" : "#c0392b" }}>
+                    {(totalFt + totalRw) > 0 ? `${Math.round(totalFt / (totalFt + totalRw) * 100)}%` : "—"}
+                  </td>
                 </tr>
               </>
             ) : (
