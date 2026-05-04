@@ -1193,13 +1193,15 @@ export default function UnifiedOpsApp() {
     // This prevents a refetch every time the user switches tabs.
     if (overviewLoadedKeyRef.current === loadKey) return undefined;
 
+    // Set loading state synchronously so the bar appears immediately when date changes.
+    // If we defer this to inside the async function, there's a window where loading=false
+    // but stale data is shown — causing the bar to appear late or data to lag behind.
+    if (!cachedPayload) { setOverviewLoading(true); setOverviewError(""); }
+    setDashboardLoadingMessage("Refreshing Overview…");
+
     let cancelled = false;
 
     async function loadOverviewSection() {
-      setDashboardLoadingMessage("Refreshing Overview…");
-      if (!cachedPayload) setOverviewLoading(true);
-      setOverviewError("");
-
       try {
         const overviewResponse = await fetch(
           `/api/dashboard/overview?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}&includeNewShowsPod=${includeNewShowsPod}&years=${encodeURIComponent(yearsParam)}`,
@@ -1269,13 +1271,13 @@ export default function UnifiedOpsApp() {
     // This prevents a refetch every time the user switches between tabs that share this data.
     if (leadershipLoadedKeyRef.current === loadKey) return undefined;
 
+    // Set loading state synchronously so the bar appears immediately when date changes.
+    if (!cachedPayload) { setLeadershipOverviewLoading(true); setLeadershipOverviewError(""); }
+    setDashboardLoadingMessage("Refreshing Overview…");
+
     let cancelled = false;
 
     async function loadLeadershipOverview() {
-      setDashboardLoadingMessage("Refreshing Overview…");
-      if (!cachedPayload) setLeadershipOverviewLoading(true);
-      setLeadershipOverviewError("");
-
       try {
         const response = await fetch(`/api/dashboard/leadership-overview?startDate=${encodeURIComponent(rangeSelection.startDate)}&endDate=${encodeURIComponent(rangeSelection.endDate)}&includeGuAssets=${includeGuAssets ? "true" : "false"}&years=${encodeURIComponent(yearsParam)}`, {
           cache: "no-store",
