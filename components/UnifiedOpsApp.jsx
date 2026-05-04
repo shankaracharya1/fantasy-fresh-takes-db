@@ -1194,9 +1194,8 @@ export default function UnifiedOpsApp() {
     if (overviewLoadedKeyRef.current === loadKey) return undefined;
 
     // Set loading state synchronously so the bar appears immediately when date changes.
-    // If we defer this to inside the async function, there's a window where loading=false
-    // but stale data is shown — causing the bar to appear late or data to lag behind.
-    if (!cachedPayload) { setOverviewLoading(true); setOverviewError(""); }
+    // Also clear stale data so the previous date's numbers don't flash while new data loads.
+    if (!cachedPayload) { setOverviewData(null); setOverviewLoading(true); setOverviewError(""); }
     setDashboardLoadingMessage("Refreshing Overview…");
 
     let cancelled = false;
@@ -1272,7 +1271,8 @@ export default function UnifiedOpsApp() {
     if (leadershipLoadedKeyRef.current === loadKey) return undefined;
 
     // Set loading state synchronously so the bar appears immediately when date changes.
-    if (!cachedPayload) { setLeadershipOverviewLoading(true); setLeadershipOverviewError(""); }
+    // Also clear stale data so the previous date's numbers don't flash while new data loads.
+    if (!cachedPayload) { setLeadershipOverviewData(null); setLeadershipOverviewLoading(true); setLeadershipOverviewError(""); }
     setDashboardLoadingMessage("Refreshing Overview…");
 
     let cancelled = false;
