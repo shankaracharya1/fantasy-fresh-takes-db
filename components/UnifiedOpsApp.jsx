@@ -1193,7 +1193,7 @@ export default function UnifiedOpsApp() {
     }
 
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
-    const cacheKey = `overview:${rangeSelection.startDate}:${rangeSelection.endDate}:${includeNewShowsPod ? "with-new" : "bau"}`;
+    const cacheKey = `overview:v2:${rangeSelection.startDate}:${rangeSelection.endDate}:${includeNewShowsPod ? "with-new" : "bau"}:years-${yearsParam}`;
     const loadKey = `${cacheKey}:${yearsParam}:nonce=${refreshNonce}`;
 
     const cachedPayload = readClientCache(cacheKey);
@@ -1270,7 +1270,7 @@ export default function UnifiedOpsApp() {
     }
 
     const rangeSelection = buildDateRangeSelection(dashboardDateRange);
-    const cacheKey = `leadership-overview:${rangeSelection.startDate}:${rangeSelection.endDate}:include-gu-${includeGuAssets ? "1" : "0"}`;
+    const cacheKey = `leadership-overview:v3:${rangeSelection.startDate}:${rangeSelection.endDate}:include-gu-${includeGuAssets ? "1" : "0"}:years-${yearsParam}`;
     const loadKey = `${cacheKey}:${yearsParam}:nonce=${refreshNonce}`;
 
     const cachedPayload = readClientCache(cacheKey);
@@ -2188,7 +2188,7 @@ export default function UnifiedOpsApp() {
               <div className="section-shell">
                 <PodWiseContent
                   competitionPodRows={competitionData?.podRows}
-                  analyticsRows={analyticsData?.rows || []}
+                  scriptRowsByPod={competitionData?.scriptRowsByPod || {}}
                   competitionLoading={competitionLoading}
                   competitionWeekLabel={competitionData?.weekLabel}
                   performanceRangeMode={podPerformanceRangeMode}
