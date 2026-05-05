@@ -244,8 +244,12 @@ async function loadLifetimeCompetitionData(rosterMeta) {
   const [weekDataEntries, liveResult, liveWorkflowResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
     Promise.all(
       weekKeys.map(async (key) => {
-        const data = await readJsonObject(makePlannerWeekPath(key));
-        return [key, data];
+        try {
+          const data = await readJsonObject(makePlannerWeekPath(key));
+          return [key, data];
+        } catch {
+          return [key, null]; // Supabase unavailable — treat week as empty
+        }
       })
     ),
     fetchLiveTabRows(),
@@ -306,10 +310,19 @@ export async function GET(request) {
   const period = normalizeWeekView(rawPeriod || "current");
 
   try {
-    const storedConfig = await readJsonObject(CONFIG_PATH);
-    const currentConfig = mergeWriterConfig(storedConfig || createDefaultWriterConfig());
+    // Supabase (planner config + week data) is optional — fall back to defaults if unavailable
+    let storedConfig = null;
+    let storedWeek = null;
     const currentWeekKey = getCurrentWeekKey();
-    const storedWeek = await readJsonObject(makePlannerWeekPath(currentWeekKey));
+    try {
+      [storedConfig, storedWeek] = await Promise.all([
+        readJsonObject(CONFIG_PATH),
+        readJsonObject(makePlannerWeekPath(currentWeekKey)),
+      ]);
+    } catch {
+      // Supabase unavailable — roster uses POD_LEAD_ORDER defaults, no planner week data
+    }
+    const currentConfig = mergeWriterConfig(storedConfig || createDefaultWriterConfig());
     const weekData = mergeWeekData(currentConfig, storedWeek, currentWeekKey);
     const pods = buildPodsModel(currentConfig, weekData).filter((pod) => isVisiblePlannerPodLeadName(pod?.cl));
     const rosterMeta = buildPodRosterMeta(pods);
