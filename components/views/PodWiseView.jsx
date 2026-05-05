@@ -526,7 +526,7 @@ function parsePodFromAssetLink(assetLink) {
 
 export default function PodWiseContent({
   competitionPodRows,
-  analyticsRows = [],
+  scriptRowsByPod = {},
   competitionLoading,
   competitionWeekLabel,
   performanceRangeMode,
@@ -562,26 +562,6 @@ export default function PodWiseContent({
 
   const bestPod = sorted[0] || null;
   const [expandedPod, setExpandedPod] = useState(null);
-
-  // Build per-POD script detail map from analytics rows
-  const scriptRowsByPod = (() => {
-    const map = {};
-    for (const row of analyticsRows) {
-      const pod = parsePodFromAssetLink(row.assetLink);
-      if (!pod) continue;
-      if (!map[pod]) map[pod] = [];
-      map[pod].push({
-        showName: row.showName || "",
-        beatName: row.beatName || "",
-        assetCode: row.assetCode || "",
-        cpi: row.metrics?.cpi?.value ?? null,
-        trueComp: row.metrics?.absoluteCompletion?.value ?? null,
-        ctr: row.metrics?.ctr?.value ?? null,
-        cti: row.metrics?.cti?.value ?? null,
-      });
-    }
-    return map;
-  })();
 
   const totalBeats = sorted.reduce((s, r) => s + r.beats, 0);
   const totalScripts = sorted.reduce((s, r) => s + r.scripts, 0);

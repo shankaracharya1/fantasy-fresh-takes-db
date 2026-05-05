@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
-import { fetchAnalyticsLiveTabRows, fetchLiveWorkflowRows, normalizePodLeadName } from "../../../../lib/live-tab.js";
+import { fetchLiveWorkflowRows, normalizePodLeadName } from "../../../../lib/live-tab.js";
 import { generateWeekKeysSince } from "../../../../lib/tracker-data.js";
 import { shiftYmd, formatWeekRangeLabel } from "../../../../lib/week-view.js";
+import { readJsonObject, writeJsonObject } from "../../../../lib/storage.js";
+import { readInMemResponseCache, writeInMemResponseCache } from "../../../../lib/response-cache.js";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
 
 const LIFETIME_SINCE = "2026-03-16";
+const RESPONSE_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+const INVALIDATION_TOKEN_PATH = "response-cache/__invalidated-at.json";
+const CACHE_PATH = "response-cache/pod-trend.json";
+let _invalidationTs = 0;
+let _invalidationCheckedAt = 0;
+const INVALIDATION_MEMORY_TTL = 60 * 1000;
 
 function toFiniteNumber(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -33,14 +41,39 @@ function isFunnelSuccess(row) {
   return passesAllThresholds || passesCpiOnly;
 }
 
-// Matches Detailed POD Overview: Live tab rows (GA/GI), date by finalUploadDate, metrics from Analytics
-function classifyRows(liveWorkflowRows, analyticsRows, weekStart, weekEnd) {
-  const analyticsMap = new Map();
-  for (const row of (Array.isArray(analyticsRows) ? analyticsRows : [])) {
-    const code = String(row?.assetCode || "").trim().toUpperCase();
-    if (code && !analyticsMap.has(code)) analyticsMap.set(code, row);
+async function getInvalidationTs() {
+  if (Date.now() - _invalidationCheckedAt < INVALIDATION_MEMORY_TTL) return _invalidationTs;
+  try {
+    const d = await readJsonObject(INVALIDATION_TOKEN_PATH);
+    _invalidationTs = Number(d?.invalidatedAt || 0);
+  } catch {
+    _invalidationTs = 0;
   }
+  _invalidationCheckedAt = Date.now();
+  return _invalidationTs;
+}
 
+async function readResponseCache(path) {
+  try {
+    const data = await readJsonObject(path);
+    if (!data?.cachedAt || !data?.payload) return null;
+    if (Date.now() - Number(data.cachedAt) > RESPONSE_CACHE_TTL_MS) return null;
+    const invalidatedAt = await getInvalidationTs();
+    if (Number(data.cachedAt) < invalidatedAt) return null;
+    return data.payload;
+  } catch {
+    return null;
+  }
+}
+
+async function writeResponseCache(path, payload) {
+  try {
+    await writeJsonObject(path, { cachedAt: Date.now(), payload });
+  } catch {}
+}
+
+// Matches Detailed POD Overview: Live tab rows (GA/GI), date by finalUploadDate, metrics from the same live workflow rows
+function classifyRows(liveWorkflowRows, weekStart, weekEnd) {
   const seenCodes = new Set();
   const validRows = (Array.isArray(liveWorkflowRows) ? liveWorkflowRows : []).filter((row) => {
     const code = String(row?.assetCode || "").trim().toUpperCase();
@@ -58,19 +91,22 @@ function classifyRows(liveWorkflowRows, analyticsRows, weekStart, weekEnd) {
     if (!podStats.has(podName)) podStats.set(podName, { totalLive: 0, hits: 0 });
     const stats = podStats.get(podName);
     stats.totalLive += 1;
-    const code = String(row?.assetCode || "").trim().toUpperCase();
-    const aRow = analyticsMap.get(code);
-    if (aRow && isFunnelSuccess(aRow)) stats.hits += 1;
+    if (isFunnelSuccess(row)) stats.hits += 1;
   }
   return podStats;
 }
 
 export async function GET() {
+  const memCached = readInMemResponseCache(CACHE_PATH);
+  if (memCached) return NextResponse.json(memCached);
+  const cached = await readResponseCache(CACHE_PATH);
+  if (cached) {
+    writeInMemResponseCache(CACHE_PATH, cached);
+    return NextResponse.json(cached);
+  }
+
   try {
-    const [{ rows: liveWorkflowRows }, { rows: analyticsRows }] = await Promise.all([
-      fetchLiveWorkflowRows(),
-      fetchAnalyticsLiveTabRows(),
-    ]);
+    const { rows: liveWorkflowRows } = await fetchLiveWorkflowRows();
 
     const weekKeys = generateWeekKeysSince(LIFETIME_SINCE);
 
@@ -84,7 +120,7 @@ export async function GET() {
     // Build weekly data points
     const weeks = weekKeys.map((weekKey) => {
       const weekEnd = shiftYmd(weekKey, 6);
-      const podStats = classifyRows(liveWorkflowRows, analyticsRows, weekKey, weekEnd);
+      const podStats = classifyRows(liveWorkflowRows, weekKey, weekEnd);
       const pods = {};
       for (const podName of allPodNames) {
         const stats = podStats.get(podName);
@@ -139,7 +175,10 @@ export async function GET() {
       weeks.some((w) => pod in w.pods) || months.some((m) => pod in m.pods)
     ).sort();
 
-    return NextResponse.json({ ok: true, weeks, months, podNames: activePods });
+    const payload = { ok: true, weeks, months, podNames: activePods };
+    writeInMemResponseCache(CACHE_PATH, payload);
+    await writeResponseCache(CACHE_PATH, payload);
+    return NextResponse.json(payload);
   } catch (error) {
     return NextResponse.json({ ok: false, error: error.message, weeks: [], months: [], podNames: [] });
   }

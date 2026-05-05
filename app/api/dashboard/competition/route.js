@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
-import { readJsonObject } from "../../../../lib/storage.js";
+import { readJsonObject, writeJsonObject } from "../../../../lib/storage.js";
+import { readInMemResponseCache, writeInMemResponseCache } from "../../../../lib/response-cache.js";
 import {
   POD_LEAD_ORDER,
   fetchLiveTabRows,
   fetchLiveWorkflowRows,
-  fetchAnalyticsLiveTabRows,
   fetchEditorialTabRows,
   fetchProductionTabRows,
   buildLifetimeScriptsPerPod,
   buildLwEditorialOutputPerPod,
-  isAnalyticsEligibleProductionType,
-  isTatEligibleProductionType,
   normalizePodLeadName,
 } from "../../../../lib/live-tab.js";
 import {
@@ -28,6 +26,11 @@ import { buildDateRangeSelection, formatWeekRangeLabel, getWeekSelection, normal
 
 const CONFIG_PATH = "config/writer-config.json";
 const LIFETIME_SINCE = "2026-03-16";
+const RESPONSE_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+const INVALIDATION_TOKEN_PATH = "response-cache/__invalidated-at.json";
+let _invalidationTs = 0;
+let _invalidationCheckedAt = 0;
+const INVALIDATION_MEMORY_TTL = 60 * 1000;
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -35,6 +38,42 @@ export const dynamic = "force-dynamic";
 
 function makePlannerWeekPath(weekKey) {
   return `weeks/${weekKey}.json`;
+}
+
+async function getInvalidationTs() {
+  if (Date.now() - _invalidationCheckedAt < INVALIDATION_MEMORY_TTL) return _invalidationTs;
+  try {
+    const d = await readJsonObject(INVALIDATION_TOKEN_PATH);
+    _invalidationTs = Number(d?.invalidatedAt || 0);
+  } catch {
+    _invalidationTs = 0;
+  }
+  _invalidationCheckedAt = Date.now();
+  return _invalidationTs;
+}
+
+function responseCacheKey({ mode, scope, period, startDate, endDate }) {
+  const key = `${mode || ""}__${scope || ""}__${period || ""}__${startDate || ""}__${endDate || ""}`;
+  return `response-cache/competition__${key.replace(/[^a-z0-9_]/gi, "_")}.json`;
+}
+
+async function readResponseCache(path) {
+  try {
+    const data = await readJsonObject(path);
+    if (!data?.cachedAt || !data?.payload) return null;
+    if (Date.now() - Number(data.cachedAt) > RESPONSE_CACHE_TTL_MS) return null;
+    const invalidatedAt = await getInvalidationTs();
+    if (Number(data.cachedAt) < invalidatedAt) return null;
+    return data.payload;
+  } catch {
+    return null;
+  }
+}
+
+async function writeResponseCache(path, payload) {
+  try {
+    await writeJsonObject(path, { cachedAt: Date.now(), payload });
+  } catch {}
 }
 
 function toFiniteNumber(value) {
@@ -87,13 +126,7 @@ function isFunnelSuccess(row) {
 // - Source: Live tab rows (GA/GI asset codes only), date-filtered by finalUploadDate
 // - Metrics: joined from Analytics sheet by assetCode
 // - Success: isFunnelSuccess (same as leadership-overview)
-function computeHitRatePerPodFromLive(liveWorkflowRows, analyticsRows, sinceDate, untilDate) {
-  const analyticsMap = new Map();
-  for (const row of (Array.isArray(analyticsRows) ? analyticsRows : [])) {
-    const code = String(row?.assetCode || "").trim().toUpperCase();
-    if (code && !analyticsMap.has(code)) analyticsMap.set(code, row);
-  }
-
+function computeHitRatePerPodFromLive(liveWorkflowRows, sinceDate, untilDate) {
   const seenCodes = new Set();
   const validRows = (Array.isArray(liveWorkflowRows) ? liveWorkflowRows : []).filter((row) => {
     const code = String(row?.assetCode || "").trim().toUpperCase();
@@ -114,48 +147,52 @@ function computeHitRatePerPodFromLive(liveWorkflowRows, analyticsRows, sinceDate
     if (!podStats.has(podName)) podStats.set(podName, { totalLive: 0, hits: 0 });
     const stats = podStats.get(podName);
     stats.totalLive += 1;
-    const code = String(row?.assetCode || "").trim().toUpperCase();
-    const aRow = analyticsMap.get(code);
-    if (aRow && isFunnelSuccess(aRow)) stats.hits += 1;
+    if (isFunnelSuccess(row)) stats.hits += 1;
   }
   return podStats;
 }
 
-function computeHitRatePerPod(liveWorkflowRows, analyticsRows, sinceDate) {
-  return computeHitRatePerPodFromLive(liveWorkflowRows, analyticsRows, sinceDate, null);
+function computeHitRatePerPod(liveWorkflowRows, sinceDate) {
+  return computeHitRatePerPodFromLive(liveWorkflowRows, sinceDate, null);
 }
 
-function computeHitRatePerPodForWeek(liveWorkflowRows, analyticsRows, weekSelection) {
+function computeHitRatePerPodForWeek(liveWorkflowRows, weekSelection) {
   const weekStart = String(weekSelection?.weekStart || "");
   const weekEnd = String(weekSelection?.weekEnd || "");
   if (!weekStart || !weekEnd) return new Map();
-  return computeHitRatePerPodFromLive(liveWorkflowRows, analyticsRows, weekStart, weekEnd);
+  return computeHitRatePerPodFromLive(liveWorkflowRows, weekStart, weekEnd);
 }
 
 // Build per-POD script detail rows for the detail drawer (Show, Angle, Code, CPI, True Comp, CTR, CTI)
-function buildPodScriptDetailRows(analyticsRows, weekSelection) {
+function buildPodScriptDetailRows(workflowRows, weekSelection) {
   const weekStart = String(weekSelection?.weekStart || "");
   const weekEnd = String(weekSelection?.weekEnd || "");
 
   const byPod = {};
-  for (const row of Array.isArray(analyticsRows) ? analyticsRows : []) {
-    const liveDate = String(row?.liveDate || "").trim();
+  const seenCodes = new Set();
+  for (const row of Array.isArray(workflowRows) ? workflowRows : []) {
+    const assetCode = String(row?.assetCode || "").trim();
+    const assetKey = assetCode.toUpperCase();
+    if (!assetKey || seenCodes.has(assetKey)) continue;
+    seenCodes.add(assetKey);
+
+    const liveDate = String(row?.liveDate || row?.finalUploadDate || "").trim();
     if (!liveDate) continue;
     if (weekStart && liveDate < weekStart) continue;
     if (weekEnd && liveDate > weekEnd) continue;
 
-    const pod = String(row?.podLeadName || "").trim();
+    const pod = normalizePodLeadName(String(row?.podLeadName || "").trim());
     if (!pod) continue;
 
     if (!byPod[pod]) byPod[pod] = [];
     byPod[pod].push({
       showName: row.showName || "",
       beatName: row.beatName || "",
-      assetCode: row.assetCode || "",
-      cpi: row.cpiUsd != null ? row.cpiUsd : null,
-      trueComp: row.absoluteCompletionPct != null ? row.absoluteCompletionPct : null,
-      ctr: row.ctrPct != null ? row.ctrPct : null,
-      cti: row.clickToInstall != null ? row.clickToInstall : null,
+      assetCode,
+      cpi: toFiniteNumber(row?.cpiUsd),
+      trueComp: toFiniteNumber(row?.absoluteCompletionPct),
+      ctr: toFiniteNumber(row?.ctrPct),
+      cti: toFiniteNumber(row?.clickToInstall),
       liveDate,
     });
   }
@@ -173,6 +210,34 @@ function buildScriptsPerPodForWeek(liveRows, weekSelection) {
     if (!liveDate || liveDate < weekStart || liveDate > weekEnd) continue;
 
     const podName = String(row?.podLeadName || "").trim();
+    if (!podName) continue;
+    const assetCode = String(row?.assetCode || "").trim();
+    if (!assetCode) continue;
+
+    if (!podAssets.has(podName)) {
+      podAssets.set(podName, new Set());
+    }
+    podAssets.get(podName).add(assetCode);
+  }
+
+  const result = new Map();
+  for (const [podName, assetSet] of podAssets) {
+    result.set(podName, assetSet.size);
+  }
+  return result;
+}
+
+function buildScriptsPerPodForWeekFromWorkflowRows(liveWorkflowRows, weekSelection) {
+  const weekStart = String(weekSelection?.weekStart || "");
+  const weekEnd = String(weekSelection?.weekEnd || "");
+  if (!weekStart || !weekEnd) return new Map();
+
+  const podAssets = new Map();
+  for (const row of Array.isArray(liveWorkflowRows) ? liveWorkflowRows : []) {
+    const liveDate = String(row?.liveDate || row?.finalUploadDate || "").trim();
+    if (!liveDate || liveDate < weekStart || liveDate > weekEnd) continue;
+
+    const podName = normalizePodLeadName(String(row?.podLeadName || "").trim());
     if (!podName) continue;
     const assetCode = String(row?.assetCode || "").trim();
     if (!assetCode) continue;
@@ -241,7 +306,7 @@ async function loadLifetimeCompetitionData(rosterMeta) {
   const weekKeys = generateWeekKeysSince(LIFETIME_SINCE);
   const lastWeekSelection = getWeekSelection("last");
 
-  const [weekDataEntries, liveResult, liveWorkflowResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
+  const [weekDataEntries, liveResult, liveWorkflowResult, editorialResult, productionResult] = await Promise.all([
     Promise.all(
       weekKeys.map(async (key) => {
         try {
@@ -254,7 +319,6 @@ async function loadLifetimeCompetitionData(rosterMeta) {
     ),
     fetchLiveTabRows(),
     fetchLiveWorkflowRows(),
-    fetchAnalyticsLiveTabRows(),
     fetchEditorialTabRows(),
     fetchProductionTabRows(),
   ]);
@@ -262,7 +326,7 @@ async function loadLifetimeCompetitionData(rosterMeta) {
   const weekDataMap = Object.fromEntries(weekDataEntries.filter(([, data]) => data !== null));
   const lifetimeBeatsMap = buildLifetimeBeatsPerPod(weekDataMap);
   const lifetimeScriptsMap = buildLifetimeScriptsPerPod(liveResult.rows, LIFETIME_SINCE);
-  const hitRateMap = computeHitRatePerPod(liveWorkflowResult.rows, analyticsResult.rows, LIFETIME_SINCE);
+  const hitRateMap = computeHitRatePerPod(liveWorkflowResult.rows, LIFETIME_SINCE);
   const lwEditorialMap = buildLwEditorialOutputPerPod(editorialResult.rows, productionResult.rows, lastWeekSelection);
 
   return buildPodRowsFromMaps(rosterMeta.podOrder, rosterMeta, lifetimeBeatsMap, lifetimeScriptsMap, hitRateMap).map((row) => ({
@@ -273,16 +337,14 @@ async function loadLifetimeCompetitionData(rosterMeta) {
 
 async function loadWeeklyCompetitionData(rosterMeta, period) {
   const weekSelection = getWeekSelection(period);
-  const [liveResult, liveWorkflowResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
-    fetchLiveTabRows(),
+  const [liveWorkflowResult, editorialResult, productionResult] = await Promise.all([
     fetchLiveWorkflowRows(),
-    fetchAnalyticsLiveTabRows(),
     fetchEditorialTabRows(),
     fetchProductionTabRows(),
   ]);
 
-  const scriptsMap = buildScriptsPerPodForWeek(liveResult.rows, weekSelection);
-  const hitRateMap = computeHitRatePerPodForWeek(liveWorkflowResult.rows, analyticsResult.rows, weekSelection);
+  const scriptsMap = buildScriptsPerPodForWeekFromWorkflowRows(liveWorkflowResult.rows, weekSelection);
+  const hitRateMap = computeHitRatePerPodForWeek(liveWorkflowResult.rows, weekSelection);
   const beatsMap = buildLwEditorialOutputPerPod(editorialResult.rows, productionResult.rows, weekSelection);
 
   const podRows = buildPodRowsFromMaps(rosterMeta.podOrder, rosterMeta, beatsMap, scriptsMap, hitRateMap).map((row) => ({
@@ -292,6 +354,7 @@ async function loadWeeklyCompetitionData(rosterMeta, period) {
 
   return {
     podRows,
+    scriptRowsByPod: buildPodScriptDetailRows(liveWorkflowResult.rows, weekSelection),
     period,
     weekKey: weekSelection.weekKey,
     weekLabel: formatWeekRangeLabel(weekSelection.weekStart, weekSelection.weekEnd),
@@ -308,6 +371,20 @@ export async function GET(request) {
   const hasPeriodFilter = rawPeriod === "last" || rawPeriod === "current" || rawPeriod === "next";
   const hasDateRangeFilter = Boolean(startDate || endDate);
   const period = normalizeWeekView(rawPeriod || "current");
+  const cachePath = responseCacheKey({
+    mode,
+    scope,
+    period,
+    startDate,
+    endDate,
+  });
+  const memCached = readInMemResponseCache(cachePath);
+  if (memCached) return NextResponse.json(memCached);
+  const cached = await readResponseCache(cachePath);
+  if (cached) {
+    writeInMemResponseCache(cachePath, cached);
+    return NextResponse.json(cached);
+  }
 
   try {
     // Supabase (planner config + week data) is optional — fall back to defaults if unavailable
@@ -331,7 +408,7 @@ export async function GET(request) {
 
     if (mode === "lifetime") {
       const podRows = await loadLifetimeCompetitionData(scopedRosterMeta);
-      return NextResponse.json({
+      const payload = {
         ok: true,
         podRows,
         period: "lifetime",
@@ -339,44 +416,38 @@ export async function GET(request) {
         weekLabel: `Lifetime (${LIFETIME_SINCE}+)`,
         selectionMode: "lifetime",
         scope,
-      });
+      };
+      writeInMemResponseCache(cachePath, payload);
+      await writeResponseCache(cachePath, payload);
+      return NextResponse.json(payload);
     }
 
     if (hasPeriodFilter || hasDateRangeFilter) {
       const selection = hasDateRangeFilter ? buildDateRangeSelection({ startDate, endDate, period }) : null;
-      const weekly = await loadWeeklyCompetitionData(scopedRosterMeta, hasDateRangeFilter ? selection.period : period);
-      const effectiveWeekSelection = hasDateRangeFilter ? selection : getWeekSelection(weekly.period);
-      const [liveResult, liveWorkflowResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
-        fetchLiveTabRows(),
-        fetchLiveWorkflowRows(),
-        fetchAnalyticsLiveTabRows(),
-        fetchEditorialTabRows(),
-        fetchProductionTabRows(),
-      ]);
-      const scriptsMap = buildScriptsPerPodForWeek(liveResult.rows, effectiveWeekSelection);
-      const hitRateMap = computeHitRatePerPodForWeek(liveWorkflowResult.rows, analyticsResult.rows, effectiveWeekSelection);
-      const beatsMap = buildLwEditorialOutputPerPod(editorialResult.rows, productionResult.rows, effectiveWeekSelection);
-      const podRows = buildPodRowsFromMaps(scopedPodOrder, scopedRosterMeta, beatsMap, scriptsMap, hitRateMap).map((row) => ({
-        ...row,
-        lwEditorialOutput: beatsMap.get(row.podLeadName) || 0,
-      }));
-      const scriptRowsByPod = buildPodScriptDetailRows(analyticsResult.rows, effectiveWeekSelection);
-
-      return NextResponse.json({
+      const periodToLoad = hasDateRangeFilter ? selection.period : period;
+      const weekly = await loadWeeklyCompetitionData(scopedRosterMeta, periodToLoad);
+      const payload = {
         ok: true,
-        podRows,
-        scriptRowsByPod,
+        podRows: weekly.podRows,
+        scriptRowsByPod: weekly.scriptRowsByPod,
         period: hasDateRangeFilter ? "range" : weekly.period,
-        weekKey: effectiveWeekSelection.weekKey,
-        weekLabel: formatWeekRangeLabel(effectiveWeekSelection.weekStart, effectiveWeekSelection.weekEnd),
+        weekKey: hasDateRangeFilter ? selection.weekKey : weekly.weekKey,
+        weekLabel: hasDateRangeFilter
+          ? formatWeekRangeLabel(selection.weekStart, selection.weekEnd)
+          : weekly.weekLabel,
         selectionMode: hasDateRangeFilter ? "date-range" : "week",
         scope,
-      });
+      };
+      writeInMemResponseCache(cachePath, payload);
+      await writeResponseCache(cachePath, payload);
+      return NextResponse.json(payload);
     }
 
     const podRows = await loadLifetimeCompetitionData(scopedRosterMeta);
-
-    return NextResponse.json({ ok: true, podRows, selectionMode: "lifetime", scope });
+    const payload = { ok: true, podRows, selectionMode: "lifetime", scope };
+    writeInMemResponseCache(cachePath, payload);
+    await writeResponseCache(cachePath, payload);
+    return NextResponse.json(payload);
   } catch (error) {
     return NextResponse.json({
       ok: true,
