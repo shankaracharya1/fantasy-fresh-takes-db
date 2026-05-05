@@ -992,10 +992,10 @@ export default function UnifiedOpsApp() {
   const [dashboardLoadingMessage, setDashboardLoadingMessage] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [cacheRefreshing, setCacheRefreshing] = useState(false);
-  const [lastSyncedAt, setLastSyncedAt] = useState(() => {
-    if (typeof window === "undefined") return null;
-    try { return parseInt(window.localStorage.getItem("last-synced-at"), 10) || null; } catch { return null; }
-  });
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  useEffect(() => {
+    try { const v = parseInt(window.localStorage.getItem("last-synced-at"), 10) || null; setLastSyncedAt(v); } catch {}
+  }, []);
   const [syncConfirmPending, setSyncConfirmPending] = useState(false);
   // Tab-switch guards: track the params key for which we have in-memory data.
   // When activeView changes but params didn't change, loadKey === ref → skip fetch.
