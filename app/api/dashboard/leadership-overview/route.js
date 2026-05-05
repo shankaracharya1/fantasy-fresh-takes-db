@@ -652,9 +652,9 @@ function buildFullGenAiRows(workflowRows, analyticsRows, startDate, endDate) {
       if (seenCodes.has(code)) return false;
       seenCodes.add(code);
     }
-    // Filter by strictLeadSubmittedDate — same field the Live tab filters by ("Date submitted by Lead")
-    // This ensures the count matches what users see in the Live tab for the selected date range.
-    const d = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
+    // Filter by finalUploadDate (= stageDate for live rows) — matches what users see in the sheet
+    // when filtering by "Final Upload Date".
+    const d = String(row?.stageDate || row?.finalUploadDate || "").slice(0, 10);
     return d && (!startDate || d >= startDate) && (!endDate || d <= endDate);
   });
 
@@ -663,14 +663,14 @@ function buildFullGenAiRows(workflowRows, analyticsRows, startDate, endDate) {
     const aRow = analyticsMap.get(code) || {};
     const hasAnalytics = Object.keys(aRow).length > 0;
     const isFt = classifyFtRw(row?.reworkType) === "ft";
-    const dateForBucket = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
+    const dateForBucket = String(row?.stageDate || row?.finalUploadDate || "").slice(0, 10);
     const timeParts = getTimeParts(dateForBucket);
     return {
       id: `full-gen-ai-${index + 1}`,
       assetCode: normalizeText(row.assetCode),
       showName: toTitleCase(row.showName || ""),
       beatName: toTitleCase(row.beatName || ""),
-      podLeadName: toTitleCase(row.podLeadName || ""),
+      podLeadName: normalizePodLeadName(row.podLeadName || "") || toTitleCase(row.podLeadName || ""),
       writerName: toTitleCase(row.writerName || ""),
       scriptType: isFt ? "ft" : "rw",
       productionType: normalizeText(row.productionType),
@@ -790,12 +790,14 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
   };
 
   for (const row of filtered) {
+    const scriptType = classifyFtRw(row?.reworkType);
+    if (scriptType === null) continue; // Fresh Take PS (and blank) — excluded entirely from throughput
+
     const pod = ensurePod(normalizePodLeadName(row?.podLeadName || row?.podLeadRaw) || row?.podLeadName || row?.podLeadRaw);
     pod.totalScripts += 1;
     const writer = ensureWriter(pod, resolveWriterName(row?.writerName));
     writer.totalScripts += 1;
 
-    const scriptType = classifyFtRw(row?.reworkType);
     const isFt = scriptType === "ft";
     const dateUsed = String(row?.strictLeadSubmittedDate || "").slice(0, 10);
     writer.scripts.push({
@@ -828,15 +830,18 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
     const writerKey = normalizeText(resolveWriterName(row?.writerName)) || "Unknown Writer";
     const mapKey = `${podKey}::${writerKey}`;
     if (!liveCountMap.has(mapKey)) liveCountMap.set(mapKey, { podKey, writerKey, assetCodes: new Set(), scripts: [] });
+    const liveScriptType = classifyFtRw(row?.reworkType);
+    if (liveScriptType === null) continue; // Fresh Take PS — excluded from live throughput count
     const entry = liveCountMap.get(mapKey);
     const code = String(row?.assetCode || "").trim();
     if (code && !entry.assetCodes.has(code.toLowerCase())) {
       entry.assetCodes.add(code.toLowerCase());
       entry.scripts.push({
         assetCode: normalizeText(row?.assetCode) || "",
+        showName: normalizeText(row?.showName) || "",
         beatName: normalizeText(row?.beatName) || "",
         scriptStatus: normalizeText(row?.scriptStatus || row?.status) || "Uploaded",
-        type: classifyFtRw(row?.reworkType) === "ft" ? "ft" : "rw",
+        type: liveScriptType === "ft" ? "ft" : "rw",
         date: uploadDate,
         source: "live",
       });

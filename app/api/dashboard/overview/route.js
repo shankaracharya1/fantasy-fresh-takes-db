@@ -452,20 +452,21 @@ function buildPodThroughputForRange({ editorialRows = [], readyRows = [], produc
       String(row?.dateSubmittedByLead || "").slice(0, 10) ||
       String(row?.etaToStartProd || "").slice(0, 10);
     if (!leadDate || leadDate < startDate || leadDate > endDate) continue;
+    const scriptType = classifyScriptType(row?.reworkType);
+    if (scriptType === null) continue; // Fresh Take PS — excluded entirely
+
     const pod = ensurePod(row?.podLeadName || row?.podLeadRaw);
     pod.totalScripts += 1;
     const writer = ensureWriter(pod, row?.writerName);
     writer.totalScripts += 1;
 
-    const scriptType = classifyScriptType(row?.reworkType);
     if (scriptType === "FT") {
       pod.ftCount += 1;
       writer.ftCount += 1;
-    } else if (scriptType === "RW") {
+    } else {
       pod.rwCount += 1;
       writer.rwCount += 1;
     }
-    // null = "Fresh Take PS" or similar — excluded from both counts
   }
 
   return Array.from(podMap.values())
