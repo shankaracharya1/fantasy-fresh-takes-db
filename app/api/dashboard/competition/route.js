@@ -213,7 +213,13 @@ function filterPodOrderByScope(podOrder, scope = "bau") {
 }
 
 function buildPodRowsFromMaps(podOrder, rosterMeta, beatsMap, scriptsMap, hitRateMap) {
-  return podOrder.map((podLeadName) => {
+  // Start with the configured pod order, then append any data-driven pods from the
+  // Live tab that aren't already in the list (e.g. Yadhu, or leads added outside the roster)
+  const knownNames = new Set(podOrder);
+  const extraPodNames = [...hitRateMap.keys()].filter((name) => !knownNames.has(name)).sort();
+  const fullOrder = [...podOrder, ...extraPodNames];
+
+  return fullOrder.map((podLeadName) => {
     const hitStats = hitRateMap.get(podLeadName) || { totalLive: 0, hits: 0 };
     const successfulBeats = Number(hitStats.hits || 0);
     return {
