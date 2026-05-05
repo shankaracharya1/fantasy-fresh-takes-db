@@ -938,7 +938,6 @@ function buildPodThroughputRowsForRange(workflowRows, startDate, endDate) {
       }, new Map());
 
       const writerRows = Array.from(mergedByPodLocalAlias.values())
-        .filter((w) => normalizePodLeadName(w.writerName) !== pod.podLeadName)
         .sort((a, b) => b.totalScripts - a.totalScripts || a.writerName.localeCompare(b.writerName))
         .map((w) => {
           const scripts = (w.scripts || []).slice().sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.assetCode || "").localeCompare(b.assetCode || ""));
