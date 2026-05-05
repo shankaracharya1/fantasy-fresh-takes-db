@@ -504,6 +504,13 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
     return `${monthNames[d.getUTCMonth()]} ${d.getUTCDate()}`;
   };
 
+  const abbreviateName = (name) => {
+    if (!name) return "";
+    const words = name.trim().split(/\s+/);
+    if (words.length === 1) return words[0];
+    return words.map((w) => w[0].toUpperCase()).join("");
+  };
+
   const scriptList = (scripts) => {
     if (!scripts || scripts.length === 0) return <span style={{ color: "#ccc" }}>—</span>;
     return (
@@ -511,6 +518,11 @@ function PodThroughputRankingTable({ rows = [], loading = false }) {
         {scripts.map((s, i) => (
           <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 4, fontSize: 11 }}>
             <span style={{ fontWeight: 700, color: "#2d4a2d", fontFamily: "monospace", whiteSpace: "nowrap" }}>{s.assetCode || "—"}</span>
+            {s.showName && (
+              <span style={{ fontWeight: 600, color: "#555", whiteSpace: "nowrap" }}>
+                · {abbreviateName(s.showName)}
+              </span>
+            )}
             {s.beatName && <span style={{ color: "#666" }}>· {s.beatName}</span>}
             {s.scriptStatus && <span style={{ color: "#888", fontSize: 10, whiteSpace: "nowrap" }}>· {s.scriptStatus}</span>}
           </div>
@@ -1754,11 +1766,17 @@ function ReworkBadge({ value }) {
 
 function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loading = false }) {
   const [expandedAngles, setExpandedAngles] = useState({});
+  const [hoveredShowKey, setHoveredShowKey] = useState(null);
   const [sortConfig, setSortConfig] = useState({ col: "ads", dir: "desc" });
-  const [collapsedPods, setCollapsedPods] = useState(new Set());
+  const [expandedPodNames, setExpandedPodNames] = useState(new Set()); // empty = all collapsed by default
+  const [groupBy, setGroupBy] = useState("writer"); // "writer" | "show"
+  const [expandedShows, setExpandedShows] = useState(new Set());
+  const toggleShow = (key) => setExpandedShows((prev) => {
+    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next;
+  });
 
   const togglePodCollapse = (podName) =>
-    setCollapsedPods((prev) => {
+    setExpandedPodNames((prev) => {
       const next = new Set(prev);
       next.has(podName) ? next.delete(podName) : next.add(podName);
       return next;
@@ -1787,15 +1805,16 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
     for (const row of scopedRows) {
       const pod = row.podLeadName || "Unknown POD";
       const writer = row.writerName || "No owner";
-      const show = row.showName;
-      const beatKey = `${show}|${row.beatName}`;
+      const show = (row.showName || "").trim();
+      const showKey = show.toLowerCase(); // normalize key to avoid duplicate groups from case/space differences
+      const beatKey = `${showKey}|${(row.beatName || "").trim().toLowerCase()}`;
 
       if (!podMap.has(pod)) podMap.set(pod, { podName: pod, writerMap: new Map() });
       const podEntry = podMap.get(pod);
       if (!podEntry.writerMap.has(writer)) podEntry.writerMap.set(writer, { writerName: writer, showMap: new Map() });
       const writerEntry = podEntry.writerMap.get(writer);
-      if (!writerEntry.showMap.has(show)) writerEntry.showMap.set(show, { showName: show, beatMap: new Map() });
-      const showEntry = writerEntry.showMap.get(show);
+      if (!writerEntry.showMap.has(showKey)) writerEntry.showMap.set(showKey, { showName: show, beatMap: new Map() });
+      const showEntry = writerEntry.showMap.get(showKey);
       if (!showEntry.beatMap.has(beatKey)) showEntry.beatMap.set(beatKey, { beatName: row.beatName, showName: show, attempts: 0, successCount: 0, ftCount: 0, rwCount: 0, ads: [] });
       const beatEntry = showEntry.beatMap.get(beatKey);
       beatEntry.attempts++;
@@ -1838,7 +1857,16 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
       const allBeats = writers.flatMap((w) => w.shows.flatMap((s) => s.beats));
       const totalAttempts = allBeats.reduce((s, b) => s + b.attempts, 0);
       const totalSuccess = allBeats.reduce((s, b) => s + b.successCount, 0);
-      return { podName, writers, totalAttempts, totalSuccess, totalShows: new Set(allBeats.map((b) => b.showName)).size, totalBeats: allBeats.length };
+      // Pre-compute cross-writer show-level stats for this POD
+      const showStats = new Map();
+      for (const w of writers) {
+        for (const sh of w.shows) {
+          const prev = showStats.get(sh.showName) || { attempts: 0, success: 0 };
+          for (const b of sh.beats) { prev.attempts += b.attempts; prev.success += b.successCount; }
+          showStats.set(sh.showName, prev);
+        }
+      }
+      return { podName, writers, totalAttempts, totalSuccess, totalShows: new Set(allBeats.map((b) => b.showName)).size, totalBeats: allBeats.length, showStats };
     }).sort((a, b) => {
       if (col === "pod") return m * a.podName.localeCompare(b.podName);
       if (col === "successful") return m * (a.totalSuccess - b.totalSuccess);
@@ -1860,9 +1888,24 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
             GA/GI scripts · Live tab only · filtered by upload date · success metrics from analytics
           </div>
         </div>
-        <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end", display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="overview-section-actions" style={{ marginLeft: "auto", justifyContent: "flex-end", display: "flex", alignItems: "center", gap: 12 }}>
           <div className="overview-section-note">
             {loading ? "PODs: ..." : `PODs: ${formatMetricValue(byPod.length)}`}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", background: "var(--subtle-bg, #f0ece4)", borderRadius: 6, padding: 2, gap: 2 }}>
+            {[["writer", "By Writer"], ["show", "By Show"]].map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                onClick={() => setGroupBy(val)}
+                style={{
+                  fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 4, border: "none",
+                  cursor: "pointer", transition: "all 0.15s",
+                  background: groupBy === val ? "var(--accent, #c2703e)" : "transparent",
+                  color: groupBy === val ? "#fff" : "var(--subtle)",
+                }}
+              >{label}</button>
+            ))}
           </div>
         </div>
       </div>
@@ -1901,9 +1944,18 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
               <thead>
                 <tr>
                   <th style={{ width: 110, cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("pod")}>POD{sortIcon("pod")}</th>
-                  <th style={{ width: 120, cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("writer")}>Writer{sortIcon("writer")}</th>
-                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("show")}>Show{sortIcon("show")}</th>
-                  <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("beat")}>Angle{sortIcon("beat")}</th>
+                  {groupBy === "writer" ? (
+                    <>
+                      <th style={{ width: 120, cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("writer")}>Writer{sortIcon("writer")}</th>
+                      <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("show")}>Show{sortIcon("show")}</th>
+                      <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("beat")}>Angle{sortIcon("beat")}</th>
+                    </>
+                  ) : (
+                    <>
+                      <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("show")} colSpan={2}>Show{sortIcon("show")}</th>
+                      <th style={{ cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("writer")}>Writers{sortIcon("writer")}</th>
+                    </>
+                  )}
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("ads")}>Ads{sortIcon("ads")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("successful")}>Successful{sortIcon("successful")}</th>
                   <th style={{ textAlign: "right", cursor: "pointer", userSelect: "none" }} onClick={() => toggleSort("hitRate")}>Hit Rate{sortIcon("hitRate")}</th>
@@ -1912,7 +1964,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
               </thead>
               <tbody>
                 {byPod.length > 0 ? byPod.flatMap((pod) => {
-                  const isPodCollapsed = collapsedPods.has(pod.podName);
+                  const isPodCollapsed = !expandedPodNames.has(pod.podName);
                   const podToggleBtn = (isCollapsed) => (
                     <button
                       type="button"
@@ -1934,7 +1986,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                       ? `${((pod.totalSuccess / pod.totalAttempts) * 100).toFixed(1)}%`
                       : "—";
                     return [(
-                      <tr key={`pod-collapsed-${pod.podName}`} style={{ background: "var(--subtle-bg, #f0ece4)" }}>
+                      <tr key={`pod-collapsed-${pod.podName}`} style={{ background: "var(--subtle-bg, #f0ece4)", cursor: "pointer", userSelect: "none" }} onClick={() => togglePodCollapse(pod.podName)}>
                         <td style={{ fontWeight: 700, fontSize: 13, borderRight: "1px solid var(--border)", paddingTop: 8, paddingBottom: 8 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             {podToggleBtn(true)}
@@ -1951,6 +2003,104 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                       </tr>
                     )];
                   }
+
+                  // ── By Show view ────────────────────────────────────────────
+                  if (groupBy === "show") {
+                    const sgMap = new Map();
+                    for (const writer of pod.writers) {
+                      for (const show of writer.shows) {
+                        if (!sgMap.has(show.showName)) sgMap.set(show.showName, { showName: show.showName, entries: [], totalAttempts: 0, totalSuccess: 0, writerNames: new Set() });
+                        const sg = sgMap.get(show.showName);
+                        sg.writerNames.add(writer.writerName);
+                        for (const b of show.beats) {
+                          sg.entries.push({ writerName: writer.writerName, beat: b });
+                          sg.totalAttempts += b.attempts;
+                          sg.totalSuccess += b.successCount;
+                        }
+                      }
+                    }
+                    const showGroups = Array.from(sgMap.values()).sort((a, b) => b.totalAttempts - a.totalAttempts);
+                    const podShowRowCount = showGroups.reduce((sum, sg) => {
+                      const sk = `${pod.podName}::${sg.showName}`;
+                      return sum + 1 + (expandedShows.has(sk) ? sg.entries.length : 0);
+                    }, 0);
+
+                    const rows = [];
+                    let isFirstShowOfPod = true;
+                    for (const sg of showGroups) {
+                      const sk = `${pod.podName}::${sg.showName}`;
+                      const isShowExp = expandedShows.has(sk);
+                      const hr = sg.totalAttempts > 0 ? ((sg.totalSuccess / sg.totalAttempts) * 100).toFixed(1) : null;
+                      const hrNum = hr != null ? parseFloat(hr) : null;
+                      const hrColor = hrNum != null ? (hrNum >= 50 ? "#2d5a3d" : hrNum >= 20 ? "#9f6b15" : "var(--subtle)") : "var(--subtle)";
+                      rows.push(
+                        <tr key={`sg-${sk}`} style={{ cursor: "pointer", userSelect: "none", background: isShowExp ? "rgba(45,90,61,0.04)" : undefined }} onClick={() => toggleShow(sk)}>
+                          {isFirstShowOfPod && (
+                            <td rowSpan={podShowRowCount} style={{ fontWeight: 700, verticalAlign: "top", fontSize: 13, paddingTop: 10, borderRight: "1px solid var(--border)" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                {podToggleBtn(false)}
+                                <span>{pod.podName}</span>
+                              </div>
+                            </td>
+                          )}
+                          <td colSpan={2} style={{ fontWeight: 700, fontSize: 13 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                              <span style={{ width: 16, height: 16, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "var(--subtle-bg,#f0ece4)", borderRadius: 3, fontSize: 10, color: "var(--subtle)", flexShrink: 0 }}>
+                                {isShowExp ? "−" : "+"}
+                              </span>
+                              {sg.showName}
+                            </div>
+                          </td>
+                          <td style={{ fontSize: 11, color: "var(--subtle)", whiteSpace: "nowrap" }}>
+                            {sg.writerNames.size} writer{sg.writerNames.size !== 1 ? "s" : ""}
+                          </td>
+                          <td style={{ textAlign: "right", fontWeight: 700 }}>{sg.totalAttempts}</td>
+                          <td style={{ textAlign: "right" }}>
+                            {sg.totalSuccess > 0 ? <span className="genai-success-badge">{sg.totalSuccess}</span> : <span className="genai-zero">0</span>}
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            <span style={{ fontWeight: 700, color: hrColor }}>{hr != null ? `${hr}%` : "—"}</span>
+                          </td>
+                          <td />
+                        </tr>
+                      );
+                      if (isShowExp) {
+                        for (const { writerName, beat } of sg.entries) {
+                          const bhr = beat.attempts > 0 ? ((beat.successCount / beat.attempts) * 100).toFixed(1) : null;
+                          const bhrNum = bhr != null ? parseFloat(bhr) : null;
+                          rows.push(
+                            <tr key={`sg-entry-${sk}|${writerName}|${beat.beatName}`} style={{ background: "var(--bg-deep,#f7f4ef)", fontSize: 12 }}>
+                              <td style={{ paddingLeft: 24, color: "var(--subtle)", fontSize: 12, fontStyle: "italic" }}>{writerName}</td>
+                              <td style={{ fontSize: 12 }}>{beat.beatName || "—"}</td>
+                              <td />
+                              <td style={{ textAlign: "right" }}>
+                                <span style={{ fontWeight: 600 }}>{beat.attempts}</span>
+                                {(beat.ftCount > 0 || beat.rwCount > 0) && (
+                                  <span style={{ display: "block", fontSize: 9, lineHeight: 1.3, marginTop: 1, whiteSpace: "nowrap" }}>
+                                    {beat.ftCount > 0 && <span style={{ color: "#2d5a3d", fontWeight: 700 }}>{beat.ftCount} FT</span>}
+                                    {beat.ftCount > 0 && beat.rwCount > 0 && <span style={{ margin: "0 2px", color: "var(--subtle)" }}>·</span>}
+                                    {beat.rwCount > 0 && <span style={{ color: "#c2703e", fontWeight: 700 }}>{beat.rwCount} RW</span>}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                {beat.successCount > 0 ? <span className="genai-success-badge">{beat.successCount}</span> : <span className="genai-zero">0</span>}
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                <span className={`genai-hitrate${bhrNum != null ? (bhrNum >= 50 ? " is-high" : bhrNum >= 20 ? " is-mid" : " is-low") : ""}`}>
+                                  {bhr != null ? `${bhr}%` : "—"}
+                                </span>
+                              </td>
+                              <td />
+                            </tr>
+                          );
+                        }
+                      }
+                      isFirstShowOfPod = false;
+                    }
+                    return rows;
+                  }
+                  // ── By Writer view (default) ─────────────────────────────────
 
                   const beatExtra = (writerName, beat) => {
                     const key = `${pod.podName}|${writerName}|${beat.showName}|${beat.beatName}`;
@@ -1978,12 +2128,15 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                         const angleKey = `${pod.podName}|${writer.writerName}|${beat.showName}|${beat.beatName}`;
                         const isExpanded = Boolean(expandedAngles[angleKey]);
 
+                        const showHoverKey = `${pod.podName}|${writer.writerName}|${show.showName}`;
                         rows.push(
                           <tr
                             key={angleKey}
                             className={`overview-genai-parent-row${beat.successCount > 0 ? " overview-genai-success-row" : ""}`}
                             style={{ cursor: "pointer" }}
                             onClick={() => setExpandedAngles((prev) => ({ ...prev, [angleKey]: !prev[angleKey] }))}
+                            onMouseEnter={() => setHoveredShowKey(showHoverKey)}
+                            onMouseLeave={() => setHoveredShowKey(null)}
                           >
                             {isFirstOfPod && (
                               <td rowSpan={podRowSpan} style={{ fontWeight: 700, verticalAlign: "top", fontSize: 13, paddingTop: 10, borderRight: "1px solid var(--border)" }}>
@@ -1999,8 +2152,21 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                               </td>
                             )}
                             {isFirstOfShow && (
-                              <td rowSpan={showRowSpan} className="genai-show-name" style={{ verticalAlign: "top", paddingTop: 10 }}>
+                              <td rowSpan={showRowSpan} className="genai-show-name" style={{ verticalAlign: "top", paddingTop: 10, transition: "background 120ms ease", background: hoveredShowKey === showHoverKey ? "color-mix(in srgb, var(--card-alt) 70%, transparent 30%)" : undefined }}>
                                 {show.showName}
+                                {(() => {
+                                  const s = pod.showStats?.get(show.showName);
+                                  if (!s || s.attempts === 0) return null;
+                                  const hr = ((s.success / s.attempts) * 100).toFixed(1);
+                                  const hrNum = parseFloat(hr);
+                                  const color = hrNum >= 50 ? "#2d5a3d" : hrNum >= 20 ? "#9f6b15" : "var(--subtle)";
+                                  return (
+                                    <div style={{ fontSize: 10, marginTop: 4, color: "var(--subtle)", lineHeight: 1.4 }}>
+                                      <span style={{ fontWeight: 600, color }}>Show: {hr}%</span>
+                                      <span style={{ marginLeft: 4 }}>({s.attempts} ads · {s.success} hits)</span>
+                                    </div>
+                                  );
+                                })()}
                               </td>
                             )}
                             <td className="genai-beat-name">
@@ -2089,6 +2255,25 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                 }) : (
                   <tr><td colSpan="8">No Full Gen AI rows for this filter yet.</td></tr>
                 )}
+                {byPod.length > 0 && (() => {
+                  const grandAds = byPod.reduce((s, p) => s + p.totalAttempts, 0);
+                  const grandSuccess = byPod.reduce((s, p) => s + p.totalSuccess, 0);
+                  const grandHr = grandAds > 0 ? ((grandSuccess / grandAds) * 100).toFixed(1) : null;
+                  return (
+                    <tr style={{ background: "#2d5a3d", borderTop: "2px solid #2d5a3d" }}>
+                      <td colSpan={groupBy === "show" ? 3 : 4} style={{ fontWeight: 700, fontSize: 12, color: "#fff", paddingTop: 8, paddingBottom: 8 }}>
+                        Grand Total — {byPod.length} PODs
+                      </td>
+                      {groupBy === "show" && <td />}
+                      <td style={{ textAlign: "right", fontWeight: 700, fontSize: 13, color: "#fff" }}>{grandAds}</td>
+                      <td style={{ textAlign: "right", fontWeight: 700, fontSize: 13, color: "#fff" }}>{grandSuccess}</td>
+                      <td style={{ textAlign: "right", fontWeight: 700, fontSize: 13, color: grandHr != null ? (parseFloat(grandHr) >= 20 ? "#7ee8a2" : parseFloat(grandHr) >= 10 ? "#ffd580" : "#ffb3a7") : "#fff" }}>
+                        {grandHr != null ? `${grandHr}%` : "—"}
+                      </td>
+                      <td />
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>

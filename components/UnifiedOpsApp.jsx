@@ -1031,13 +1031,7 @@ export default function UnifiedOpsApp() {
     activeView === "production" ||
     activeView === "planner2" ||
     activeView === "reports";
-  const headerDateRangeDisabled =
-    (activeView === "overview" && overviewLoading) ||
-    (activeView === "leadership-overview" && leadershipOverviewLoading) ||
-    (activeView === "pod-wise" && competitionLoading) ||
-    (activeView === "production" && acdMetricsLoading && !acdMetricsData) ||
-    (activeView === "planner2" && planner2Loading && !planner2Data) ||
-    (activeView === "reports" && writerPriorityLoading && !writerPriorityData);
+  const headerDateRangeDisabled = false; // Never block date controls — stale fetches are cancelled via loadKey refs
   const monthWeekOptions = useMemo(() => buildStaticMonthWeekOptions(MIN_DASHBOARD_DATE), []);
   const selectedMonthWeekOption = useMemo(
     () => monthWeekOptions.find((option) => option.id === weekFilterSelection) || monthWeekOptions[0] || null,
