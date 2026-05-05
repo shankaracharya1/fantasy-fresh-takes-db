@@ -3,6 +3,7 @@ import { readJsonObject } from "../../../../lib/storage.js";
 import {
   POD_LEAD_ORDER,
   fetchLiveTabRows,
+  fetchLiveWorkflowRows,
   fetchAnalyticsLiveTabRows,
   fetchEditorialTabRows,
   fetchProductionTabRows,
@@ -10,6 +11,7 @@ import {
   buildLwEditorialOutputPerPod,
   isAnalyticsEligibleProductionType,
   isTatEligibleProductionType,
+  normalizePodLeadName,
 } from "../../../../lib/live-tab.js";
 import {
   buildLifetimeBeatsPerPod,
@@ -63,157 +65,71 @@ function countBenchmarkMisses(metricMap, keys) {
   return keys.reduce((sum, key) => sum + (metricMap?.[key]?.meetsBenchmark ? 0 : 1), 0);
 }
 
-function computeHitRatePerPod(analyticsRows, sinceDate) {
-  const validRows = (Array.isArray(analyticsRows) ? analyticsRows : []).filter((row) => {
-    const liveDate = String(row?.liveDate || "").trim();
-    if (!liveDate || liveDate < sinceDate) return false;
-    if (!isTatEligibleProductionType(row?.productionType)) return false;
-    const assetCode = String(row?.assetCode || "").trim();
-    if (!assetCode) return false;
+// Same success definition as Detailed POD Overview (isFunnelSuccess in leadership-overview/route.js)
+function isFunnelSuccess(row) {
+  const amountSpent = toFiniteNumber(row?.amountSpentUsd);
+  const q1Completion = toFiniteNumber(row?.video0To25Pct);
+  const cti = toFiniteNumber(row?.clickToInstall);
+  const absoluteCompletion = toFiniteNumber(row?.absoluteCompletionPct);
+  const cpi = toFiniteNumber(row?.cpiUsd);
+  const passesAllThresholds = (
+    Number.isFinite(amountSpent) && amountSpent >= 100 &&
+    Number.isFinite(q1Completion) && q1Completion > 10 &&
+    Number.isFinite(cti) && cti >= 12 &&
+    Number.isFinite(absoluteCompletion) && absoluteCompletion >= 1.8 &&
+    Number.isFinite(cpi) && cpi <= 12
+  );
+  const passesCpiOnly = Number.isFinite(cpi) && cpi < 6;
+  return passesAllThresholds || passesCpiOnly;
+}
+
+// Core hit-rate logic matching Detailed POD Overview:
+// - Source: Live tab rows (GA/GI asset codes only), date-filtered by finalUploadDate
+// - Metrics: joined from Analytics sheet by assetCode
+// - Success: isFunnelSuccess (same as leadership-overview)
+function computeHitRatePerPodFromLive(liveWorkflowRows, analyticsRows, sinceDate, untilDate) {
+  const analyticsMap = new Map();
+  for (const row of (Array.isArray(analyticsRows) ? analyticsRows : [])) {
+    const code = String(row?.assetCode || "").trim().toUpperCase();
+    if (code && !analyticsMap.has(code)) analyticsMap.set(code, row);
+  }
+
+  const seenCodes = new Set();
+  const validRows = (Array.isArray(liveWorkflowRows) ? liveWorkflowRows : []).filter((row) => {
+    const code = String(row?.assetCode || "").trim().toUpperCase();
+    if (!code.startsWith("GA") && !code.startsWith("GI")) return false;
+    if (seenCodes.has(code)) return false;
+    seenCodes.add(code);
+    const d = String(row?.finalUploadDate || "").slice(0, 10);
+    if (!d) return false;
+    if (sinceDate && d < sinceDate) return false;
+    if (untilDate && d > untilDate) return false;
     return true;
   });
 
-  // Dedupe by assetCode per pod — keep best row (highest completeness score then spend)
-  const podAssetMap = new Map();
-  for (const row of validRows) {
-    const podName = String(row?.podLeadName || "").trim();
-    if (!podName) continue;
-
-    const assetCode = String(row?.assetCode || "").trim().toLowerCase();
-    const key = `${podName}|${assetCode}`;
-
-    if (!podAssetMap.has(key)) {
-      podAssetMap.set(key, row);
-    } else {
-      const existing = podAssetMap.get(key);
-      const nextScore = Number(row?.metricsCompletenessScore || 0);
-      const existingScore = Number(existing?.metricsCompletenessScore || 0);
-      if (nextScore > existingScore || (nextScore === existingScore && Number(row?.amountSpentUsd || 0) > Number(existing?.amountSpentUsd || 0))) {
-        podAssetMap.set(key, row);
-      }
-    }
-  }
-
-  // Classify each deduped row — denominator is ALL live scripts, not just qualifying
   const podStats = new Map();
-  for (const row of podAssetMap.values()) {
-    const podName = String(row?.podLeadName || "").trim();
+  for (const row of validRows) {
+    const podName = normalizePodLeadName(String(row?.podLeadName || "").trim());
     if (!podName) continue;
-
-    if (!podStats.has(podName)) {
-      podStats.set(podName, { totalLive: 0, hits: 0 });
-    }
+    if (!podStats.has(podName)) podStats.set(podName, { totalLive: 0, hits: 0 });
     const stats = podStats.get(podName);
     stats.totalLive += 1;
-
-    const amountSpent = toFiniteNumber(row?.amountSpentUsd);
-    // Only scripts with $100+ spend can qualify for Gen AI / P1 Rework
-    if (!Number.isFinite(amountSpent) || amountSpent < 100) continue;
-
-    const metrics = {
-      threeSecPlays: buildMetricCell(row?.threeSecPlaysPct, BASELINE_THRESHOLD_CHECKS.threeSecPlays),
-      thruplaysTo3s: buildMetricCell(row?.thruplaysTo3sPct, BASELINE_THRESHOLD_CHECKS.thruplaysTo3s),
-      q1Completion: buildMetricCell(row?.q1CompletionPct, BASELINE_THRESHOLD_CHECKS.q1Completion),
-      cpi: buildMetricCell(row?.cpiUsd, BASELINE_THRESHOLD_CHECKS.cpi),
-      absoluteCompletion: buildMetricCell(row?.absoluteCompletionPct, BASELINE_THRESHOLD_CHECKS.absoluteCompletion),
-      cti: buildMetricCell(row?.clickToInstall, BASELINE_THRESHOLD_CHECKS.cti),
-      amountSpent: buildMetricCell(row?.amountSpentUsd, BASELINE_THRESHOLD_CHECKS.amountSpent),
-    };
-
-    const baselineKeys = Object.keys(BASELINE_THRESHOLD_CHECKS);
-    const baselineMissCount = countBenchmarkMisses(metrics, baselineKeys);
-    const cpiValue = toFiniteNumber(row?.cpiUsd);
-    const ctiValue = toFiniteNumber(row?.clickToInstall);
-    const cpiPass = Number.isFinite(cpiValue) && cpiValue < 10;
-
-    // Gen AI: CPI < $10 AND <= 2 baseline benchmark misses
-    if (cpiPass && baselineMissCount <= 2) {
-      stats.hits += 1;
-    }
-    // P1 Rework: CTI >= 12%
-    else if (Number.isFinite(ctiValue) && ctiValue >= 12) {
-      stats.hits += 1;
-    }
+    const code = String(row?.assetCode || "").trim().toUpperCase();
+    const aRow = analyticsMap.get(code);
+    if (aRow && isFunnelSuccess(aRow)) stats.hits += 1;
   }
-
   return podStats;
 }
 
-function computeHitRatePerPodForWeek(analyticsRows, weekSelection) {
+function computeHitRatePerPod(liveWorkflowRows, analyticsRows, sinceDate) {
+  return computeHitRatePerPodFromLive(liveWorkflowRows, analyticsRows, sinceDate, null);
+}
+
+function computeHitRatePerPodForWeek(liveWorkflowRows, analyticsRows, weekSelection) {
   const weekStart = String(weekSelection?.weekStart || "");
   const weekEnd = String(weekSelection?.weekEnd || "");
   if (!weekStart || !weekEnd) return new Map();
-
-  const validRows = (Array.isArray(analyticsRows) ? analyticsRows : []).filter((row) => {
-    const liveDate = String(row?.liveDate || "").trim();
-    if (!liveDate || liveDate < weekStart || liveDate > weekEnd) return false;
-    if (!isTatEligibleProductionType(row?.productionType)) return false;
-    const assetCode = String(row?.assetCode || "").trim();
-    if (!assetCode) return false;
-    return true;
-  });
-
-  const podAssetMap = new Map();
-  for (const row of validRows) {
-    const podName = String(row?.podLeadName || "").trim();
-    if (!podName) continue;
-
-    const assetCode = String(row?.assetCode || "").trim().toLowerCase();
-    const key = `${podName}|${assetCode}`;
-
-    if (!podAssetMap.has(key)) {
-      podAssetMap.set(key, row);
-    } else {
-      const existing = podAssetMap.get(key);
-      const nextScore = Number(row?.metricsCompletenessScore || 0);
-      const existingScore = Number(existing?.metricsCompletenessScore || 0);
-      if (
-        nextScore > existingScore ||
-        (nextScore === existingScore && Number(row?.amountSpentUsd || 0) > Number(existing?.amountSpentUsd || 0))
-      ) {
-        podAssetMap.set(key, row);
-      }
-    }
-  }
-
-  const podStats = new Map();
-  for (const row of podAssetMap.values()) {
-    const podName = String(row?.podLeadName || "").trim();
-    if (!podName) continue;
-
-    if (!podStats.has(podName)) {
-      podStats.set(podName, { totalLive: 0, hits: 0 });
-    }
-    const stats = podStats.get(podName);
-    stats.totalLive += 1;
-
-    const amountSpent = toFiniteNumber(row?.amountSpentUsd);
-    if (!Number.isFinite(amountSpent) || amountSpent < 100) continue;
-
-    const metrics = {
-      threeSecPlays: buildMetricCell(row?.threeSecPlaysPct, BASELINE_THRESHOLD_CHECKS.threeSecPlays),
-      thruplaysTo3s: buildMetricCell(row?.thruplaysTo3sPct, BASELINE_THRESHOLD_CHECKS.thruplaysTo3s),
-      q1Completion: buildMetricCell(row?.q1CompletionPct, BASELINE_THRESHOLD_CHECKS.q1Completion),
-      cpi: buildMetricCell(row?.cpiUsd, BASELINE_THRESHOLD_CHECKS.cpi),
-      absoluteCompletion: buildMetricCell(row?.absoluteCompletionPct, BASELINE_THRESHOLD_CHECKS.absoluteCompletion),
-      cti: buildMetricCell(row?.clickToInstall, BASELINE_THRESHOLD_CHECKS.cti),
-      amountSpent: buildMetricCell(row?.amountSpentUsd, BASELINE_THRESHOLD_CHECKS.amountSpent),
-    };
-
-    const baselineKeys = Object.keys(BASELINE_THRESHOLD_CHECKS);
-    const baselineMissCount = countBenchmarkMisses(metrics, baselineKeys);
-    const cpiValue = toFiniteNumber(row?.cpiUsd);
-    const ctiValue = toFiniteNumber(row?.clickToInstall);
-    const cpiPass = Number.isFinite(cpiValue) && cpiValue < 10;
-
-    if (cpiPass && baselineMissCount <= 2) {
-      stats.hits += 1;
-    } else if (Number.isFinite(ctiValue) && ctiValue >= 12) {
-      stats.hits += 1;
-    }
-  }
-
-  return podStats;
+  return computeHitRatePerPodFromLive(liveWorkflowRows, analyticsRows, weekStart, weekEnd);
 }
 
 // Build per-POD script detail rows for the detail drawer (Show, Angle, Code, CPI, True Comp, CTR, CTI)
@@ -319,7 +235,7 @@ async function loadLifetimeCompetitionData(rosterMeta) {
   const weekKeys = generateWeekKeysSince(LIFETIME_SINCE);
   const lastWeekSelection = getWeekSelection("last");
 
-  const [weekDataEntries, liveResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
+  const [weekDataEntries, liveResult, liveWorkflowResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
     Promise.all(
       weekKeys.map(async (key) => {
         const data = await readJsonObject(makePlannerWeekPath(key));
@@ -327,6 +243,7 @@ async function loadLifetimeCompetitionData(rosterMeta) {
       })
     ),
     fetchLiveTabRows(),
+    fetchLiveWorkflowRows(),
     fetchAnalyticsLiveTabRows(),
     fetchEditorialTabRows(),
     fetchProductionTabRows(),
@@ -335,7 +252,7 @@ async function loadLifetimeCompetitionData(rosterMeta) {
   const weekDataMap = Object.fromEntries(weekDataEntries.filter(([, data]) => data !== null));
   const lifetimeBeatsMap = buildLifetimeBeatsPerPod(weekDataMap);
   const lifetimeScriptsMap = buildLifetimeScriptsPerPod(liveResult.rows, LIFETIME_SINCE);
-  const hitRateMap = computeHitRatePerPod(analyticsResult.rows, LIFETIME_SINCE);
+  const hitRateMap = computeHitRatePerPod(liveWorkflowResult.rows, analyticsResult.rows, LIFETIME_SINCE);
   const lwEditorialMap = buildLwEditorialOutputPerPod(editorialResult.rows, productionResult.rows, lastWeekSelection);
 
   return buildPodRowsFromMaps(rosterMeta.podOrder, rosterMeta, lifetimeBeatsMap, lifetimeScriptsMap, hitRateMap).map((row) => ({
@@ -346,15 +263,16 @@ async function loadLifetimeCompetitionData(rosterMeta) {
 
 async function loadWeeklyCompetitionData(rosterMeta, period) {
   const weekSelection = getWeekSelection(period);
-  const [liveResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
+  const [liveResult, liveWorkflowResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
     fetchLiveTabRows(),
+    fetchLiveWorkflowRows(),
     fetchAnalyticsLiveTabRows(),
     fetchEditorialTabRows(),
     fetchProductionTabRows(),
   ]);
 
   const scriptsMap = buildScriptsPerPodForWeek(liveResult.rows, weekSelection);
-  const hitRateMap = computeHitRatePerPodForWeek(analyticsResult.rows, weekSelection);
+  const hitRateMap = computeHitRatePerPodForWeek(liveWorkflowResult.rows, analyticsResult.rows, weekSelection);
   const beatsMap = buildLwEditorialOutputPerPod(editorialResult.rows, productionResult.rows, weekSelection);
 
   const podRows = buildPodRowsFromMaps(rosterMeta.podOrder, rosterMeta, beatsMap, scriptsMap, hitRateMap).map((row) => ({
@@ -409,14 +327,15 @@ export async function GET(request) {
       const selection = hasDateRangeFilter ? buildDateRangeSelection({ startDate, endDate, period }) : null;
       const weekly = await loadWeeklyCompetitionData(scopedRosterMeta, hasDateRangeFilter ? selection.period : period);
       const effectiveWeekSelection = hasDateRangeFilter ? selection : getWeekSelection(weekly.period);
-      const [liveResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
+      const [liveResult, liveWorkflowResult, analyticsResult, editorialResult, productionResult] = await Promise.all([
         fetchLiveTabRows(),
+        fetchLiveWorkflowRows(),
         fetchAnalyticsLiveTabRows(),
         fetchEditorialTabRows(),
         fetchProductionTabRows(),
       ]);
       const scriptsMap = buildScriptsPerPodForWeek(liveResult.rows, effectiveWeekSelection);
-      const hitRateMap = computeHitRatePerPodForWeek(analyticsResult.rows, effectiveWeekSelection);
+      const hitRateMap = computeHitRatePerPodForWeek(liveWorkflowResult.rows, analyticsResult.rows, effectiveWeekSelection);
       const beatsMap = buildLwEditorialOutputPerPod(editorialResult.rows, productionResult.rows, effectiveWeekSelection);
       const podRows = buildPodRowsFromMaps(scopedPodOrder, scopedRosterMeta, beatsMap, scriptsMap, hitRateMap).map((row) => ({
         ...row,
