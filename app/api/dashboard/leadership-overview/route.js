@@ -674,14 +674,14 @@ function buildFullGenAiRows(workflowRows, analyticsRows, startDate, endDate) {
       productionType: normalizeText(row.productionType),
       source: String(row.source || ""),
       // Success/hit-rate from analytics only
-      success: hasAnalytics ? isFunnelSuccess({ ...aRow, q1ToImpressions: row?.q1ToImpressions }) : false,
+      success: hasAnalytics ? isFunnelSuccess({ ...aRow, q1ToImpressions: aRow?.q1ToImpressions ?? row?.q1ToImpressions }) : false,
       hasAnalytics,
       amountSpentUsd: toFiniteNumber(aRow?.amountSpentUsd),
       cpiUsd: toFiniteNumber(aRow?.cpiUsd),
       absoluteCompletionPct: toFiniteNumber(aRow?.absoluteCompletionPct),
       ctrPct: toFiniteNumber(aRow?.ctrPct),
       thruPlayTo3sRatio: toFiniteNumber(aRow?.thruPlayTo3sRatio),
-      q1ToImpressions: toFiniteNumber(row?.q1ToImpressions),
+      q1ToImpressions: toFiniteNumber(aRow?.q1ToImpressions ?? row?.q1ToImpressions),
       ...timeParts,
     };
   });
