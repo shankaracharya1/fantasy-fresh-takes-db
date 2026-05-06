@@ -25,20 +25,20 @@ function toFiniteNumber(value) {
 
 // Same success definition as Detailed POD Overview
 function isFunnelSuccess(row) {
-  const amountSpent = toFiniteNumber(row?.amountSpentUsd);
-  const q1Completion = toFiniteNumber(row?.video0To25Pct);
-  const cti = toFiniteNumber(row?.clickToInstall);
-  const absoluteCompletion = toFiniteNumber(row?.absoluteCompletionPct);
   const cpi = toFiniteNumber(row?.cpiUsd);
-  const passesAllThresholds = (
-    Number.isFinite(amountSpent) && amountSpent >= 100 &&
-    Number.isFinite(q1Completion) && q1Completion > 10 &&
-    Number.isFinite(cti) && cti >= 12 &&
-    Number.isFinite(absoluteCompletion) && absoluteCompletion >= 1.8 &&
-    Number.isFinite(cpi) && cpi <= 12
+  const completion = toFiniteNumber(row?.absoluteCompletionPct);
+  const ctr = toFiniteNumber(row?.ctrPct);
+  const q1Impressions = toFiniteNumber(row?.q1ToImpressions);
+  const thruPlay3s = toFiniteNumber(row?.thruPlayTo3sRatio);
+  const amountSpent = toFiniteNumber(row?.amountSpentUsd);
+  return (
+    Number.isFinite(cpi) && cpi < 8 &&
+    Number.isFinite(completion) && completion > 1.8 &&
+    Number.isFinite(ctr) && ctr > 1.8 &&
+    Number.isFinite(thruPlay3s) && thruPlay3s > 20 &&
+    Number.isFinite(amountSpent) && amountSpent > 100 &&
+    (!Number.isFinite(q1Impressions) || q1Impressions > 4)
   );
-  const passesCpiOnly = Number.isFinite(cpi) && cpi < 6;
-  return passesAllThresholds || passesCpiOnly;
 }
 
 async function getInvalidationTs() {

@@ -46,7 +46,7 @@ function buildAnalyticsSubtitle(data) {
 function classifyPromising(metrics) {
   const cpiValue = Number(metrics?.cpi?.value);
   const ctiValue = Number(metrics?.cti?.value);
-  const baselineKeys = ["threeSecPlays", "thruplaysTo3s", "q1Completion", "cpi", "absoluteCompletion", "cti"];
+  const baselineKeys = ["cpi", "absoluteCompletion", "ctr", "q1ToImpressions", "thruPlay3s", "amountSpent"];
   let missCount = 0;
   for (const key of baselineKeys) {
     const cell = metrics?.[key];

@@ -1820,7 +1820,7 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
       beatEntry.attempts++;
       if (row.success) beatEntry.successCount++;
       if (row.scriptType === "ft") beatEntry.ftCount++; else if (row.scriptType === "rw") beatEntry.rwCount++;
-      beatEntry.ads.push({ assetCode: row.assetCode, success: row.success, scriptType: row.scriptType, cpiUsd: row.cpiUsd, absoluteCompletionPct: row.absoluteCompletionPct, ctrPct: row.ctrPct, clickToInstall: row.clickToInstall });
+      beatEntry.ads.push({ assetCode: row.assetCode, success: row.success, scriptType: row.scriptType, cpiUsd: row.cpiUsd, absoluteCompletionPct: row.absoluteCompletionPct, ctrPct: row.ctrPct, thruPlayTo3sRatio: row.thruPlayTo3sRatio, q1ToImpressions: row.q1ToImpressions });
     }
 
     // Sort helpers
@@ -2231,7 +2231,9 @@ function FullGenAiSection({ fullGenAiRows = [], fullGenAiSourceError = null, loa
                                 <td className="genai-metric-val" style={{ fontSize: 10 }}>
                                   {ad.ctrPct != null ? formatPercent(ad.ctrPct) : "-"}
                                   {" · "}
-                                  {ad.clickToInstall != null ? formatPercent(ad.clickToInstall) : "-"}
+                                  {ad.q1ToImpressions != null ? `${ad.q1ToImpressions.toFixed(1)}%` : "-"}
+                                  {" · "}
+                                  {ad.thruPlayTo3sRatio != null ? `${ad.thruPlayTo3sRatio.toFixed(1)}%` : "-"}
                                 </td>
                                 <td />
                               </tr>
